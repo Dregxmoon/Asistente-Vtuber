@@ -6,7 +6,7 @@ flotando sobre cualquier aplicación, juego o navegador.
 ## ✅ Requisitos
 
 - Windows 10/11 (64 bits)
-- [Node.js](https://nodejs.org) v18 o superior (LTS recomendado)
+- [Node.js](https://nodejs.org) v18 recoemndable node 22 (LTS recomendado)
 
 ## 🚀 Instalación
 
