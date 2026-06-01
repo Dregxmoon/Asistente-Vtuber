@@ -5,11 +5,12 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "postinstall": "node fix-electron.js",
     "build": "electron-builder --win --x64",
     "build-portable": "electron-builder --win portable"
   },
   "devDependencies": {
-    "electron": "^28.3.3",
+    "electron": "^28.0.0",
     "electron-builder": "^24.0.0"
   },
   "build": {
@@ -20,19 +21,15 @@
     },
     "win": {
       "target": [
-        {
-          "target": "portable",
-          "arch": [
-            "x64"
-          ]
-        }
+        { "target": "portable", "arch": ["x64"] }
       ],
       "icon": "assets/icon.ico"
     },
     "files": [
       "main.js",
       "src/**/*",
-      "assets/**/*"
+      "assets/**/*",
+      "models/**/*"
     ]
   }
 }
