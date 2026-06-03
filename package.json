@@ -22,8 +22,7 @@
     "win": {
       "target": [
         { "target": "portable", "arch": ["x64"] }
-      ],
-      "icon": "assets/icon.ico"
+      ]
     },
     "files": [
       "main.js",
