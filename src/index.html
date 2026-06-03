@@ -260,6 +260,13 @@ const fs = require('fs');
 // Exponer PIXI globalmente para pixi-live2d-display
 window.PIXI = PIXI;
 
+// Modelo por defecto: March 7th (7 de marzo)
+const DEFAULT_MODEL_CANDIDATES = [
+  path.join(__dirname, '..', 'models', '7 march', '7march.model3.json'),
+  path.join(__dirname, '..', 'models', '7 march', '7march.moc3.json'),
+  path.join(__dirname, '..', 'Models', 'March 7th', 'march 7th.model3.json'),
+];
+
 // ── Elementos ──────────────────────────────────────────────────────────────
 const canvas       = document.getElementById('live2d-canvas');
 const dropZone     = document.getElementById('drop-zone');
@@ -422,6 +429,18 @@ document.addEventListener('drop', (e) => {
     showStatus('⚠ Solo archivos .model3.json', 3000);
   }
 });
+
+// ── Modelo por defecto al iniciar ─────────────────────────────────────────
+function loadDefaultModel() {
+  for (const candidate of DEFAULT_MODEL_CANDIDATES) {
+    if (fs.existsSync(candidate)) {
+      loadModel(candidate);
+      return;
+    }
+  }
+}
+
+window.addEventListener('DOMContentLoaded', loadDefaultModel);
 
 // ── Resize responsivo ──────────────────────────────────────────────────────
 window.addEventListener('resize', () => {

@@ -29,7 +29,8 @@
       "main.js",
       "src/**/*",
       "assets/**/*",
-      "models/**/*"
+      "models/**/*",
+      "Models/**/*"
     ]
   }
 }
