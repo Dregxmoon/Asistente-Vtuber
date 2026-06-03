@@ -19,7 +19,6 @@
 </style>
 </head>
 <body>
-
 <canvas id="live2d-canvas"></canvas>
 
 <script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
@@ -37,16 +36,31 @@ const MODEL_PATH = path.join(__dirname, '..', 'models', 'March 7th', 'march 7th.
 const canvas = document.getElementById('live2d-canvas');
 
 let pixiApp, model;
+let currentView = 'full';
+let modelNaturalW = 0;
+let modelNaturalH = 0;
+
+// ── Configuración de cada vista ────────────────────────────────────────────
+// scaleRatio : qué fracción del alto de la ventana ocupa el modelo completo
+// anchorY    : desde qué punto vertical del modelo se "recorta" (0=cabeza, 1=pies)
+// posYRatio  : dónde se coloca verticalmente en el canvas (1 = fondo)
+const VIEW = {
+  //              scaleRatio  anchorX  anchorY  posYRatio
+  full: { sr: 0.92, ax: 0.5, ay: 1.00, py: 1.00 },
+  half: { sr: 1.70, ax: 0.5, ay: 0.72, py: 1.10 },
+  head: { sr: 3.80, ax: 0.5, ay: 0.18, py: 0.90 },
+};
 
 async function loadModel() {
   if (!fs.existsSync(MODEL_PATH)) {
-    console.error('Modelo no encontrado en:', MODEL_PATH);
+    console.error('Modelo no encontrado:', MODEL_PATH);
     return;
   }
 
   pixiApp = new PIXI.Application({
     view: canvas,
-    resizeTo: window,
+    width:  canvas.clientWidth,
+    height: canvas.clientHeight,
     backgroundAlpha: 0,
     antialias: true,
     resolution: window.devicePixelRatio || 1,
@@ -60,73 +74,120 @@ async function loadModel() {
 
   try {
     model = await PIXI.live2d.Live2DModel.from(fileUrl);
+
+    // Guardar dimensiones naturales del modelo
+    modelNaturalW = model.width;
+    modelNaturalH = model.height;
+
     pixiApp.stage.addChild(model);
-    fitModel();
+    applyView(currentView);
     setupHitDetection();
     startIdle();
-    console.log('Modelo cargado OK');
+    console.log('Modelo OK — natural size:', modelNaturalW, 'x', modelNaturalH);
   } catch(err) {
     console.error('Error cargando modelo:', err);
   }
 }
 
-function fitModel() {
-  if (!model) return;
+function applyView(view, animate = false) {
+  if (!model || !pixiApp) return;
 
-  // Escalar para que llene bien la ventana verticalmente
-  const scale = (pixiApp.screen.height / model.height) * 0.95;
-  model.scale.set(scale);
+  const cfg = VIEW[view];
+  const W = pixiApp.screen.width;
+  const H = pixiApp.screen.height;
 
-  // Anclar en base (centro horizontal, pie abajo)
-  model.anchor.set(0.5, 1);
+  // Escala: el modelo completo debería ocupar sr * H píxeles de alto
+  const targetScale = (H / modelNaturalH) * cfg.sr;
+  const targetX = W * cfg.ax;
+  const targetY = H * cfg.py;
+  const targetAX = cfg.ax;
+  const targetAY = cfg.ay;
 
-  // Posicionar en esquina inferior derecha dentro del canvas
-  model.position.set(
-    pixiApp.screen.width  * 0.62, // desplazado a la derecha
-    pixiApp.screen.height          // pegado al fondo
-  );
+  if (!animate) {
+    model.scale.set(targetScale);
+    model.anchor.set(targetAX, targetAY);
+    model.position.set(targetX, targetY);
+    currentView = view;
+    return;
+  }
+
+  // Animación suave
+  const duration = 700;
+  const start = performance.now();
+  const fromScale = model.scale.x;
+  const fromX = model.x;
+  const fromY = model.y;
+  const fromAX = model.anchor.x;
+  const fromAY = model.anchor.y;
+
+  const ease = t => t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+
+  const tick = (now) => {
+    const t = Math.min((now - start) / duration, 1);
+    const e = ease(t);
+    model.scale.set(fromScale + (targetScale - fromScale) * e);
+    model.anchor.set(
+      fromAX + (targetAX - fromAX) * e,
+      fromAY + (targetAY - fromAY) * e
+    );
+    model.position.set(
+      fromX + (targetX - fromX) * e,
+      fromY + (targetY - fromY) * e
+    );
+    if (t < 1) requestAnimationFrame(tick);
+    else {
+      currentView = view;
+      triggerMotion();
+    }
+  };
+  requestAnimationFrame(tick);
 }
 
-// ── Hit detection: el overlay pasa clics salvo cuando el cursor está sobre el modelo
+function triggerMotion() {
+  try {
+    const defs = model?.internalModel?.motionManager?.definitions;
+    if (!defs) return;
+    const groups = Object.keys(defs);
+    if (!groups.length) return;
+    model.motion(groups[Math.floor(Math.random() * groups.length)]);
+  } catch(_) {}
+}
+
+function startIdle() {
+  setTimeout(triggerMotion, 1000);
+  setInterval(triggerMotion, 8000);
+}
+
 function setupHitDetection() {
-  if (!model) return;
-
-  // El canvas del PIXI detecta movimiento del mouse
   pixiApp.view.addEventListener('mousemove', (e) => {
-    const rect   = pixiApp.view.getBoundingClientRect();
-    const localX = (e.clientX - rect.left)  / pixiApp.renderer.resolution;
-    const localY = (e.clientY - rect.top)   / pixiApp.renderer.resolution;
-
-    // Calcular bounding box del modelo en coordenadas del canvas
-    const bounds = model.getBounds();
-    const onModel = (
-      localX >= bounds.x &&
-      localX <= bounds.x + bounds.width &&
-      localY >= bounds.y &&
-      localY <= bounds.y + bounds.height
-    );
-
-    ipcRenderer.send('model-hover', onModel);
+    const rect = pixiApp.view.getBoundingClientRect();
+    const lx = (e.clientX - rect.left)  / pixiApp.renderer.resolution;
+    const ly = (e.clientY - rect.top)   / pixiApp.renderer.resolution;
+    const b  = model.getBounds();
+    const on = lx >= b.x && lx <= b.x + b.width && ly >= b.y && ly <= b.y + b.height;
+    ipcRenderer.send('model-hover', on);
   });
-
   pixiApp.view.addEventListener('mouseleave', () => {
     ipcRenderer.send('model-hover', false);
   });
 }
 
-function startIdle() {
-  setInterval(() => {
-    try {
-      const motions = model?.internalModel?.motionManager?.definitions;
-      if (!motions) return;
-      const groups = Object.keys(motions);
-      if (!groups.length) return;
-      model.motion(groups[Math.floor(Math.random() * groups.length)]);
-    } catch(_) {}
-  }, 8000);
-}
+// Recibir vista desde main
+ipcRenderer.on('set-view', (e, view) => {
+  if (!model) {
+    // modelo aún cargando, guardar para aplicar después
+    currentView = view;
+    return;
+  }
+  applyView(view, view !== currentView);
+});
 
-window.addEventListener('resize', fitModel);
+window.addEventListener('resize', () => {
+  if (!pixiApp || !model) return;
+  pixiApp.renderer.resize(canvas.clientWidth, canvas.clientHeight);
+  applyView(currentView, false);
+});
+
 window.addEventListener('DOMContentLoaded', loadModel);
 </script>
 </body>

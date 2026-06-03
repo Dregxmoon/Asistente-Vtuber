@@ -2,33 +2,26 @@ const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage } = require
 const path = require('path');
 
 const MARGIN = 12;
-const SIZES = {
-  small:  [300, 430],
-  medium: [420, 600],
-  large:  [560, 800],
-};
+const WIN_W = 380;
+const WIN_H = 580;
 
 let mainWindow;
 let tray;
-let isClickThrough = true; // Click-through activado por defecto
+let isClickThrough = true;
+let currentView = 'full';
 
 if (process.platform === 'linux') {
   app.commandLine.appendSwitch('enable-transparent-visuals');
 }
 
-function getBottomRightBounds(width, height) {
+function getBottomRightBounds() {
   const { workArea } = screen.getPrimaryDisplay();
   return {
-    x: Math.round(workArea.x + workArea.width  - width  - MARGIN),
-    y: Math.round(workArea.y + workArea.height - height - MARGIN),
-    width,
-    height,
+    x: Math.round(workArea.x + workArea.width  - WIN_W - MARGIN),
+    y: Math.round(workArea.y + workArea.height - WIN_H - MARGIN),
+    width:  WIN_W,
+    height: WIN_H,
   };
-}
-
-function placeBottomRight(width, height) {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  mainWindow.setBounds(getBottomRightBounds(width, height));
 }
 
 function setClickThrough(enabled) {
@@ -39,11 +32,19 @@ function setClickThrough(enabled) {
   if (tray) tray.setContextMenu(buildTrayMenu());
 }
 
+function sendView(view) {
+  currentView = view;
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send('set-view', view);
+  if (tray) tray.setContextMenu(buildTrayMenu());
+}
+
 function createWindow() {
-  const [w, h] = SIZES.medium;
+  const views = ['full', 'half', 'head'];
+  currentView = views[Math.floor(Math.random() * views.length)];
 
   mainWindow = new BrowserWindow({
-    ...getBottomRightBounds(w, h),
+    ...getBottomRightBounds(),
     transparent: true,
     backgroundColor: '#00000000',
     frame: false,
@@ -52,7 +53,7 @@ function createWindow() {
     resizable: false,
     hasShadow: false,
     thickFrame: false,
-    focusable: false, // no roba foco
+    focusable: false,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -63,39 +64,53 @@ function createWindow() {
   mainWindow.setAlwaysOnTop(true, 'screen-saver');
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   mainWindow.setMenuBarVisibility(false);
-
-  // Click-through activado desde el inicio
   mainWindow.setIgnoreMouseEvents(true, { forward: true });
 
-  mainWindow.webContents.on('console-message', (e, level, msg, line) => {
+  mainWindow.webContents.on('console-message', (e, level, msg) => {
     console.log(`[renderer] ${msg}`);
   });
 
   // mainWindow.webContents.openDevTools({ mode: 'detach' });
 
   mainWindow.loadFile(path.join(__dirname, 'src/index.html'));
+
+  mainWindow.webContents.once('did-finish-load', () => {
+    setTimeout(() => {
+      mainWindow.webContents.send('set-view', currentView);
+      startAutoSwitch();
+    }, 1500);
+  });
+}
+
+function startAutoSwitch() {
+  const views = ['full', 'half', 'head'];
+  const scheduleNext = () => {
+    const delay = (Math.random() * 20 + 20) * 1000;
+    setTimeout(() => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      const options = views.filter(v => v !== currentView);
+      const next = options[Math.floor(Math.random() * options.length)];
+      sendView(next);
+      scheduleNext();
+    }, delay);
+  };
+  scheduleNext();
 }
 
 function buildTrayMenu() {
   return Menu.buildFromTemplate([
     {
-      label: isClickThrough ? '🔒 Bloquear (mover ventana)' : '🖱️ Pasar clics (modo normal)',
+      label: isClickThrough ? '🔒 Bloquear (mover ventana)' : '🖱️ Pasar clics',
       click: () => setClickThrough(!isClickThrough),
     },
     { type: 'separator' },
-    { label: 'Tamaño pequeño',  click: () => placeBottomRight(...SIZES.small)  },
-    { label: 'Tamaño mediano',  click: () => placeBottomRight(...SIZES.medium) },
-    { label: 'Tamaño grande',   click: () => placeBottomRight(...SIZES.large)  },
-    { label: 'Esquina inferior derecha', click: () => {
-      const [w, h] = mainWindow.getSize();
-      placeBottomRight(w, h);
-    }},
+    { label: `${currentView === 'full' ? '✓ ' : ''}Cuerpo completo`, click: () => sendView('full') },
+    { label: `${currentView === 'half' ? '✓ ' : ''}Medio cuerpo`,    click: () => sendView('half') },
+    { label: `${currentView === 'head' ? '✓ ' : ''}Solo cabeza`,     click: () => sendView('head') },
+    { type: 'separator' },
     {
       label: 'Mostrar / ocultar',
-      click: () => {
-        if (mainWindow.isVisible()) mainWindow.hide();
-        else mainWindow.show();
-      },
+      click: () => mainWindow.isVisible() ? mainWindow.hide() : mainWindow.show(),
     },
     { type: 'separator' },
     { label: 'Cerrar', click: () => app.quit() },
@@ -108,16 +123,9 @@ function createTray() {
   tray.setContextMenu(buildTrayMenu());
 }
 
-// Desde el renderer: hover sobre el modelo activa/desactiva click-through
 ipcMain.on('model-hover', (e, hovering) => {
   if (!mainWindow || mainWindow.isDestroyed()) return;
-  // Solo bloquea clics cuando el cursor está sobre el modelo
   mainWindow.setIgnoreMouseEvents(!hovering, { forward: true });
-});
-
-ipcMain.on('drag-window', (e, { deltaX, deltaY }) => {
-  const [x, y] = mainWindow.getPosition();
-  mainWindow.setPosition(x + deltaX, y + deltaY);
 });
 
 app.whenReady().then(() => {
@@ -126,8 +134,7 @@ app.whenReady().then(() => {
 
   screen.on('display-metrics-changed', () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
-    const [w, h] = mainWindow.getSize();
-    placeBottomRight(w, h);
+    mainWindow.setBounds(getBottomRightBounds());
   });
 });
 
