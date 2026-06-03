@@ -40,12 +40,10 @@ let currentView = 'full';
 let modelNaturalW = 0;
 let modelNaturalH = 0;
 
-// ── Configuración de cada vista ────────────────────────────────────────────
-// scaleRatio : qué fracción del alto de la ventana ocupa el modelo completo
-// anchorY    : desde qué punto vertical del modelo se "recorta" (0=cabeza, 1=pies)
-// posYRatio  : dónde se coloca verticalmente en el canvas (1 = fondo)
+// Estado de drag
+let isDragging = false;
+
 const VIEW = {
-  //              scaleRatio  anchorX  anchorY  posYRatio
   full: { sr: 0.92, ax: 0.5, ay: 1.00, py: 1.00 },
   half: { sr: 1.70, ax: 0.5, ay: 0.72, py: 1.10 },
   head: { sr: 3.80, ax: 0.5, ay: 0.18, py: 0.90 },
@@ -74,16 +72,13 @@ async function loadModel() {
 
   try {
     model = await PIXI.live2d.Live2DModel.from(fileUrl);
-
-    // Guardar dimensiones naturales del modelo
     modelNaturalW = model.width;
     modelNaturalH = model.height;
-
     pixiApp.stage.addChild(model);
     applyView(currentView);
-    setupHitDetection();
+    setupInteraction();
     startIdle();
-    console.log('Modelo OK — natural size:', modelNaturalW, 'x', modelNaturalH);
+    console.log('Modelo OK:', modelNaturalW, 'x', modelNaturalH);
   } catch(err) {
     console.error('Error cargando modelo:', err);
   }
@@ -95,23 +90,18 @@ function applyView(view, animate = false) {
   const cfg = VIEW[view];
   const W = pixiApp.screen.width;
   const H = pixiApp.screen.height;
-
-  // Escala: el modelo completo debería ocupar sr * H píxeles de alto
   const targetScale = (H / modelNaturalH) * cfg.sr;
   const targetX = W * cfg.ax;
   const targetY = H * cfg.py;
-  const targetAX = cfg.ax;
-  const targetAY = cfg.ay;
 
   if (!animate) {
     model.scale.set(targetScale);
-    model.anchor.set(targetAX, targetAY);
+    model.anchor.set(cfg.ax, cfg.ay);
     model.position.set(targetX, targetY);
     currentView = view;
     return;
   }
 
-  // Animación suave
   const duration = 700;
   const start = performance.now();
   const fromScale = model.scale.x;
@@ -119,7 +109,6 @@ function applyView(view, animate = false) {
   const fromY = model.y;
   const fromAX = model.anchor.x;
   const fromAY = model.anchor.y;
-
   const ease = t => t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
 
   const tick = (now) => {
@@ -127,8 +116,8 @@ function applyView(view, animate = false) {
     const e = ease(t);
     model.scale.set(fromScale + (targetScale - fromScale) * e);
     model.anchor.set(
-      fromAX + (targetAX - fromAX) * e,
-      fromAY + (targetAY - fromAY) * e
+      fromAX + (cfg.ax - fromAX) * e,
+      fromAY + (cfg.ay - fromAY) * e
     );
     model.position.set(
       fromX + (targetX - fromX) * e,
@@ -158,24 +147,72 @@ function startIdle() {
   setInterval(triggerMotion, 8000);
 }
 
-function setupHitDetection() {
+function setupInteraction() {
+  // ── Hit detection + drag ──────────────────────────────────────────────────
   pixiApp.view.addEventListener('mousemove', (e) => {
+    if (isDragging) {
+      // Enviar posición absoluta del cursor en pantalla
+      ipcRenderer.send('drag-move', {
+        x: e.screenX,
+        y: e.screenY,
+      });
+      return;
+    }
+
+    // Hit detection normal
     const rect = pixiApp.view.getBoundingClientRect();
     const lx = (e.clientX - rect.left)  / pixiApp.renderer.resolution;
     const ly = (e.clientY - rect.top)   / pixiApp.renderer.resolution;
     const b  = model.getBounds();
-    const on = lx >= b.x && lx <= b.x + b.width && ly >= b.y && ly <= b.y + b.height;
+    const on = lx >= b.x && lx <= b.x + b.width &&
+               ly >= b.y && ly <= b.y + b.height;
     ipcRenderer.send('model-hover', on);
   });
-  pixiApp.view.addEventListener('mouseleave', () => {
+
+  pixiApp.view.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return; // solo clic izquierdo
+    // Verificar si el cursor está sobre el modelo
+    const rect = pixiApp.view.getBoundingClientRect();
+    const lx = (e.clientX - rect.left)  / pixiApp.renderer.resolution;
+    const ly = (e.clientY - rect.top)   / pixiApp.renderer.resolution;
+    const b  = model.getBounds();
+    const onModel = lx >= b.x && lx <= b.x + b.width &&
+                    ly >= b.y && ly <= b.y + b.height;
+
+    if (onModel) {
+      isDragging = true;
+      ipcRenderer.send('drag-start');
+      // Durante el drag necesitamos recibir eventos aunque salga del canvas
+      document.body.style.cursor = 'grabbing';
+    }
+  });
+
+  // Terminar drag al soltar en cualquier parte
+  window.addEventListener('mouseup', (e) => {
+    if (e.button !== 0 || !isDragging) return;
+    isDragging = false;
+    document.body.style.cursor = '';
     ipcRenderer.send('model-hover', false);
+  });
+
+  pixiApp.view.addEventListener('mouseleave', () => {
+    if (!isDragging) {
+      ipcRenderer.send('model-hover', false);
+    }
+  });
+
+  // Durante el drag, capturar movimiento aunque el mouse salga del canvas
+  window.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    ipcRenderer.send('drag-move', {
+      x: e.screenX,
+      y: e.screenY,
+    });
   });
 }
 
-// Recibir vista desde main
 ipcRenderer.on('set-view', (e, view) => {
   if (!model) {
-    // modelo aún cargando, guardar para aplicar después
     currentView = view;
     return;
   }

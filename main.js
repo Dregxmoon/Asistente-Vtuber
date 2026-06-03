@@ -9,6 +9,7 @@ let mainWindow;
 let tray;
 let isClickThrough = true;
 let currentView = 'full';
+let userHasMoved = false; // true cuando el usuario arrastra manualmente
 
 if (process.platform === 'linux') {
   app.commandLine.appendSwitch('enable-transparent-visuals');
@@ -109,6 +110,13 @@ function buildTrayMenu() {
     { label: `${currentView === 'head' ? '✓ ' : ''}Solo cabeza`,     click: () => sendView('head') },
     { type: 'separator' },
     {
+      label: '📌 Volver a esquina inferior derecha',
+      click: () => {
+        userHasMoved = false;
+        mainWindow.setBounds(getBottomRightBounds());
+      },
+    },
+    {
       label: 'Mostrar / ocultar',
       click: () => mainWindow.isVisible() ? mainWindow.hide() : mainWindow.show(),
     },
@@ -123,6 +131,21 @@ function createTray() {
   tray.setContextMenu(buildTrayMenu());
 }
 
+// Drag desde el renderer: mueve la ventana y marca que el usuario la movió
+ipcMain.on('drag-start', () => {
+  userHasMoved = true;
+});
+
+ipcMain.on('drag-move', (e, { x, y }) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const size = mainWindow.getSize();
+  // Centrar la ventana en la posición del cursor
+  mainWindow.setPosition(
+    Math.round(x - size[0] / 2),
+    Math.round(y - size[1] / 2)
+  );
+});
+
 ipcMain.on('model-hover', (e, hovering) => {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   mainWindow.setIgnoreMouseEvents(!hovering, { forward: true });
@@ -134,7 +157,10 @@ app.whenReady().then(() => {
 
   screen.on('display-metrics-changed', () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
-    mainWindow.setBounds(getBottomRightBounds());
+    // Solo reposicionar en esquina si el usuario NO lo ha movido manualmente
+    if (!userHasMoved) {
+      mainWindow.setBounds(getBottomRightBounds());
+    }
   });
 });
 
