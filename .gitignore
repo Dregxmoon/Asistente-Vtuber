@@ -3,3 +3,5 @@ dist/
 
 # .gitignore
 *.env
+
+config.example.json

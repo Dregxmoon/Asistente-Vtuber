@@ -38,6 +38,21 @@ function saveConfig(data) {
   }
 }
 
+// ── Inicializar config LLM si no existe ───────────────────────────────────
+function ensureLLMConfig() {
+  const cfg = loadConfig();
+  if (!cfg.llm) {
+    saveConfig({
+      llm: {
+        primary: 'groq',
+        apiKeys: { groq: '', gemini: '', openai: '' },
+        fallback: ['gemini', 'openai'],
+      }
+    });
+    console.log('[config] bloque llm inicializado en config.json');
+  }
+}
+
 // ── Estado global ─────────────────────────────────────────────────────────────
 let mainWindow     = null;   // overlay Live2D
 let chatWindow     = null;   // ventana de chat
@@ -510,16 +525,30 @@ function handleVoiceEvent(msg) {
   }
 }
 
+// ── IPC: config y keys ────────────────────────────────────────────────────────
+ipcMain.handle('get-config', () => {
+  return loadConfig();
+});
+
+ipcMain.handle('save-llm-keys', (e, { groq, gemini, openai }) => {
+  saveConfig({
+    llm: {
+      primary:  'groq',
+      apiKeys:  { groq, gemini, openai },
+      fallback: ['gemini', 'openai'],
+    }
+  });
+  console.log('[config] keys LLM actualizadas');
+  return true;
+});
+
 // ── App init ──────────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
-  createWindow();   // overlay se crea oculto
+  ensureLLMConfig();
+  createWindow();
   createTray();
   startControlServer();
-
-  // Arrancar con el micrófono guardado (o auto-detectar si no hay ninguno)
   startVoiceListener(selectedMicIndex);
-
-  // PRIMERO abre el chat — el overlay aparecerá cuando se cierre
   createChatWindow();
 
   screen.on('display-metrics-changed', () => {
