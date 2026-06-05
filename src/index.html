@@ -2,24 +2,55 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>VTuber</title>
+<title>March 7th</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
-    width: 100%;
-    height: 100%;
+    width: 100%; height: 100%;
     overflow: hidden;
     background: transparent;
   }
   #live2d-canvas {
-    width: 100%;
-    height: 100%;
+    width: 100%; height: 100%;
     display: block;
+    position: absolute; top: 0; left: 0;
+  }
+  #wake-indicator {
+    position: absolute;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%) scale(0.85);
+    background: rgba(255,100,150,0.85);
+    border-radius: 999px;
+    padding: 5px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    color: white;
+    letter-spacing: 0.05em;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    white-space: nowrap;
+    backdrop-filter: blur(6px);
+  }
+  #wake-indicator.visible {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+  #wake-indicator.listening {
+    background: rgba(80,180,255,0.9);
+    animation: listenPulse 1s ease-in-out infinite;
+  }
+  @keyframes listenPulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(80,180,255,0.4); }
+    50%      { box-shadow: 0 0 0 8px rgba(80,180,255,0); }
   }
 </style>
 </head>
 <body>
+
 <canvas id="live2d-canvas"></canvas>
+<div id="wake-indicator">Te escucho...</div>
 
 <script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pixi.js@6.5.10/dist/browser/pixi.min.js"></script>
@@ -29,19 +60,21 @@
 const { ipcRenderer } = require('electron');
 const path = require('path');
 const fs   = require('fs');
+const cp   = require('child_process');
 
 window.PIXI = PIXI;
 
 const MODEL_PATH = path.join(__dirname, '..', 'models', 'March 7th', 'march 7th.model3.json');
-const canvas = document.getElementById('live2d-canvas');
+const canvas     = document.getElementById('live2d-canvas');
+const TTS_VOICE  = 'ja-JP-NanamiNeural';
 
 let pixiApp, model;
-let currentView = 'full';
-let modelNaturalW = 0;
+let currentView   = 'full';
 let modelNaturalH = 0;
-
-// Estado de drag
-let isDragging = false;
+let isDragging    = false;
+let dragMoved     = false;
+let isSpeaking    = false;
+let audioCtx      = null;
 
 const VIEW = {
   full: { sr: 0.92, ax: 0.5, ay: 1.00, py: 1.00 },
@@ -49,6 +82,93 @@ const VIEW = {
   head: { sr: 3.80, ax: 0.5, ay: 0.18, py: 0.90 },
 };
 
+// ── Indicador de voz ──────────────────────────────────────────────────────────
+const wakeIndicator = document.getElementById('wake-indicator');
+
+function showIndicator(text, type = '') {
+  wakeIndicator.textContent = text;
+  wakeIndicator.className   = 'visible' + (type ? ` ${type}` : '');
+}
+function hideIndicator() { wakeIndicator.className = ''; }
+
+// ── Emociones de voz ──────────────────────────────────────────────────────────
+const EMOTION_PROFILES = {
+  happy:   { rate: '+12%', pitch: '+20Hz' },
+  excited: { rate: '+18%', pitch: '+28Hz' },
+  sad:     { rate: '-10%', pitch: '-8Hz'  },
+  tired:   { rate: '-8%',  pitch: '-4Hz'  },
+  gentle:  { rate: '+2%',  pitch: '+10Hz' },
+  default: { rate: '+8%',  pitch: '+18Hz' },
+};
+
+function detectEmotion(text) {
+  const t = text.toLowerCase();
+  if (/error|fallo|problema|no pude|lo siento|perdon|triste/.test(t)) return 'sad';
+  if (/genial|perfecto|listo|hecho|exito|bien|super|increible/.test(t)) return 'excited';
+  if (/procesando|espera|momento|calculando|buscando/.test(t))          return 'tired';
+  if (/hola|aqui|lista|ayud/.test(t))                                   return 'happy';
+  return 'default';
+}
+
+function cleanForTTS(text) {
+  return text
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE00}-\u{FEFF}]/gu, '')
+    .replace(/\s{2,}/g, ' ').trim();
+}
+
+// ── TTS ───────────────────────────────────────────────────────────────────────
+function getAudioCtx() {
+  if (!audioCtx || audioCtx.state === 'closed') audioCtx = new AudioContext();
+  return audioCtx;
+}
+
+async function speak(text, emotionOverride = null) {
+  if (isSpeaking) return;
+  isSpeaking = true;
+
+  const spokenText = cleanForTTS(text);
+  const emotion    = emotionOverride || detectEmotion(spokenText);
+  const emo        = EMOTION_PROFILES[emotion] || EMOTION_PROFILES.default;
+  const scriptPath = path.join(__dirname, '..', 'tts_stream.py');
+
+  try {
+    await new Promise((resolve, reject) => {
+      const chunks = [];
+      const proc = cp.spawn('python', [
+        scriptPath,
+        '--voice', TTS_VOICE,
+        '--rate',  emo.rate,
+        '--pitch', emo.pitch,
+        '--text',  spokenText,
+      ]);
+      proc.stdout.on('data', c => chunks.push(c));
+      proc.on('close', async (code) => {
+        if (code !== 0 || !chunks.length) { reject(new Error('TTS failed')); return; }
+        try {
+          const buf = Buffer.concat(chunks);
+          const ab  = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+          const ctx = getAudioCtx();
+          const audioBuf = await ctx.decodeAudioData(ab);
+          const src = ctx.createBufferSource();
+          src.buffer = audioBuf;
+          src.connect(ctx.destination);
+          src.start(0);
+          src.onended = resolve;
+        } catch(e) { reject(e); }
+      });
+      proc.on('error', reject);
+    });
+  } catch {
+    const utt = new SpeechSynthesisUtterance(spokenText);
+    utt.lang = 'ja-JP'; utt.pitch = 1.3; utt.rate = 1.05;
+    await new Promise(r => { utt.onend = r; speechSynthesis.speak(utt); });
+  }
+
+  isSpeaking = false;
+  triggerMotion();
+}
+
+// ── Live2D ────────────────────────────────────────────────────────────────────
 async function loadModel() {
   if (!fs.existsSync(MODEL_PATH)) {
     console.error('Modelo no encontrado:', MODEL_PATH);
@@ -66,68 +186,52 @@ async function loadModel() {
   });
 
   PIXI.live2d.Live2DModel.registerTicker(PIXI.Ticker);
-
   const fileUrl = 'file:///' + MODEL_PATH.replace(/\\/g, '/');
-  console.log('Cargando:', fileUrl);
 
   try {
     model = await PIXI.live2d.Live2DModel.from(fileUrl);
-    modelNaturalW = model.width;
     modelNaturalH = model.height;
     pixiApp.stage.addChild(model);
     applyView(currentView);
     setupInteraction();
     startIdle();
-    console.log('Modelo OK:', modelNaturalW, 'x', modelNaturalH);
+    console.log('[overlay] modelo cargado');
   } catch(err) {
-    console.error('Error cargando modelo:', err);
+    console.error('[overlay] error cargando modelo:', err);
   }
 }
 
+// ── Vistas ────────────────────────────────────────────────────────────────────
 function applyView(view, animate = false) {
   if (!model || !pixiApp) return;
-
   const cfg = VIEW[view];
-  const W = pixiApp.screen.width;
-  const H = pixiApp.screen.height;
-  const targetScale = (H / modelNaturalH) * cfg.sr;
-  const targetX = W * cfg.ax;
-  const targetY = H * cfg.py;
+  const W   = pixiApp.screen.width;
+  const H   = pixiApp.screen.height;
+  const ts  = (H / modelNaturalH) * cfg.sr;
+  const tx  = W * cfg.ax;
+  const ty  = H * cfg.py;
 
   if (!animate) {
-    model.scale.set(targetScale);
+    model.scale.set(ts);
     model.anchor.set(cfg.ax, cfg.ay);
-    model.position.set(targetX, targetY);
+    model.position.set(tx, ty);
     currentView = view;
     return;
   }
 
-  const duration = 700;
-  const start = performance.now();
-  const fromScale = model.scale.x;
-  const fromX = model.x;
-  const fromY = model.y;
-  const fromAX = model.anchor.x;
-  const fromAY = model.anchor.y;
+  const dur = 700, start = performance.now();
+  const fs  = model.scale.x, fx = model.x, fy = model.y;
+  const fax = model.anchor.x, fay = model.anchor.y;
   const ease = t => t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
 
   const tick = (now) => {
-    const t = Math.min((now - start) / duration, 1);
+    const t = Math.min((now - start) / dur, 1);
     const e = ease(t);
-    model.scale.set(fromScale + (targetScale - fromScale) * e);
-    model.anchor.set(
-      fromAX + (cfg.ax - fromAX) * e,
-      fromAY + (cfg.ay - fromAY) * e
-    );
-    model.position.set(
-      fromX + (targetX - fromX) * e,
-      fromY + (targetY - fromY) * e
-    );
+    model.scale.set(fs + (ts - fs) * e);
+    model.anchor.set(fax + (cfg.ax - fax) * e, fay + (cfg.ay - fay) * e);
+    model.position.set(fx + (tx - fx) * e, fy + (ty - fy) * e);
     if (t < 1) requestAnimationFrame(tick);
-    else {
-      currentView = view;
-      triggerMotion();
-    }
+    else { currentView = view; triggerMotion(); }
   };
   requestAnimationFrame(tick);
 }
@@ -137,88 +241,139 @@ function triggerMotion() {
     const defs = model?.internalModel?.motionManager?.definitions;
     if (!defs) return;
     const groups = Object.keys(defs);
-    if (!groups.length) return;
-    model.motion(groups[Math.floor(Math.random() * groups.length)]);
+    if (groups.length) model.motion(groups[Math.floor(Math.random() * groups.length)]);
   } catch(_) {}
 }
 
+// ── Idle ──────────────────────────────────────────────────────────────────────
 function startIdle() {
   setTimeout(triggerMotion, 1000);
   setInterval(triggerMotion, 8000);
+  startAutonomousView();
 }
 
+const VIEW_PERSONALITY = {
+  weights:  { full: 55, half: 25, head: 20 },
+  duration: {
+    full: { min: 35, max: 90 },
+    half: { min: 20, max: 50 },
+    head: { min: 12, max: 30 },
+  },
+};
+
+function pickNextView() {
+  const w = VIEW_PERSONALITY.weights;
+  const total = w.full + w.half + w.head;
+  const r = Math.random() * total;
+  if (r < w.full) return 'full';
+  if (r < w.full + w.half) return 'half';
+  return 'head';
+}
+
+function startAutonomousView() {
+  const schedule = () => {
+    const d    = VIEW_PERSONALITY.duration[currentView];
+    const wait = (d.min + Math.random() * (d.max - d.min)) * 1000;
+    setTimeout(() => {
+      const next = pickNextView();
+      if (model && next !== currentView) {
+        applyView(next, true);
+        ipcRenderer.send('view-changed', next);
+      }
+      schedule();
+    }, wait);
+  };
+  setTimeout(schedule, 5000);
+}
+
+// ── Interacción: drag + doble click abre chat ─────────────────────────────────
 function setupInteraction() {
-  // ── Hit detection + drag ──────────────────────────────────────────────────
+  let clickDownOnModel = false;
+  let lastClickTime    = 0;
+
+  function isOnModel(clientX, clientY) {
+    const rect = pixiApp.view.getBoundingClientRect();
+    const lx = (clientX - rect.left) / pixiApp.renderer.resolution;
+    const ly = (clientY - rect.top)  / pixiApp.renderer.resolution;
+    const b  = model.getBounds();
+    return lx >= b.x && lx <= b.x + b.width && ly >= b.y && ly <= b.y + b.height;
+  }
+
   pixiApp.view.addEventListener('mousemove', (e) => {
     if (isDragging) {
-      // Enviar posición absoluta del cursor en pantalla
-      ipcRenderer.send('drag-move', {
-        x: e.screenX,
-        y: e.screenY,
-      });
+      dragMoved = true;
+      ipcRenderer.send('drag-move', { x: e.screenX, y: e.screenY });
       return;
     }
-
-    // Hit detection normal
-    const rect = pixiApp.view.getBoundingClientRect();
-    const lx = (e.clientX - rect.left)  / pixiApp.renderer.resolution;
-    const ly = (e.clientY - rect.top)   / pixiApp.renderer.resolution;
-    const b  = model.getBounds();
-    const on = lx >= b.x && lx <= b.x + b.width &&
-               ly >= b.y && ly <= b.y + b.height;
+    const on = isOnModel(e.clientX, e.clientY);
     ipcRenderer.send('model-hover', on);
   });
 
   pixiApp.view.addEventListener('mousedown', (e) => {
-    if (e.button !== 0) return; // solo clic izquierdo
-    // Verificar si el cursor está sobre el modelo
-    const rect = pixiApp.view.getBoundingClientRect();
-    const lx = (e.clientX - rect.left)  / pixiApp.renderer.resolution;
-    const ly = (e.clientY - rect.top)   / pixiApp.renderer.resolution;
-    const b  = model.getBounds();
-    const onModel = lx >= b.x && lx <= b.x + b.width &&
-                    ly >= b.y && ly <= b.y + b.height;
-
-    if (onModel) {
-      isDragging = true;
+    if (e.button !== 0) return;
+    if (isOnModel(e.clientX, e.clientY)) {
+      isDragging       = true;
+      dragMoved        = false;
+      clickDownOnModel = true;
       ipcRenderer.send('drag-start');
-      // Durante el drag necesitamos recibir eventos aunque salga del canvas
       document.body.style.cursor = 'grabbing';
     }
   });
 
-  // Terminar drag al soltar en cualquier parte
   window.addEventListener('mouseup', (e) => {
-    if (e.button !== 0 || !isDragging) return;
-    isDragging = false;
+    if (e.button !== 0) return;
+
+    if (clickDownOnModel && !dragMoved) {
+      const now = Date.now();
+      if (now - lastClickTime < 400) {
+        // Doble click → abrir chat
+        ipcRenderer.send('model-dblclick');
+        lastClickTime = 0;
+      } else {
+        lastClickTime = now;
+        triggerMotion();
+      }
+    }
+
+    isDragging       = false;
+    clickDownOnModel = false;
     document.body.style.cursor = '';
     ipcRenderer.send('model-hover', false);
   });
 
   pixiApp.view.addEventListener('mouseleave', () => {
-    if (!isDragging) {
-      ipcRenderer.send('model-hover', false);
-    }
+    if (!isDragging) ipcRenderer.send('model-hover', false);
   });
 
-  // Durante el drag, capturar movimiento aunque el mouse salga del canvas
   window.addEventListener('mousemove', (e) => {
     if (!isDragging) return;
-    ipcRenderer.send('drag-move', {
-      x: e.screenX,
-      y: e.screenY,
-    });
+    ipcRenderer.send('drag-move', { x: e.screenX, y: e.screenY });
   });
 }
 
+// ── IPC desde main.js ─────────────────────────────────────────────────────────
 ipcRenderer.on('set-view', (e, view) => {
-  if (!model) {
-    currentView = view;
-    return;
-  }
+  if (!model) { currentView = view; return; }
   applyView(view, view !== currentView);
 });
 
+ipcRenderer.on('speak', (e, payload) => {
+  if (typeof payload === 'string') speak(payload);
+  else speak(payload.text, payload.emotion || null);
+});
+
+ipcRenderer.on('set-status', () => {});
+
+ipcRenderer.on('voice-wake', () => {
+  triggerMotion();
+});
+ipcRenderer.on('voice-listening', () => {
+});
+ipcRenderer.on('voice-idle', () => {
+  hideIndicator();
+});
+
+// ── Resize ────────────────────────────────────────────────────────────────────
 window.addEventListener('resize', () => {
   if (!pixiApp || !model) return;
   pixiApp.renderer.resize(canvas.clientWidth, canvas.clientHeight);

@@ -1,20 +1,65 @@
-const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage } = require('electron');
+const {
+  app, BrowserWindow, ipcMain, screen,
+  Tray, Menu, nativeImage
+} = require('electron');
 const path = require('path');
+const http = require('http');
+const fs   = require('fs');
+const { URL } = require('url');
 
-const MARGIN = 12;
-const WIN_W = 380;
-const WIN_H = 580;
+// ── Constantes ────────────────────────────────────────────────────────────────
+const MARGIN  = 12;
+const WIN_W   = 380;
+const WIN_H   = 580;
+const CHAT_W  = 900;
+const CHAT_H  = 600;
 
-let mainWindow;
-let tray;
+// ── Config persistente (micrófono y tema) ─────────────────────────────────────
+const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
+
+function loadConfig() {
+  try {
+    if (fs.existsSync(CONFIG_PATH)) {
+      return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+    }
+  } catch (e) {
+    console.log('[config] error leyendo config.json:', e.message);
+  }
+  return {};
+}
+
+function saveConfig(data) {
+  try {
+    const current = loadConfig();
+    const merged  = { ...current, ...data };
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(merged, null, 2), 'utf-8');
+  } catch (e) {
+    console.log('[config] error guardando config.json:', e.message);
+  }
+}
+
+// ── Estado global ─────────────────────────────────────────────────────────────
+let mainWindow     = null;   // overlay Live2D
+let chatWindow     = null;   // ventana de chat
+let tray           = null;
 let isClickThrough = true;
-let currentView = 'full';
-let userHasMoved = false; // true cuando el usuario arrastra manualmente
+let currentView    = 'full';
+let userHasMoved   = false;
+let chatTheme      = 'dark';
+
+// Micrófono — se carga desde config.json al arrancar
+const savedConfig    = loadConfig();
+let selectedMicIndex = savedConfig.micIndex  ?? null;
+let selectedMicLabel = savedConfig.micLabel  ?? 'default';
+chatTheme            = savedConfig.chatTheme ?? 'dark';
+
+console.log('[march7th] config cargada:', savedConfig);
 
 if (process.platform === 'linux') {
   app.commandLine.appendSwitch('enable-transparent-visuals');
 }
 
+// ── Posición windows ──────────────────────────────────────────────────────────
 function getBottomRightBounds() {
   const { workArea } = screen.getPrimaryDisplay();
   return {
@@ -25,11 +70,21 @@ function getBottomRightBounds() {
   };
 }
 
+function getChatBounds() {
+  const { workArea } = screen.getPrimaryDisplay();
+  return {
+    x: Math.round(workArea.x + (workArea.width  - CHAT_W) / 2),
+    y: Math.round(workArea.y + (workArea.height - CHAT_H) / 2),
+    width:  CHAT_W,
+    height: CHAT_H,
+  };
+}
+
+// ── Click-through ─────────────────────────────────────────────────────────────
 function setClickThrough(enabled) {
   isClickThrough = enabled;
   if (!mainWindow || mainWindow.isDestroyed()) return;
   mainWindow.setIgnoreMouseEvents(enabled, { forward: true });
-  mainWindow.webContents.send('clickthrough-status', enabled);
   if (tray) tray.setContextMenu(buildTrayMenu());
 }
 
@@ -40,25 +95,32 @@ function sendView(view) {
   if (tray) tray.setContextMenu(buildTrayMenu());
 }
 
+function sendSpeak(text, emotion) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send('speak', emotion ? { text, emotion } : text);
+}
+
+// ── Ventana overlay (se crea pero oculta hasta que se cierra el chat) ──────────
 function createWindow() {
   const views = ['full', 'half', 'head'];
   currentView = views[Math.floor(Math.random() * views.length)];
 
   mainWindow = new BrowserWindow({
     ...getBottomRightBounds(),
-    transparent: true,
+    transparent:     true,
     backgroundColor: '#00000000',
-    frame: false,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    resizable: false,
-    hasShadow: false,
-    thickFrame: false,
-    focusable: false,
+    frame:           false,
+    alwaysOnTop:     true,
+    skipTaskbar:     true,
+    resizable:       false,
+    hasShadow:       false,
+    thickFrame:      false,
+    focusable:       false,
+    show:            false,   // ← oculta al inicio; se muestra cuando se cierra el chat
     webPreferences: {
-      nodeIntegration: true,
+      nodeIntegration:  true,
       contextIsolation: false,
-      webSecurity: false,
+      webSecurity:      false,
     },
   });
 
@@ -68,40 +130,108 @@ function createWindow() {
   mainWindow.setIgnoreMouseEvents(true, { forward: true });
 
   mainWindow.webContents.on('console-message', (e, level, msg) => {
-    console.log(`[renderer] ${msg}`);
+    console.log(`[overlay] ${msg}`);
   });
-
-  // mainWindow.webContents.openDevTools({ mode: 'detach' });
 
   mainWindow.loadFile(path.join(__dirname, 'src/index.html'));
 
   mainWindow.webContents.once('did-finish-load', () => {
     setTimeout(() => {
       mainWindow.webContents.send('set-view', currentView);
-      startAutoSwitch();
     }, 1500);
   });
 }
 
-function startAutoSwitch() {
-  const views = ['full', 'half', 'head'];
-  const scheduleNext = () => {
-    const delay = (Math.random() * 20 + 20) * 1000;
-    setTimeout(() => {
-      if (!mainWindow || mainWindow.isDestroyed()) return;
-      const options = views.filter(v => v !== currentView);
-      const next = options[Math.floor(Math.random() * options.length)];
-      sendView(next);
-      scheduleNext();
-    }, delay);
-  };
-  scheduleNext();
+// ── Ventana de chat ───────────────────────────────────────────────────────────
+function createChatWindow() {
+  if (chatWindow && !chatWindow.isDestroyed()) {
+    if (!chatWindow.isVisible()) {
+      chatWindow.show();
+      chatWindow.focus();
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
+      if (tray) tray.setContextMenu(buildTrayMenu());
+    } else {
+      chatWindow.focus();
+    }
+    return;
+  }
+
+  chatWindow = new BrowserWindow({
+    ...getChatBounds(),
+    frame:          false,
+    transparent:    false,
+    backgroundColor:'#0d0f14',
+    resizable:      true,
+    minWidth:       700,
+    minHeight:      480,
+    skipTaskbar:    false,
+    alwaysOnTop:    false,
+    hasShadow:      true,
+    show:           true,
+    webPreferences: {
+      nodeIntegration:  true,
+      contextIsolation: false,
+      webSecurity:      false,
+    },
+  });
+
+  chatWindow.setMenuBarVisibility(false);
+  chatWindow.loadFile(path.join(__dirname, 'src/chat.html'));
+
+  chatWindow.webContents.on('console-message', (e, level, msg) => {
+    console.log(`[chat] ${msg}`);
+  });
+
+  chatWindow.webContents.once('did-finish-load', () => {
+    chatWindow.webContents.send('init-theme', chatTheme);
+    // Restaurar micrófono guardado
+    if (selectedMicIndex !== null) {
+      chatWindow.webContents.send('restore-mic', {
+        index: selectedMicIndex,
+        label: selectedMicLabel,
+      });
+    }
+  });
+
+  // Ocultar overlay mientras el chat está abierto
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
+
+  chatWindow.on('closed', () => {
+    chatWindow = null;
+    // Mostrar overlay cuando se cierra el chat
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
+    if (tray) tray.setContextMenu(buildTrayMenu());
+  });
+
+  if (tray) tray.setContextMenu(buildTrayMenu());
 }
 
+function toggleChatWindow() {
+  if (!chatWindow || chatWindow.isDestroyed()) {
+    createChatWindow();
+  } else if (chatWindow.isVisible()) {
+    chatWindow.hide();
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
+    if (tray) tray.setContextMenu(buildTrayMenu());
+  } else {
+    chatWindow.show();
+    chatWindow.focus();
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
+    if (tray) tray.setContextMenu(buildTrayMenu());
+  }
+}
+
+// ── Tray ──────────────────────────────────────────────────────────────────────
 function buildTrayMenu() {
+  const chatOpen = chatWindow && !chatWindow.isDestroyed() && chatWindow.isVisible();
   return Menu.buildFromTemplate([
     {
-      label: isClickThrough ? '🔒 Bloquear (mover ventana)' : '🖱️ Pasar clics',
+      label: chatOpen ? '💬 Cerrar chat' : '💬 Abrir chat',
+      click: toggleChatWindow,
+    },
+    { type: 'separator' },
+    {
+      label: isClickThrough ? '🔒 Bloquear (mover overlay)' : '🖱️ Pasar clics',
       click: () => setClickThrough(!isClickThrough),
     },
     { type: 'separator' },
@@ -110,36 +240,47 @@ function buildTrayMenu() {
     { label: `${currentView === 'head' ? '✓ ' : ''}Solo cabeza`,     click: () => sendView('head') },
     { type: 'separator' },
     {
-      label: '📌 Volver a esquina inferior derecha',
+      label: '🔊 Prueba de voz',
+      submenu: [
+        { label: 'Saludo',      click: () => sendSpeak('Hola! Estoy aqui para ayudarte!') },
+        { label: 'Emocion sad', click: () => sendSpeak('Lo siento, hubo un error.', 'sad') },
+        { label: 'Excited',     click: () => sendSpeak('Perfecto, todo salio bien!', 'excited') },
+      ],
+    },
+    { type: 'separator' },
+    {
+      label: `🎙 Mic: ${selectedMicLabel}`,
+      enabled: false,
+    },
+    { type: 'separator' },
+    {
+      label: '📌 Volver a esquina',
       click: () => {
         userHasMoved = false;
         mainWindow.setBounds(getBottomRightBounds());
       },
     },
     {
-      label: 'Mostrar / ocultar',
+      label: 'Mostrar / ocultar overlay',
       click: () => mainWindow.isVisible() ? mainWindow.hide() : mainWindow.show(),
     },
     { type: 'separator' },
-    { label: 'Cerrar', click: () => app.quit() },
+    { label: 'Cerrar todo', click: () => app.quit() },
   ]);
 }
 
 function createTray() {
   tray = new Tray(nativeImage.createEmpty());
-  tray.setToolTip('VTuber Overlay — March 7th');
+  tray.setToolTip('March 7th — Sentinel-Pi');
   tray.setContextMenu(buildTrayMenu());
 }
 
-// Drag desde el renderer: mueve la ventana y marca que el usuario la movió
-ipcMain.on('drag-start', () => {
-  userHasMoved = true;
-});
+// ── IPC: overlay ──────────────────────────────────────────────────────────────
+ipcMain.on('drag-start', () => { userHasMoved = true; });
 
 ipcMain.on('drag-move', (e, { x, y }) => {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   const size = mainWindow.getSize();
-  // Centrar la ventana en la posición del cursor
   mainWindow.setPosition(
     Math.round(x - size[0] / 2),
     Math.round(y - size[1] / 2)
@@ -151,17 +292,244 @@ ipcMain.on('model-hover', (e, hovering) => {
   mainWindow.setIgnoreMouseEvents(!hovering, { forward: true });
 });
 
+ipcMain.on('view-changed', (e, view) => {
+  currentView = view;
+  if (tray) tray.setContextMenu(buildTrayMenu());
+});
+
+ipcMain.on('model-dblclick', () => toggleChatWindow());
+
+// Comandos de voz
+ipcMain.on('voice-command', (e, { action, text }) => {
+  console.log(`[march7th] voice-command: ${action}`, text || '');
+  if (action === 'open-chat') {
+    if (!chatWindow || chatWindow.isDestroyed() || !chatWindow.isVisible()) createChatWindow();
+  } else if (action === 'close-chat') {
+    if (chatWindow && !chatWindow.isDestroyed() && chatWindow.isVisible()) {
+      chatWindow.hide();
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
+      if (tray) tray.setContextMenu(buildTrayMenu());
+    }
+  } else if (action === 'message' && text) {
+    if (chatWindow && !chatWindow.isDestroyed()) {
+      chatWindow.webContents.send('chat-message', text);
+    }
+  }
+});
+
+// ── IPC: selección de micrófono → guardar en config.json ─────────────────────
+ipcMain.on('set-mic-index', (e, { index, label }) => {
+  console.log(`[march7th] micrófono seleccionado: [${index}] ${label}`);
+  selectedMicIndex = index;
+  selectedMicLabel = label;
+
+  // Persistir en disco
+  saveConfig({ micIndex: index, micLabel: label });
+  console.log(`[march7th] micrófono guardado en config.json`);
+
+  if (tray) tray.setContextMenu(buildTrayMenu());
+  restartVoiceListener(index);
+});
+
+// ── IPC: chat window ──────────────────────────────────────────────────────────
+ipcMain.on('chat-close', () => {
+  if (chatWindow && !chatWindow.isDestroyed()) chatWindow.hide();
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
+  if (tray) tray.setContextMenu(buildTrayMenu());
+});
+
+ipcMain.on('chat-theme-changed', (e, theme) => {
+  chatTheme = theme;
+  saveConfig({ chatTheme: theme });
+});
+
+// ── Servidor HTTP local ───────────────────────────────────────────────────────
+const VALID_EMOTIONS = ['happy','excited','sad','tired','gentle','default'];
+const VALID_VIEWS    = ['full','half','head'];
+
+const HELP_TEXT = `
+  March 7th — Control API (puerto 3131)
+
+  curl "http://localhost:3131/speak?text=hola"
+  curl "http://localhost:3131/speak?text=lo+siento&emotion=sad"
+  curl "http://localhost:3131/view?v=half"
+  curl "http://localhost:3131/chat?action=open"
+  curl "http://localhost:3131/chat?action=close"
+  curl "http://localhost:3131/mic?index=0"
+
+  emociones: happy | excited | sad | tired | gentle | default
+  vistas   : full | half | head
+`;
+
+function startControlServer() {
+  const server = http.createServer((req, res) => {
+    const url = new URL(req.url, 'http://localhost:3131');
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+
+    if (url.pathname === '/speak') {
+      const text   = url.searchParams.get('text') || '';
+      const rawEmo = (url.searchParams.get('emotion') || '').toLowerCase();
+      const emotion = VALID_EMOTIONS.includes(rawEmo) ? rawEmo : null;
+      if (!text) { res.writeHead(400); res.end('falta ?text='); return; }
+      sendSpeak(text, emotion);
+      if (chatWindow && !chatWindow.isDestroyed()) chatWindow.webContents.send('chat-message', text);
+      res.writeHead(200); res.end(`ok: ${text}`);
+      return;
+    }
+
+    if (url.pathname === '/view') {
+      const v = (url.searchParams.get('v') || '').toLowerCase();
+      if (!VALID_VIEWS.includes(v)) { res.writeHead(400); res.end(`validos: ${VALID_VIEWS.join(', ')}`); return; }
+      sendView(v);
+      res.writeHead(200); res.end(`ok: ${v}`);
+      return;
+    }
+
+    if (url.pathname === '/chat') {
+      const action = (url.searchParams.get('action') || '').toLowerCase();
+      if (action === 'open') createChatWindow();
+      else if (action === 'close') {
+        if (chatWindow && !chatWindow.isDestroyed()) {
+          chatWindow.hide();
+          if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
+        }
+      } else toggleChatWindow();
+      res.writeHead(200); res.end(`ok: chat ${action || 'toggled'}`);
+      return;
+    }
+
+    if (url.pathname === '/mic') {
+      const idx = parseInt(url.searchParams.get('index') || '-1', 10);
+      if (idx >= 0) restartVoiceListener(idx);
+      res.writeHead(200); res.end(`ok: mic index ${idx}`);
+      return;
+    }
+
+    res.writeHead(200); res.end(HELP_TEXT);
+  });
+
+  server.listen(3131, '127.0.0.1', () => {
+    console.log('[march7th] API lista → http://localhost:3131/help');
+  });
+
+  server.on('error', (e) => {
+    if (e.code === 'EADDRINUSE')
+      console.log('[march7th] puerto 3131 ocupado, cierra otra instancia primero.');
+  });
+}
+
+// ── Voice Listener (Python) ───────────────────────────────────────────────────
+const { spawn } = require('child_process');
+
+const VOICE_COMMANDS_OPEN  = ['abre el chat','abre chat','abrir chat','muestra el chat','abre la ventana','chat'];
+const VOICE_COMMANDS_CLOSE = ['cierra el chat','cierra chat','cerrar chat','oculta el chat'];
+
+let voiceProc         = null;
+let voiceRestartTimer = null;
+
+function startVoiceListener(micIndex = null) {
+  const scriptPath = path.join(__dirname, 'voice_listener.py');
+  if (!fs.existsSync(scriptPath)) {
+    console.log('[voice] voice_listener.py no encontrado, omitiendo.');
+    return;
+  }
+
+  const args = [scriptPath];
+  if (micIndex !== null && micIndex >= 0) {
+    args.push('--mic-index', String(micIndex));
+  }
+
+  voiceProc = spawn('python', args);
+
+  voiceProc.stdout.on('data', (data) => {
+    const lines = data.toString().split('\n').filter(l => l.trim());
+    for (const line of lines) {
+      try { handleVoiceEvent(JSON.parse(line)); } catch(_) {}
+    }
+  });
+
+  voiceProc.stderr.on('data', (d) => console.log('[voice stderr]', d.toString().trim()));
+
+  voiceProc.on('close', (code) => {
+    console.log(`[voice] proceso terminado (code ${code}), reiniciando en 3s...`);
+    voiceProc = null;
+    if (voiceRestartTimer) clearTimeout(voiceRestartTimer);
+    voiceRestartTimer = setTimeout(() => startVoiceListener(selectedMicIndex), 3000);
+  });
+
+  voiceProc.on('error', (e) => console.log('[voice] error al lanzar proceso:', e.message));
+  console.log(`[voice] listener iniciado${micIndex !== null ? ` (mic ${micIndex})` : ''}`);
+}
+
+function restartVoiceListener(micIndex) {
+  console.log(`[voice] reiniciando con micrófono índice ${micIndex}...`);
+  if (voiceRestartTimer) { clearTimeout(voiceRestartTimer); voiceRestartTimer = null; }
+  if (voiceProc && !voiceProc.killed) {
+    voiceProc.removeAllListeners('close');
+    voiceProc.kill();
+    voiceProc = null;
+  }
+  setTimeout(() => startVoiceListener(micIndex), 500);
+}
+
+function handleVoiceEvent(msg) {
+  switch (msg.type) {
+    case 'log':       console.log('[voice]', msg.msg); break;
+    case 'ready':     console.log('[voice] micrófono listo, calibrando...'); break;
+    case 'calibrated':console.log('[voice] calibrado, escuchando wake word'); break;
+    case 'wake':
+      console.log('[voice] wake word detectado!');
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('voice-wake');
+      break;
+    case 'listening':
+      console.log('[voice] esperando comando...');
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('voice-listening');
+      break;
+    case 'command': {
+      const text = msg.text.toLowerCase();
+      console.log('[voice] comando:', text);
+      if (VOICE_COMMANDS_OPEN.some(c => text.includes(c))) {
+        if (!chatWindow || chatWindow.isDestroyed() || !chatWindow.isVisible()) createChatWindow();
+      } else if (VOICE_COMMANDS_CLOSE.some(c => text.includes(c))) {
+        if (chatWindow && !chatWindow.isDestroyed() && chatWindow.isVisible()) {
+          chatWindow.hide();
+          if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
+          if (tray) tray.setContextMenu(buildTrayMenu());
+        }
+      } else {
+        if (chatWindow && !chatWindow.isDestroyed()) chatWindow.webContents.send('chat-message', text);
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('speak', 'Entendido!');
+      }
+      break;
+    }
+    case 'timeout':
+      console.log('[voice] timeout esperando comando');
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('voice-idle');
+      break;
+    case 'error': console.log('[voice] error:', msg.msg); break;
+  }
+}
+
+// ── App init ──────────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
-  createWindow();
+  createWindow();   // overlay se crea oculto
   createTray();
+  startControlServer();
+
+  // Arrancar con el micrófono guardado (o auto-detectar si no hay ninguno)
+  startVoiceListener(selectedMicIndex);
+
+  // PRIMERO abre el chat — el overlay aparecerá cuando se cierre
+  createChatWindow();
 
   screen.on('display-metrics-changed', () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
-    // Solo reposicionar en esquina si el usuario NO lo ha movido manualmente
-    if (!userHasMoved) {
-      mainWindow.setBounds(getBottomRightBounds());
-    }
+    if (!userHasMoved) mainWindow.setBounds(getBottomRightBounds());
   });
+});
+
+app.on('before-quit', () => {
+  if (voiceProc) { voiceProc.kill(); voiceProc = null; }
 });
 
 app.on('window-all-closed', () => {

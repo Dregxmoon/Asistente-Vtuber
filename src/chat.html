@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<title>March 7th — Chat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Zen+Kaku+Gothic+New:wght@300;400;700&family=Kaisei+Decol:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root { --transition-theme: 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
+
+[data-theme="dark"] {
+  --bg-base:        #0d0f14;
+  --bg-panel:       #11141b;
+  --bg-input:       #191d27;
+  --bg-msg-user:    #1e2535;
+  --bg-msg-march:   #141820;
+  --border:         #2a2f3d;
+  --border-accent:  #3d4460;
+  --text-primary:   #e8eaf0;
+  --text-secondary: #7b82a0;
+  --text-march:     #a8b4e8;
+  --accent:         #5b6ef5;
+  --accent-glow:    rgba(91,110,245,0.25);
+  --accent2:        #c084fc;
+  --scrollbar:      #2a2f3d;
+  --tag-bg:         #1e2535;
+  --font-mono:      'Share Tech Mono', monospace;
+  --font-body:      'Zen Kaku Gothic New', sans-serif;
+  --font-display:   'Kaisei Decol', serif;
+  --cursor-color:   #5b6ef5;
+  --grain:          url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  --header-bg:      rgba(13,15,20,0.95);
+  --divider:        linear-gradient(90deg, transparent, #3d4460 30%, #3d4460 70%, transparent);
+  --file-bg:        #161a24;
+  --file-hover:     #1e2535;
+  --file-border:    #2a2f3d;
+  --drop-overlay:   rgba(91,110,245,0.12);
+  --drop-border:    #5b6ef5;
+}
+
+[data-theme="sakura"] {
+  --bg-base:        #f5eef8;
+  --bg-panel:       #fdf6ff;
+  --bg-input:       #fff0f7;
+  --bg-msg-user:    #ffe4f0;
+  --bg-msg-march:   #f9f0ff;
+  --border:         #f0c8e0;
+  --border-accent:  #e8a0c8;
+  --text-primary:   #3d2040;
+  --text-secondary: #a070a0;
+  --text-march:     #8040a0;
+  --accent:         #d060a0;
+  --accent-glow:    rgba(208,96,160,0.2);
+  --accent2:        #a060d0;
+  --scrollbar:      #f0c8e0;
+  --tag-bg:         #ffe4f0;
+  --font-mono:      'Share Tech Mono', monospace;
+  --font-body:      'Zen Kaku Gothic New', sans-serif;
+  --font-display:   'Kaisei Decol', serif;
+  --cursor-color:   #d060a0;
+  --grain:          url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+  --header-bg:      rgba(245,238,248,0.95);
+  --divider:        linear-gradient(90deg, transparent, #e8a0c8 30%, #e8a0c8 70%, transparent);
+  --file-bg:        #fdeaf5;
+  --file-hover:     #ffe4f0;
+  --file-border:    #f0c8e0;
+  --drop-overlay:   rgba(208,96,160,0.08);
+  --drop-border:    #d060a0;
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  width: 100%; height: 100%; overflow: hidden;
+  background: var(--bg-base); color: var(--text-primary);
+  font-family: var(--font-body); font-size: 14px;
+  transition: background var(--transition-theme), color var(--transition-theme);
+}
+body::before {
+  content: ''; position: fixed; inset: 0;
+  background: var(--grain); pointer-events: none; z-index: 999;
+}
+
+/* ── Layout ──────────────────────────────────────────────────────────────── */
+#app {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  grid-template-rows: 48px 1fr;
+  height: 100vh;
+  animation: windowIn 0.3s cubic-bezier(0.34,1.56,0.64,1) forwards;
+}
+@keyframes windowIn {
+  from { opacity:0; transform:scale(0.96) translateY(8px); }
+  to   { opacity:1; transform:scale(1) translateY(0); }
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+#header {
+  grid-column: 1 / -1;
+  background: var(--header-bg); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 16px; gap: 12px;
+  backdrop-filter: blur(12px); -webkit-app-region: drag;
+  position: relative; z-index: 10;
+  transition: background var(--transition-theme), border-color var(--transition-theme);
+}
+#header::after {
+  content: ''; position: absolute; bottom:0; left:0; right:0;
+  height:1px; background: var(--divider);
+}
+.header-dot {
+  width:8px; height:8px; border-radius:50%;
+  background: var(--accent); box-shadow: 0 0 6px var(--accent-glow);
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1);}50%{opacity:.6;transform:scale(.85);} }
+.header-title { font-family:var(--font-display); font-size:15px; font-weight:700; color:var(--text-primary); letter-spacing:.04em; }
+.header-tag { font-family:var(--font-mono); font-size:10px; color:var(--text-secondary); background:var(--tag-bg); border:1px solid var(--border); padding:2px 7px; border-radius:4px; letter-spacing:.06em; }
+.header-spacer { flex:1; }
+.theme-label { font-family:var(--font-mono); font-size:10px; color:var(--text-secondary); -webkit-app-region:no-drag; margin-right:6px; }
+#theme-toggle {
+  -webkit-app-region:no-drag; width:32px; height:20px; border-radius:10px;
+  border:1px solid var(--border-accent); background:var(--bg-input);
+  cursor:pointer; position:relative; display:flex; align-items:center; padding:0 3px;
+  transition: all .3s ease;
+}
+#theme-toggle::after {
+  content:''; width:13px; height:13px; border-radius:50%;
+  background:var(--accent); transition:transform .3s cubic-bezier(.34,1.56,.64,1);
+  transform:translateX(0); box-shadow:0 0 6px var(--accent-glow);
+}
+[data-theme="sakura"] #theme-toggle::after { transform:translateX(12px); }
+#close-btn {
+  -webkit-app-region:no-drag; width:28px; height:28px; border-radius:50%;
+  border:1px solid var(--border); background:transparent; color:var(--text-secondary);
+  cursor:pointer; display:flex; align-items:center; justify-content:center;
+  font-size:14px; transition:all .2s; margin-left:4px;
+}
+#close-btn:hover { background:var(--bg-msg-user); color:var(--text-primary); border-color:var(--border-accent); }
+
+/* ── Panel chat ──────────────────────────────────────────────────────────── */
+#chat-panel {
+  display:flex; flex-direction:column;
+  border-right:1px solid var(--border); background:var(--bg-panel);
+  overflow:hidden; position:relative;
+  transition: background var(--transition-theme), border-color var(--transition-theme);
+}
+[data-theme="dark"] #chat-panel::before {
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background: radial-gradient(ellipse at 10% 20%,rgba(91,110,245,.05) 0%,transparent 50%),
+              radial-gradient(ellipse at 90% 80%,rgba(192,132,252,.04) 0%,transparent 50%);
+}
+[data-theme="sakura"] #chat-panel::before {
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background: radial-gradient(ellipse at 10% 20%,rgba(255,182,210,.15) 0%,transparent 50%),
+              radial-gradient(ellipse at 90% 80%,rgba(200,150,255,.12) 0%,transparent 50%);
+}
+
+/* ── Drop overlay (arrastra archivo sobre el chat) ───────────────────────── */
+#drop-overlay {
+  position:absolute; inset:0; z-index:100;
+  background: var(--drop-overlay);
+  border: 2px dashed var(--drop-border);
+  border-radius: 8px;
+  display:none; flex-direction:column; align-items:center; justify-content:center;
+  gap:12px; pointer-events:none;
+  backdrop-filter: blur(4px);
+}
+#drop-overlay.visible { display:flex; }
+#drop-overlay svg { width:48px; height:48px; color:var(--accent); opacity:.8; }
+#drop-overlay span { font-family:var(--font-mono); font-size:12px; color:var(--accent); letter-spacing:.08em; opacity:.9; }
+
+/* ── Mensajes ────────────────────────────────────────────────────────────── */
+#messages {
+  flex:1; overflow-y:auto; padding:20px 16px;
+  display:flex; flex-direction:column; gap:16px; scroll-behavior:smooth;
+}
+#messages::-webkit-scrollbar { width:4px; }
+#messages::-webkit-scrollbar-thumb { background:var(--scrollbar); border-radius:2px; }
+
+.msg { display:flex; gap:10px; align-items:flex-start; animation:msgIn .3s cubic-bezier(.34,1.56,.64,1) forwards; opacity:0; transform:translateY(8px); }
+@keyframes msgIn { to{opacity:1;transform:translateY(0);} }
+.msg.user { flex-direction:row-reverse; }
+.msg-avatar {
+  width:28px; height:28px; border-radius:50%;
+  background:var(--bg-msg-user); border:1px solid var(--border-accent);
+  display:flex; align-items:center; justify-content:center;
+  font-size:13px; flex-shrink:0; overflow:hidden;
+}
+.msg.march .msg-avatar {
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  border-color:var(--accent); font-size:11px; color:white;
+  font-family:var(--font-display); font-weight:700;
+}
+.msg-body { max-width:75%; }
+.msg-name { font-family:var(--font-mono); font-size:10px; color:var(--text-secondary); margin-bottom:4px; letter-spacing:.05em; }
+.msg.user .msg-name { text-align:right; }
+.msg.march .msg-name { color:var(--accent); }
+.msg-bubble {
+  background:var(--bg-msg-march); border:1px solid var(--border);
+  border-radius:4px 14px 14px 14px; padding:10px 14px;
+  font-size:13.5px; line-height:1.6; color:var(--text-primary);
+  transition: background var(--transition-theme), border-color var(--transition-theme);
+}
+.msg.user .msg-bubble { background:var(--bg-msg-user); border-radius:14px 4px 14px 14px; border-color:var(--border-accent); }
+.msg.march .msg-bubble { border-color:var(--border-accent); }
+.msg-time { font-family:var(--font-mono); font-size:9px; color:var(--text-secondary); margin-top:4px; opacity:.6; }
+.msg.user .msg-time { text-align:right; }
+
+/* Archivos adjuntos dentro de burbuja */
+.file-chip {
+  display:inline-flex; align-items:center; gap:6px;
+  background:var(--file-bg); border:1px solid var(--file-border);
+  border-radius:6px; padding:5px 10px; font-family:var(--font-mono);
+  font-size:10px; color:var(--text-secondary); margin-top:6px;
+  max-width:100%; overflow:hidden;
+}
+.file-chip svg { width:13px; height:13px; flex-shrink:0; color:var(--accent); }
+.file-chip span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+.session-divider { display:flex; align-items:center; gap:10px; margin:4px 0; }
+.session-divider span { font-family:var(--font-mono); font-size:10px; color:var(--text-secondary); white-space:nowrap; letter-spacing:.06em; }
+.session-divider::before,.session-divider::after { content:''; flex:1; height:1px; background:var(--divider); }
+
+.thinking-dots { display:flex; gap:4px; align-items:center; padding:4px 0; }
+.thinking-dots span { width:6px; height:6px; border-radius:50%; background:var(--accent); opacity:.4; animation:dotPulse 1.2s ease-in-out infinite; }
+.thinking-dots span:nth-child(2) { animation-delay:.2s; }
+.thinking-dots span:nth-child(3) { animation-delay:.4s; }
+@keyframes dotPulse { 0%,80%,100%{transform:scale(.7);opacity:.3;}40%{transform:scale(1.1);opacity:1;} }
+
+/* ── Barra de archivos adjuntos (sobre el input) ─────────────────────────── */
+#attachments-bar {
+  display:none; flex-wrap:wrap; gap:6px;
+  padding:8px 14px 0;
+  background:var(--bg-input);
+  border-top:1px solid var(--border);
+  transition: background var(--transition-theme);
+}
+#attachments-bar.has-files { display:flex; }
+
+.attach-chip {
+  display:inline-flex; align-items:center; gap:5px;
+  background:var(--file-bg); border:1px solid var(--file-border);
+  border-radius:20px; padding:3px 8px 3px 6px;
+  font-family:var(--font-mono); font-size:10px; color:var(--text-secondary);
+  max-width:180px; animation:chipIn .2s ease forwards;
+}
+@keyframes chipIn { from{opacity:0;transform:scale(.85);}to{opacity:1;transform:scale(1);} }
+.attach-chip svg { width:11px; height:11px; flex-shrink:0; color:var(--accent); }
+.attach-chip .chip-name { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.attach-chip .chip-del {
+  width:14px; height:14px; border-radius:50%; background:var(--border-accent);
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer; flex-shrink:0; font-size:9px; color:var(--text-secondary);
+  transition:all .15s; margin-left:2px;
+}
+.attach-chip .chip-del:hover { background:var(--accent); color:white; }
+
+/* ── Input área ──────────────────────────────────────────────────────────── */
+#input-area {
+  border-top:1px solid var(--border);
+  display:flex; flex-direction:column;
+  background:var(--bg-input); position:relative;
+  transition: background var(--transition-theme), border-color var(--transition-theme);
+}
+#input-area::before { content:''; position:absolute; top:0; left:0; right:0; height:1px; background:var(--divider); }
+#input-row { display:flex; gap:8px; align-items:flex-end; padding:12px 14px 8px; }
+
+#msg-input {
+  flex:1; background:var(--bg-panel); border:1px solid var(--border);
+  border-radius:8px; padding:10px 14px; color:var(--text-primary);
+  font-family:var(--font-body); font-size:13.5px; resize:none;
+  min-height:40px; max-height:120px; outline:none; line-height:1.5;
+  transition: border-color .2s, background var(--transition-theme);
+}
+#msg-input:focus { border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-glow); }
+#msg-input::placeholder { color:var(--text-secondary); opacity:.6; }
+
+/* Botones del input */
+.input-btn {
+  width:38px; height:38px; border-radius:8px;
+  border:1px solid var(--border); background:var(--bg-panel);
+  cursor:pointer; display:flex; align-items:center; justify-content:center;
+  transition:all .2s; flex-shrink:0; color:var(--text-secondary);
+}
+.input-btn:hover { border-color:var(--accent); color:var(--accent); }
+.input-btn svg { width:16px; height:16px; }
+.input-btn.active { background:var(--accent); border-color:var(--accent); color:white; box-shadow:0 0 12px var(--accent-glow); animation:voicePulse 1s ease-in-out infinite; }
+@keyframes voicePulse { 0%,100%{box-shadow:0 0 8px var(--accent-glow);}50%{box-shadow:0 0 20px var(--accent-glow);} }
+
+#send-btn {
+  width:38px; height:38px; border-radius:8px; background:var(--accent);
+  border:none; cursor:pointer; display:flex; align-items:center; justify-content:center;
+  transition:all .2s; flex-shrink:0; box-shadow:0 2px 8px var(--accent-glow);
+}
+#send-btn:hover { filter:brightness(1.15); transform:translateY(-1px); }
+#send-btn svg { width:16px; height:16px; fill:white; }
+
+#input-info {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:0 14px 10px;
+}
+.input-hint { font-family:var(--font-mono); font-size:10px; color:var(--text-secondary); opacity:.5; letter-spacing:.04em; }
+#char-count  { font-family:var(--font-mono); font-size:10px; color:var(--text-secondary); opacity:.4; }
+
+/* Input de archivo oculto */
+#file-input { display:none; }
+
+/* ── Selector de micrófono ───────────────────────────────────────────────── */
+#mic-bar {
+  display:flex; align-items:center; gap:8px;
+  padding:7px 14px;
+  border-top:1px solid var(--border);
+  background:var(--bg-base);
+  transition: background var(--transition-theme), border-color var(--transition-theme);
+}
+#mic-bar::before { content:''; position:absolute; } /* evita doble ::before */
+.mic-label { font-family:var(--font-mono); font-size:9px; color:var(--text-secondary); letter-spacing:.06em; white-space:nowrap; opacity:.7; }
+.mic-dot { width:6px; height:6px; border-radius:50%; background:var(--accent); flex-shrink:0; opacity:.6; }
+#mic-select {
+  flex:1; min-width:0;
+  background:var(--bg-input); border:1px solid var(--border);
+  border-radius:5px; padding:4px 8px;
+  color:var(--text-primary); font-family:var(--font-mono); font-size:10px;
+  outline:none; cursor:pointer;
+  transition: border-color .2s, background var(--transition-theme);
+  -webkit-appearance:none; appearance:none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%237b82a0'/%3E%3C/svg%3E");
+  background-repeat:no-repeat; background-position:right 8px center;
+  padding-right:22px;
+}
+#mic-select:focus { border-color:var(--accent); }
+#mic-select option { background:var(--bg-input); }
+
+/* ── Panel modelo (derecha) ──────────────────────────────────────────────── */
+#model-panel {
+  background:var(--bg-base);
+  display:flex; flex-direction:column; align-items:center;
+  position:relative; overflow:hidden;
+  transition: background var(--transition-theme);
+}
+[data-theme="dark"] #model-panel::before {
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background: radial-gradient(ellipse at 50% 80%,rgba(91,110,245,.08) 0%,transparent 60%),
+              radial-gradient(ellipse at 80% 20%,rgba(192,132,252,.06) 0%,transparent 40%);
+}
+[data-theme="sakura"] #model-panel::before {
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background: radial-gradient(ellipse at 50% 80%,rgba(255,150,200,.15) 0%,transparent 60%),
+              radial-gradient(ellipse at 80% 20%,rgba(200,150,255,.1) 0%,transparent 40%);
+}
+
+.sakura-petal { position:absolute; pointer-events:none; opacity:0; font-size:12px; animation:petalFall linear infinite; }
+@keyframes petalFall {
+  0%   { opacity:0;  transform:translateY(-20px) rotate(0deg); }
+  10%  { opacity:.7; }
+  90%  { opacity:.5; }
+  100% { opacity:0;  transform:translateY(100vh) rotate(360deg); }
+}
+
+#model-canvas-container { width:100%; flex:1; position:relative; min-height:0; }
+#live2d-chat-canvas { width:100%; height:100%; display:block; }
+
+/* Indicador de vista actual (pequeño, bottom-right del panel) */
+#view-indicator {
+  position:absolute; bottom:8px; right:8px; z-index:10;
+  font-family:var(--font-mono); font-size:9px; letter-spacing:.06em;
+  color:var(--text-secondary); background:var(--bg-panel);
+  border:1px solid var(--border); border-radius:4px;
+  padding:2px 7px; opacity:.5; pointer-events:none;
+  transition: opacity .4s;
+}
+
+.corner-deco { position:absolute; width:20px; height:20px; opacity:.25; pointer-events:none; }
+.corner-deco.tl { top:6px;    left:6px;  border-top:1.5px solid var(--accent); border-left:1.5px solid var(--accent); }
+.corner-deco.tr { top:6px;    right:6px; border-top:1.5px solid var(--accent); border-right:1.5px solid var(--accent); }
+.corner-deco.bl { bottom:6px; left:6px;  border-bottom:1.5px solid var(--accent); border-left:1.5px solid var(--accent); }
+.corner-deco.br { bottom:6px; right:6px; border-bottom:1.5px solid var(--accent); border-right:1.5px solid var(--accent); }
+
+::-webkit-scrollbar { width:4px; height:4px; }
+::-webkit-scrollbar-thumb { background:var(--scrollbar); border-radius:2px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Header -->
+  <header id="header">
+    <div class="header-dot"></div>
+    <span class="header-title">March 7th</span>
+    <span class="header-tag">v0.1 · AGENTE</span>
+    <div class="header-spacer"></div>
+    <span class="theme-label" id="theme-label">DARK</span>
+    <div id="theme-toggle" title="Cambiar tema"></div>
+    <button id="close-btn" title="Cerrar">✕</button>
+  </header>
+
+  <!-- Panel Chat -->
+  <section id="chat-panel">
+    <div class="corner-deco tl"></div>
+    <div class="corner-deco bl"></div>
+
+    <!-- Overlay de arrastrar archivo -->
+    <div id="drop-overlay">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12M8 8l4-4 4 4"/>
+      </svg>
+      <span>SOLTAR ARCHIVO AQUÍ</span>
+    </div>
+
+    <div id="messages">
+      <div class="session-divider"><span>SESIÓN INICIADA</span></div>
+      <!-- El mensaje de bienvenida se inyecta por JS después de cargar el modelo -->
+    </div>
+
+    <!-- Chips de archivos adjuntos pendientes -->
+    <div id="attachments-bar"></div>
+
+    <!-- Input -->
+    <div id="input-area">
+      <div id="input-row">
+        <!-- Micrófono -->
+        <button class="input-btn" id="voice-btn" title="Hablar por voz">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>
+            <path d="M19 10v2a7 7 0 01-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8"  y1="23" x2="16" y2="23"/>
+          </svg>
+        </button>
+        <!-- Adjuntar archivo -->
+        <button class="input-btn" id="attach-btn" title="Adjuntar archivo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66L9.41 17.41a2 2 0 01-2.83-2.83l8.49-8.48"/>
+          </svg>
+        </button>
+        <input type="file" id="file-input" multiple>
+        <textarea id="msg-input" placeholder="Escribe algo a March 7th..." rows="1"></textarea>
+        <button id="send-btn" title="Enviar (Enter)">
+          <svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
+        </button>
+      </div>
+      <div id="input-info">
+        <span class="input-hint">Enter ↵ enviar · Shift+Enter nueva línea · arrastra archivos aquí</span>
+        <span id="char-count">0</span>
+      </div>
+    </div>
+
+    <!-- Selector de micrófono -->
+    <div id="mic-bar">
+      <div class="mic-dot"></div>
+      <span class="mic-label">MIC</span>
+      <select id="mic-select">
+        <option value="">Cargando micrófonos…</option>
+      </select>
+    </div>
+  </section>
+
+  <!-- Panel March 7th (modelo Live2D) -->
+  <section id="model-panel">
+    <div id="panel-divider"></div>
+    <div class="corner-deco tr"></div>
+    <div class="corner-deco br"></div>
+    <div id="model-canvas-container">
+      <canvas id="live2d-chat-canvas"></canvas>
+    </div>
+    <div id="view-indicator">FULL</div>
+  </section>
+
+</div>
+
+<script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pixi.js@6.5.10/dist/browser/pixi.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js"></script>
+
+<script>
+const { ipcRenderer } = require('electron');
+const path = require('path');
+const fs   = require('fs');
+const cp   = require('child_process');
+
+window.PIXI = PIXI;
+
+// ── Config ─────────────────────────────────────────────────────────────────
+const MODEL_PATH = path.join(__dirname, '..', 'models', 'March 7th', 'march 7th.model3.json');
+const TTS_VOICE  = 'ja-JP-NanamiNeural';
+
+// Vistas del modelo en el panel del chat
+const VIEW = {
+  full: { sr: 0.85, ax: 0.5, ay: 1.00, py: 1.00 },
+  half: { sr: 1.55, ax: 0.5, ay: 0.72, py: 1.08 },
+  head: { sr: 3.20, ax: 0.5, ay: 0.18, py: 0.88 },
+};
+
+// Personalidad de vistas: pesos y duraciones (segundos)
+const VIEW_PERSONALITY = {
+  weights:  { full: 50, half: 30, head: 20 },
+  duration: {
+    full: { min: 30, max: 80 },
+    half: { min: 18, max: 45 },
+    head: { min: 10, max: 25 },
+  },
+};
+
+let pixiApp, model, modelNaturalH;
+let currentView  = 'head';   // inicia en cabeza
+let isSpeaking   = false;
+let isListening  = false;
+let audioCtx     = null;
+let recognition  = null;
+
+// Archivos adjuntos pendientes de enviar
+let pendingFiles = [];
+
+// ── Tema ────────────────────────────────────────────────────────────────────
+const html        = document.documentElement;
+const themeToggle = document.getElementById('theme-toggle');
+const themeLabel  = document.getElementById('theme-label');
+
+function setTheme(t) {
+  html.setAttribute('data-theme', t);
+  themeLabel.textContent = t === 'dark' ? 'DARK' : 'SAKURA';
+  updateSakuraPetals(t === 'sakura');
+  ipcRenderer.send('chat-theme-changed', t);
+}
+themeToggle.addEventListener('click', () =>
+  setTheme(html.getAttribute('data-theme') === 'dark' ? 'sakura' : 'dark')
+);
+
+// ── Pétalos sakura ──────────────────────────────────────────────────────────
+let petalInterval = null;
+function updateSakuraPetals(active) {
+  document.querySelectorAll('.sakura-petal').forEach(e => e.remove());
+  if (petalInterval) { clearInterval(petalInterval); petalInterval = null; }
+  if (!active) return;
+  const panel = document.getElementById('model-panel');
+  const spawn = () => {
+    const el = document.createElement('div');
+    el.className = 'sakura-petal';
+    el.textContent = ['·','°','˚','+'][Math.floor(Math.random()*4)];
+    el.style.cssText = `left:${10+Math.random()*80}%;top:-10px;
+      animation-duration:${6+Math.random()*6}s;animation-delay:${Math.random()*2}s;
+      font-size:${8+Math.random()*8}px;
+      color:${['#f0a0c0','#d0a0e0','#f0c0d8'][Math.floor(Math.random()*3)]};`;
+    panel.appendChild(el);
+    setTimeout(() => el.remove(), 14000);
+  };
+  spawn();
+  petalInterval = setInterval(spawn, 3500);
+}
+
+// ── Hora ────────────────────────────────────────────────────────────────────
+function now() {
+  return new Date().toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' });
+}
+
+// ── Chat — mensajes ─────────────────────────────────────────────────────────
+const messagesEl = document.getElementById('messages');
+
+function addMessage(role, text, files = []) {
+  const div    = document.createElement('div'); div.className = `msg ${role}`;
+  const avatar = document.createElement('div'); avatar.className = 'msg-avatar';
+  avatar.textContent = role === 'march' ? 'M7' : '你';
+  const body   = document.createElement('div'); body.className = 'msg-body';
+  const name   = document.createElement('div'); name.className = 'msg-name';
+  name.textContent = role === 'march' ? 'MARCH 7TH' : 'TÚ';
+  const bubble = document.createElement('div'); bubble.className = 'msg-bubble';
+  bubble.textContent = text;
+
+  // Chips de archivos adjuntos en el mensaje
+  files.forEach(f => {
+    const chip = document.createElement('div'); chip.className = 'file-chip';
+    chip.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66L9.41 17.41a2 2 0 01-2.83-2.83l8.49-8.48"/>
+    </svg><span>${f.name}</span>`;
+    bubble.appendChild(chip);
+  });
+
+  const time = document.createElement('div'); time.className = 'msg-time';
+  time.textContent = now();
+  body.appendChild(name); body.appendChild(bubble); body.appendChild(time);
+  div.appendChild(avatar); div.appendChild(body);
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  return { div, bubble };
+}
+
+function showThinking() {
+  const div = document.createElement('div');
+  div.className = 'msg march'; div.id = 'thinking-msg';
+  div.innerHTML = `<div class="msg-avatar">M7</div>
+    <div class="msg-body">
+      <div class="msg-name">MARCH 7TH</div>
+      <div class="msg-bubble">
+        <div class="thinking-dots"><span></span><span></span><span></span></div>
+      </div>
+    </div>`;
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+function removeThinking() { const t = document.getElementById('thinking-msg'); if (t) t.remove(); }
+
+// ── Respuestas temporales ───────────────────────────────────────────────────
+const TEMP_RESPONSES = [
+  'Entendido! Todavía no tengo mi cerebro completo, pero pronto podré ayudarte con eso.',
+  'Anotado! Mi sistema de agente está en construcción. Por ahora solo puedo escucharte.',
+  'Interesante! Cuando mi módulo de IA esté listo, podré responder a eso correctamente.',
+  'Recibido! Estoy aquí contigo aunque mi cerebro aún está siendo instalado.',
+  'Hmm, eso es algo que podré hacer cuando conectemos con el agente. Por ahora te escucho.',
+];
+
+async function processMessage(text, files = []) {
+  const trimmed = text.trim();
+  if (!trimmed && files.length === 0) return;
+
+  addMessage('user', trimmed || '(archivo adjunto)', files);
+  showThinking();
+  triggerMotion();
+
+  await new Promise(r => setTimeout(r, 800 + Math.random()*600));
+  removeThinking();
+
+  const response = TEMP_RESPONSES[Math.floor(Math.random()*TEMP_RESPONSES.length)];
+  const { bubble } = addMessage('march', '');
+  bubble.textContent = '';
+  for (const char of response) {
+    bubble.textContent += char;
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    await new Promise(r => setTimeout(r, 18 + Math.random()*14));
+  }
+  speak(response);
+}
+
+// ── Input texto ─────────────────────────────────────────────────────────────
+const input     = document.getElementById('msg-input');
+const sendBtn   = document.getElementById('send-btn');
+const charCount = document.getElementById('char-count');
+
+input.addEventListener('input', () => {
+  charCount.textContent = input.value.length;
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+});
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    const text = input.value;
+    input.value = ''; input.style.height = 'auto'; charCount.textContent = '0';
+    sendMessage(text);
+  }
+});
+sendBtn.addEventListener('click', () => {
+  const text = input.value;
+  input.value = ''; input.style.height = 'auto'; charCount.textContent = '0';
+  sendMessage(text);
+});
+
+function sendMessage(text) {
+  const files = [...pendingFiles];
+  clearAttachments();
+  processMessage(text, files);
+}
+
+// ── Adjuntar archivos — botón ───────────────────────────────────────────────
+const attachBtn  = document.getElementById('attach-btn');
+const fileInput  = document.getElementById('file-input');
+const attachBar  = document.getElementById('attachments-bar');
+
+attachBtn.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', (e) => addFiles(Array.from(e.target.files)));
+
+function addFiles(files) {
+  files.forEach(f => {
+    if (!pendingFiles.find(p => p.name === f.name && p.size === f.size)) {
+      pendingFiles.push(f);
+    }
+  });
+  renderAttachBar();
+  fileInput.value = ''; // reset para permitir re-selección
+}
+
+function renderAttachBar() {
+  attachBar.innerHTML = '';
+  if (pendingFiles.length === 0) {
+    attachBar.classList.remove('has-files');
+    return;
+  }
+  attachBar.classList.add('has-files');
+  pendingFiles.forEach((f, i) => {
+    const chip = document.createElement('div'); chip.className = 'attach-chip';
+    chip.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66L9.41 17.41a2 2 0 01-2.83-2.83l8.49-8.48"/>
+      </svg>
+      <span class="chip-name">${f.name}</span>
+      <div class="chip-del" data-idx="${i}">✕</div>`;
+    attachBar.appendChild(chip);
+  });
+  attachBar.querySelectorAll('.chip-del').forEach(btn => {
+    btn.addEventListener('click', () => {
+      pendingFiles.splice(Number(btn.dataset.idx), 1);
+      renderAttachBar();
+    });
+  });
+}
+
+function clearAttachments() {
+  pendingFiles = [];
+  renderAttachBar();
+}
+
+// ── Drag & drop de archivos sobre el panel de chat ──────────────────────────
+const chatPanel  = document.getElementById('chat-panel');
+const dropOverlay = document.getElementById('drop-overlay');
+let dragCounter  = 0;  // contador para evitar flicker al pasar sobre hijos
+
+chatPanel.addEventListener('dragenter', (e) => {
+  e.preventDefault();
+  dragCounter++;
+  if (e.dataTransfer.types.includes('Files')) dropOverlay.classList.add('visible');
+});
+chatPanel.addEventListener('dragleave', () => {
+  dragCounter--;
+  if (dragCounter <= 0) { dragCounter = 0; dropOverlay.classList.remove('visible'); }
+});
+chatPanel.addEventListener('dragover', (e) => e.preventDefault());
+chatPanel.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dragCounter = 0;
+  dropOverlay.classList.remove('visible');
+  const files = Array.from(e.dataTransfer.files);
+  if (files.length > 0) addFiles(files);
+});
+
+// ── Voz ─────────────────────────────────────────────────────────────────────
+const voiceBtn = document.getElementById('voice-btn');
+voiceBtn.addEventListener('click', () => {
+  if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+    addMessage('march', 'Lo siento, tu navegador no soporta reconocimiento de voz.'); return;
+  }
+  if (isListening) { recognition?.stop(); return; }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recognition = new SR();
+  recognition.lang = 'es-MX'; recognition.interimResults = false;
+  recognition.onstart  = () => { isListening = true; voiceBtn.classList.add('active'); };
+  recognition.onresult = (e) => processMessage(e.results[0][0].transcript);
+  recognition.onend    = () => { isListening = false; voiceBtn.classList.remove('active'); };
+  recognition.onerror  = () => { isListening = false; voiceBtn.classList.remove('active'); };
+  recognition.start();
+});
+
+// ── Selector de micrófono ───────────────────────────────────────────────────
+const micSelect = document.getElementById('mic-select');
+let micDevicesLoaded = false;
+
+async function loadMicDevices() {
+  if (micDevicesLoaded) return;
+  try {
+    // Solicitar permiso de audio para poder ver los labels reales
+    await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => {});
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const mics    = devices.filter(d => d.kind === 'audioinput');
+
+    micSelect.innerHTML = '';
+    const defaultOpt = document.createElement('option');
+    defaultOpt.value = ''; defaultOpt.textContent = 'Micrófono por defecto';
+    micSelect.appendChild(defaultOpt);
+
+    mics.forEach((d, i) => {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = d.label || `Micrófono ${i+1}`;
+      opt.dataset.label = d.label || `Micrófono ${i+1}`;
+      micSelect.appendChild(opt);
+    });
+
+    micDevicesLoaded = true;
+  } catch(e) {
+    console.error('[mic] error enumerando dispositivos:', e);
+  }
+}
+
+// Restaurar micrófono guardado en config.json
+ipcRenderer.on('restore-mic', (e, { index, label }) => {
+  // Esperar a que los dispositivos estén cargados
+  const tryRestore = () => {
+    const opt = micSelect.querySelector(`option[value="${index}"]`);
+    if (opt) {
+      micSelect.value = index;
+      console.log(`[mic] restaurado: [${index}] ${label}`);
+    } else if (!micDevicesLoaded) {
+      setTimeout(tryRestore, 300);
+    }
+  };
+  tryRestore();
+});
+
+// Cuando el usuario cambia el micrófono → guardar en config.json vía main
+micSelect.addEventListener('change', () => {
+  const idx = micSelect.value === '' ? null : Number(micSelect.value);
+  const lbl = micSelect.value === ''
+    ? 'default'
+    : (micSelect.options[micSelect.selectedIndex]?.dataset.label || `Micrófono ${idx+1}`);
+
+  ipcRenderer.send('set-mic-index', { index: idx ?? -1, label: lbl });
+  console.log(`[mic] seleccionado: [${idx}] ${lbl}`);
+});
+
+// ── TTS ─────────────────────────────────────────────────────────────────────
+function getAudioCtx() {
+  if (!audioCtx || audioCtx.state === 'closed') audioCtx = new AudioContext();
+  return audioCtx;
+}
+function cleanForTTS(text) {
+  return text.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu,'').replace(/\s{2,}/g,' ').trim();
+}
+async function speak(text) {
+  if (isSpeaking) return;
+  isSpeaking = true;
+  const spokenText = cleanForTTS(text);
+  const scriptPath = path.join(__dirname, '..', 'tts_stream.py');
+  try {
+    await new Promise((resolve, reject) => {
+      const chunks = [];
+      const proc = cp.spawn('python', [scriptPath,'--voice',TTS_VOICE,'--rate','+10%','--pitch','+20Hz','--text',spokenText]);
+      proc.stdout.on('data', c => chunks.push(c));
+      proc.on('close', async (code) => {
+        if (code !== 0 || !chunks.length) { reject(new Error('TTS failed')); return; }
+        try {
+          const buf = Buffer.concat(chunks);
+          const ab  = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+          const ctx = getAudioCtx();
+          const audioBuf = await ctx.decodeAudioData(ab);
+          const src = ctx.createBufferSource();
+          src.buffer = audioBuf; src.connect(ctx.destination); src.start(0);
+          src.onended = resolve;
+        } catch(e) { reject(e); }
+      });
+      proc.on('error', reject);
+    });
+  } catch {
+    const utt = new SpeechSynthesisUtterance(spokenText);
+    utt.lang = 'ja-JP'; utt.pitch = 1.3; utt.rate = 1.05;
+    await new Promise(r => { utt.onend = r; speechSynthesis.speak(utt); });
+  }
+  isSpeaking = false;
+}
+
+// ── Live2D ──────────────────────────────────────────────────────────────────
+const viewIndicator = document.getElementById('view-indicator');
+
+async function loadModel() {
+  // Cargar lista de micrófonos al mismo tiempo
+  loadMicDevices();
+
+  if (!fs.existsSync(MODEL_PATH)) {
+    // Modelo no encontrado → solo mostrar saludo de texto
+    showWelcome();
+    return;
+  }
+
+  const canvas    = document.getElementById('live2d-chat-canvas');
+  const container = document.getElementById('model-canvas-container');
+
+  pixiApp = new PIXI.Application({
+    view: canvas,
+    width:  container.clientWidth,
+    height: container.clientHeight,
+    backgroundAlpha: 0, antialias: true,
+    resolution: window.devicePixelRatio || 1, autoDensity: true,
+  });
+
+  PIXI.live2d.Live2DModel.registerTicker(PIXI.Ticker);
+  const fileUrl = 'file:///' + MODEL_PATH.replace(/\\/g, '/');
+
+  try {
+    model = await PIXI.live2d.Live2DModel.from(fileUrl);
+    modelNaturalH = model.height;
+    pixiApp.stage.addChild(model);
+    applyView('head', false);   // empieza en cabeza
+    setTimeout(triggerMotion, 600);
+    setInterval(triggerMotion, 8000);
+    startAutonomousView();
+    console.log('[chat] modelo cargado');
+  } catch(e) {
+    console.error('[chat] model error:', e);
+  }
+
+  // Saludo de bienvenida DESPUÉS de que el modelo carga
+  showWelcome();
+}
+
+// ── Saludo al iniciar ───────────────────────────────────────────────────────
+function showWelcome() {
+  const greetings = [
+    '¡Hola! Soy March 7th~ Estoy aquí y lista para ayudarte. ¿En qué puedo echarte una mano hoy?',
+    '¡Hola! Yo soy March 7th, ¡la chica del 7 de marzo! Cuéntame, ¿qué necesitas?',
+    '¡Buenas! March 7th en línea~ Lista para lo que necesites. ¡No te pongas tímido!',
+  ];
+  const text = greetings[Math.floor(Math.random()*greetings.length)];
+
+  // Añadir el mensaje con efecto typewriter
+  (async () => {
+    const { bubble } = addMessage('march', '');
+    bubble.textContent = '';
+    for (const char of text) {
+      bubble.textContent += char;
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      await new Promise(r => setTimeout(r, 20 + Math.random()*12));
+    }
+    speak(text);
+  })();
+}
+
+// ── Cambio de vista ─────────────────────────────────────────────────────────
+function applyView(view, animate = false) {
+  if (!model || !pixiApp) { currentView = view; return; }
+  const cfg = VIEW[view];
+  const W   = pixiApp.screen.width;
+  const H   = pixiApp.screen.height;
+  const ts  = (H / modelNaturalH) * cfg.sr;
+  const tx  = W * cfg.ax;
+  const ty  = H * cfg.py;
+
+  // Actualizar indicador
+  viewIndicator.textContent = view.toUpperCase();
+  setTimeout(() => { viewIndicator.style.opacity = '0'; }, 2000);
+  viewIndicator.style.opacity = '.5';
+
+  if (!animate) {
+    model.scale.set(ts); model.anchor.set(cfg.ax, cfg.ay); model.position.set(tx, ty);
+    currentView = view; return;
+  }
+
+  const dur = 700, start = performance.now();
+  const fs  = model.scale.x, fx = model.x, fy = model.y;
+  const fax = model.anchor.x, fay = model.anchor.y;
+  const ease = t => t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+  const tick = (now) => {
+    const t = Math.min((now - start)/dur, 1), e = ease(t);
+    model.scale.set(fs+(ts-fs)*e); model.anchor.set(fax+(cfg.ax-fax)*e, fay+(cfg.ay-fay)*e);
+    model.position.set(fx+(tx-fx)*e, fy+(ty-fy)*e);
+    if (t < 1) requestAnimationFrame(tick);
+    else { currentView = view; triggerMotion(); }
+  };
+  requestAnimationFrame(tick);
+}
+
+// ── Vista autónoma (March decide sola) ─────────────────────────────────────
+function pickNextView() {
+  const w = VIEW_PERSONALITY.weights;
+  const total = w.full + w.half + w.head;
+  const r = Math.random() * total;
+  if (r < w.full) return 'full';
+  if (r < w.full + w.half) return 'half';
+  return 'head';
+}
+
+function startAutonomousView() {
+  const schedule = () => {
+    const d    = VIEW_PERSONALITY.duration[currentView];
+    const wait = (d.min + Math.random()*(d.max-d.min)) * 1000;
+    setTimeout(() => {
+      const next = pickNextView();
+      if (model && next !== currentView) applyView(next, true);
+      schedule();
+    }, wait);
+  };
+  // Primera transición autónoma: entre 12 y 20 segundos después de abrir
+  setTimeout(schedule, 12000 + Math.random()*8000);
+}
+
+function triggerMotion() {
+  try {
+    const defs = model?.internalModel?.motionManager?.definitions;
+    if (!defs) return;
+    const groups = Object.keys(defs);
+    if (groups.length) model.motion(groups[Math.floor(Math.random()*groups.length)]);
+  } catch(_) {}
+}
+
+window.addEventListener('resize', () => {
+  if (!pixiApp || !model) return;
+  const container = document.getElementById('model-canvas-container');
+  pixiApp.renderer.resize(container.clientWidth, container.clientHeight);
+  applyView(currentView, false);
+});
+
+// ── Cerrar ─────────────────────────────────────────────────────────────────
+document.getElementById('close-btn').addEventListener('click', () => {
+  ipcRenderer.send('chat-close');
+});
+
+// ── IPC ────────────────────────────────────────────────────────────────────
+ipcRenderer.on('init-theme',   (e, theme) => setTheme(theme));
+ipcRenderer.on('chat-speak',   (e, text)  => speak(text));
+ipcRenderer.on('chat-message', (e, text)  => processMessage(text));
+
+// ── Init ───────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', loadModel);
+</script>
+</body>
+</html>
