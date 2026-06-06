@@ -1,11 +1,16 @@
 const {
   app, BrowserWindow, ipcMain, screen,
-  Tray, Menu, nativeImage
+  Tray, Menu, nativeImage, session
 } = require('electron');
 const path = require('path');
 const http = require('http');
 const fs   = require('fs');
 const { URL } = require('url');
+
+// ── Python executable ─────────────────────────────────────────────────────────
+// Ruta fija al intérprete para que Electron lo encuentre aunque 'python'
+// no esté en el PATH del sistema (común en Windows).
+const PYTHON_BIN = 'C:/Users/lukal/AppData/Local/Programs/Python/Python311/python.exe';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 const MARGIN  = 12;
@@ -14,55 +19,41 @@ const WIN_H   = 580;
 const CHAT_W  = 900;
 const CHAT_H  = 600;
 
-// ── Config persistente (micrófono y tema) ─────────────────────────────────────
+// ── Config persistente ────────────────────────────────────────────────────────
 const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
 
 function loadConfig() {
   try {
-    if (fs.existsSync(CONFIG_PATH)) {
+    if (fs.existsSync(CONFIG_PATH))
       return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
-    }
-  } catch (e) {
-    console.log('[config] error leyendo config.json:', e.message);
-  }
+  } catch (e) { console.log('[config] error leyendo config.json:', e.message); }
   return {};
 }
 
 function saveConfig(data) {
   try {
-    const current = loadConfig();
-    const merged  = { ...current, ...data };
+    const merged = { ...loadConfig(), ...data };
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(merged, null, 2), 'utf-8');
-  } catch (e) {
-    console.log('[config] error guardando config.json:', e.message);
-  }
+  } catch (e) { console.log('[config] error guardando config.json:', e.message); }
 }
 
-// ── Inicializar config LLM si no existe ───────────────────────────────────
 function ensureLLMConfig() {
   const cfg = loadConfig();
   if (!cfg.llm) {
-    saveConfig({
-      llm: {
-        primary: 'groq',
-        apiKeys: { groq: '', gemini: '', openai: '' },
-        fallback: ['gemini', 'openai'],
-      }
-    });
-    console.log('[config] bloque llm inicializado en config.json');
+    saveConfig({ llm: { primary: 'groq', apiKeys: { groq: '', gemini: '', openai: '' }, fallback: ['gemini', 'openai'] } });
+    console.log('[config] bloque llm inicializado');
   }
 }
 
 // ── Estado global ─────────────────────────────────────────────────────────────
-let mainWindow     = null;   // overlay Live2D
-let chatWindow     = null;   // ventana de chat
+let mainWindow     = null;
+let chatWindow     = null;
 let tray           = null;
 let isClickThrough = true;
 let currentView    = 'full';
 let userHasMoved   = false;
 let chatTheme      = 'dark';
 
-// Micrófono — se carga desde config.json al arrancar
 const savedConfig    = loadConfig();
 let selectedMicIndex = savedConfig.micIndex  ?? null;
 let selectedMicLabel = savedConfig.micLabel  ?? 'default';
@@ -70,18 +61,38 @@ chatTheme            = savedConfig.chatTheme ?? 'dark';
 
 console.log('[march7th] config cargada:', savedConfig);
 
-if (process.platform === 'linux') {
+if (process.platform === 'linux')
   app.commandLine.appendSwitch('enable-transparent-visuals');
+
+// ── Permisos globales de micrófono ────────────────────────────────────────────
+// Se aplican a la sesión default ANTES de crear ventanas.
+// Esto resuelve el error "network" en Web Speech API sin cambiar el protocolo
+// de carga (seguimos usando loadFile / file://) porque aprobamos el permiso
+// incondicionalmente en el proceso main.
+function setupMicPermissions() {
+  const ses = session.defaultSession;
+
+  ses.setPermissionRequestHandler((webContents, permission, callback) => {
+    const allowed = ['media', 'microphone', 'audioCapture', 'getUserMedia'];
+    console.log(`[permisos] ${permission} → ${allowed.includes(permission) ? 'OK' : 'deny'}`);
+    callback(allowed.includes(permission));
+  });
+
+  ses.setPermissionCheckHandler((webContents, permission) => {
+    const allowed = ['media', 'microphone', 'audioCapture', 'getUserMedia'];
+    return allowed.includes(permission);
+  });
+
+  console.log('[march7th] permisos de micrófono configurados');
 }
 
-// ── Posición windows ──────────────────────────────────────────────────────────
+// ── Posiciones ────────────────────────────────────────────────────────────────
 function getBottomRightBounds() {
   const { workArea } = screen.getPrimaryDisplay();
   return {
     x: Math.round(workArea.x + workArea.width  - WIN_W - MARGIN),
     y: Math.round(workArea.y + workArea.height - WIN_H - MARGIN),
-    width:  WIN_W,
-    height: WIN_H,
+    width: WIN_W, height: WIN_H,
   };
 }
 
@@ -90,8 +101,7 @@ function getChatBounds() {
   return {
     x: Math.round(workArea.x + (workArea.width  - CHAT_W) / 2),
     y: Math.round(workArea.y + (workArea.height - CHAT_H) / 2),
-    width:  CHAT_W,
-    height: CHAT_H,
+    width: CHAT_W, height: CHAT_H,
   };
 }
 
@@ -115,45 +125,28 @@ function sendSpeak(text, emotion) {
   mainWindow.webContents.send('speak', emotion ? { text, emotion } : text);
 }
 
-// ── Ventana overlay (se crea pero oculta hasta que se cierra el chat) ──────────
+// ── Ventana overlay ───────────────────────────────────────────────────────────
 function createWindow() {
   const views = ['full', 'half', 'head'];
   currentView = views[Math.floor(Math.random() * views.length)];
 
   mainWindow = new BrowserWindow({
     ...getBottomRightBounds(),
-    transparent:     true,
-    backgroundColor: '#00000000',
-    frame:           false,
-    alwaysOnTop:     true,
-    skipTaskbar:     true,
-    resizable:       false,
-    hasShadow:       false,
-    thickFrame:      false,
-    focusable:       false,
-    show:            false,   // ← oculta al inicio; se muestra cuando se cierra el chat
-    webPreferences: {
-      nodeIntegration:  true,
-      contextIsolation: false,
-      webSecurity:      false,
-    },
+    transparent: true, backgroundColor: '#00000000',
+    frame: false, alwaysOnTop: true, skipTaskbar: true,
+    resizable: false, hasShadow: false, thickFrame: false,
+    focusable: false, show: false,
+    webPreferences: { nodeIntegration: true, contextIsolation: false, webSecurity: false },
   });
 
   mainWindow.setAlwaysOnTop(true, 'screen-saver');
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   mainWindow.setMenuBarVisibility(false);
   mainWindow.setIgnoreMouseEvents(true, { forward: true });
-
-  mainWindow.webContents.on('console-message', (e, level, msg) => {
-    console.log(`[overlay] ${msg}`);
-  });
-
+  mainWindow.webContents.on('console-message', (e, level, msg) => console.log(`[overlay] ${msg}`));
   mainWindow.loadFile(path.join(__dirname, 'src/index.html'));
-
   mainWindow.webContents.once('did-finish-load', () => {
-    setTimeout(() => {
-      mainWindow.webContents.send('set-view', currentView);
-    }, 1500);
+    setTimeout(() => mainWindow.webContents.send('set-view', currentView), 1500);
   });
 }
 
@@ -161,8 +154,7 @@ function createWindow() {
 function createChatWindow() {
   if (chatWindow && !chatWindow.isDestroyed()) {
     if (!chatWindow.isVisible()) {
-      chatWindow.show();
-      chatWindow.focus();
+      chatWindow.show(); chatWindow.focus();
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
       if (tray) tray.setContextMenu(buildTrayMenu());
     } else {
@@ -173,47 +165,35 @@ function createChatWindow() {
 
   chatWindow = new BrowserWindow({
     ...getChatBounds(),
-    frame:          false,
-    transparent:    false,
-    backgroundColor:'#0d0f14',
-    resizable:      true,
-    minWidth:       700,
-    minHeight:      480,
-    skipTaskbar:    false,
-    alwaysOnTop:    false,
-    hasShadow:      true,
-    show:           true,
+    frame: false, transparent: false, backgroundColor: '#0d0f14',
+    resizable: true, minWidth: 700, minHeight: 480,
+    skipTaskbar: false, alwaysOnTop: false, hasShadow: true, show: true,
     webPreferences: {
-      nodeIntegration:  true,
+      nodeIntegration: true,
       contextIsolation: false,
-      webSecurity:      false,
+      webSecurity: false,
+      allowRunningInsecureContent: true,
     },
   });
 
   chatWindow.setMenuBarVisibility(false);
+
+  // ← loadFile normal, sin protocolo custom.
+  // Los permisos ya están aprobados en setupMicPermissions() arriba.
   chatWindow.loadFile(path.join(__dirname, 'src/chat.html'));
 
-  chatWindow.webContents.on('console-message', (e, level, msg) => {
-    console.log(`[chat] ${msg}`);
-  });
+  chatWindow.webContents.on('console-message', (e, level, msg) => console.log(`[chat] ${msg}`));
 
   chatWindow.webContents.once('did-finish-load', () => {
     chatWindow.webContents.send('init-theme', chatTheme);
-    // Restaurar micrófono guardado
-    if (selectedMicIndex !== null) {
-      chatWindow.webContents.send('restore-mic', {
-        index: selectedMicIndex,
-        label: selectedMicLabel,
-      });
-    }
+    if (selectedMicIndex !== null)
+      chatWindow.webContents.send('restore-mic', { index: selectedMicIndex, label: selectedMicLabel });
   });
 
-  // Ocultar overlay mientras el chat está abierto
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
 
   chatWindow.on('closed', () => {
     chatWindow = null;
-    // Mostrar overlay cuando se cierra el chat
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
     if (tray) tray.setContextMenu(buildTrayMenu());
   });
@@ -229,8 +209,7 @@ function toggleChatWindow() {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
     if (tray) tray.setContextMenu(buildTrayMenu());
   } else {
-    chatWindow.show();
-    chatWindow.focus();
+    chatWindow.show(); chatWindow.focus();
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
     if (tray) tray.setContextMenu(buildTrayMenu());
   }
@@ -240,45 +219,24 @@ function toggleChatWindow() {
 function buildTrayMenu() {
   const chatOpen = chatWindow && !chatWindow.isDestroyed() && chatWindow.isVisible();
   return Menu.buildFromTemplate([
-    {
-      label: chatOpen ? '💬 Cerrar chat' : '💬 Abrir chat',
-      click: toggleChatWindow,
-    },
+    { label: chatOpen ? '💬 Cerrar chat' : '💬 Abrir chat', click: toggleChatWindow },
     { type: 'separator' },
-    {
-      label: isClickThrough ? '🔒 Bloquear (mover overlay)' : '🖱️ Pasar clics',
-      click: () => setClickThrough(!isClickThrough),
-    },
+    { label: isClickThrough ? '🔒 Bloquear (mover overlay)' : '🖱️ Pasar clics', click: () => setClickThrough(!isClickThrough) },
     { type: 'separator' },
     { label: `${currentView === 'full' ? '✓ ' : ''}Cuerpo completo`, click: () => sendView('full') },
     { label: `${currentView === 'half' ? '✓ ' : ''}Medio cuerpo`,    click: () => sendView('half') },
     { label: `${currentView === 'head' ? '✓ ' : ''}Solo cabeza`,     click: () => sendView('head') },
     { type: 'separator' },
-    {
-      label: '🔊 Prueba de voz',
-      submenu: [
-        { label: 'Saludo',      click: () => sendSpeak('Hola! Estoy aqui para ayudarte!') },
-        { label: 'Emocion sad', click: () => sendSpeak('Lo siento, hubo un error.', 'sad') },
-        { label: 'Excited',     click: () => sendSpeak('Perfecto, todo salio bien!', 'excited') },
-      ],
-    },
+    { label: '🔊 Prueba de voz', submenu: [
+      { label: 'Saludo',      click: () => sendSpeak('Hola! Estoy aqui para ayudarte!') },
+      { label: 'Emocion sad', click: () => sendSpeak('Lo siento, hubo un error.', 'sad') },
+      { label: 'Excited',     click: () => sendSpeak('Perfecto, todo salio bien!', 'excited') },
+    ]},
     { type: 'separator' },
-    {
-      label: `🎙 Mic: ${selectedMicLabel}`,
-      enabled: false,
-    },
+    { label: `🎙 Mic: ${selectedMicLabel}`, enabled: false },
     { type: 'separator' },
-    {
-      label: '📌 Volver a esquina',
-      click: () => {
-        userHasMoved = false;
-        mainWindow.setBounds(getBottomRightBounds());
-      },
-    },
-    {
-      label: 'Mostrar / ocultar overlay',
-      click: () => mainWindow.isVisible() ? mainWindow.hide() : mainWindow.show(),
-    },
+    { label: '📌 Volver a esquina', click: () => { userHasMoved = false; mainWindow.setBounds(getBottomRightBounds()); } },
+    { label: 'Mostrar / ocultar overlay', click: () => mainWindow.isVisible() ? mainWindow.hide() : mainWindow.show() },
     { type: 'separator' },
     { label: 'Cerrar todo', click: () => app.quit() },
   ]);
@@ -292,29 +250,18 @@ function createTray() {
 
 // ── IPC: overlay ──────────────────────────────────────────────────────────────
 ipcMain.on('drag-start', () => { userHasMoved = true; });
-
 ipcMain.on('drag-move', (e, { x, y }) => {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   const size = mainWindow.getSize();
-  mainWindow.setPosition(
-    Math.round(x - size[0] / 2),
-    Math.round(y - size[1] / 2)
-  );
+  mainWindow.setPosition(Math.round(x - size[0] / 2), Math.round(y - size[1] / 2));
 });
-
 ipcMain.on('model-hover', (e, hovering) => {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   mainWindow.setIgnoreMouseEvents(!hovering, { forward: true });
 });
-
-ipcMain.on('view-changed', (e, view) => {
-  currentView = view;
-  if (tray) tray.setContextMenu(buildTrayMenu());
-});
-
+ipcMain.on('view-changed', (e, view) => { currentView = view; if (tray) tray.setContextMenu(buildTrayMenu()); });
 ipcMain.on('model-dblclick', () => toggleChatWindow());
 
-// Comandos de voz
 ipcMain.on('voice-command', (e, { action, text }) => {
   console.log(`[march7th] voice-command: ${action}`, text || '');
   if (action === 'open-chat') {
@@ -326,180 +273,123 @@ ipcMain.on('voice-command', (e, { action, text }) => {
       if (tray) tray.setContextMenu(buildTrayMenu());
     }
   } else if (action === 'message' && text) {
-    if (chatWindow && !chatWindow.isDestroyed()) {
-      chatWindow.webContents.send('chat-message', text);
-    }
+    if (chatWindow && !chatWindow.isDestroyed()) chatWindow.webContents.send('chat-message', text);
   }
 });
 
-// ── IPC: selección de micrófono → guardar en config.json ─────────────────────
 ipcMain.on('set-mic-index', (e, { index, label }) => {
-  console.log(`[march7th] micrófono seleccionado: [${index}] ${label}`);
-  selectedMicIndex = index;
-  selectedMicLabel = label;
-
-  // Persistir en disco
+  console.log(`[march7th] micrófono: [${index}] ${label}`);
+  selectedMicIndex = index; selectedMicLabel = label;
   saveConfig({ micIndex: index, micLabel: label });
-  console.log(`[march7th] micrófono guardado en config.json`);
-
   if (tray) tray.setContextMenu(buildTrayMenu());
   restartVoiceListener(index);
 });
 
-// ── IPC: chat window ──────────────────────────────────────────────────────────
 ipcMain.on('chat-close', () => {
   if (chatWindow && !chatWindow.isDestroyed()) chatWindow.hide();
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
   if (tray) tray.setContextMenu(buildTrayMenu());
 });
 
-ipcMain.on('chat-theme-changed', (e, theme) => {
-  chatTheme = theme;
-  saveConfig({ chatTheme: theme });
-});
+ipcMain.on('chat-theme-changed', (e, theme) => { chatTheme = theme; saveConfig({ chatTheme: theme }); });
 
 // ── Servidor HTTP local ───────────────────────────────────────────────────────
 const VALID_EMOTIONS = ['happy','excited','sad','tired','gentle','default'];
 const VALID_VIEWS    = ['full','half','head'];
-
 const HELP_TEXT = `
   March 7th — Control API (puerto 3131)
-
   curl "http://localhost:3131/speak?text=hola"
   curl "http://localhost:3131/speak?text=lo+siento&emotion=sad"
   curl "http://localhost:3131/view?v=half"
   curl "http://localhost:3131/chat?action=open"
   curl "http://localhost:3131/chat?action=close"
   curl "http://localhost:3131/mic?index=0"
-
-  emociones: happy | excited | sad | tired | gentle | default
-  vistas   : full | half | head
 `;
 
 function startControlServer() {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost:3131');
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-
     if (url.pathname === '/speak') {
-      const text   = url.searchParams.get('text') || '';
+      const text = url.searchParams.get('text') || '';
       const rawEmo = (url.searchParams.get('emotion') || '').toLowerCase();
       const emotion = VALID_EMOTIONS.includes(rawEmo) ? rawEmo : null;
       if (!text) { res.writeHead(400); res.end('falta ?text='); return; }
       sendSpeak(text, emotion);
       if (chatWindow && !chatWindow.isDestroyed()) chatWindow.webContents.send('chat-message', text);
-      res.writeHead(200); res.end(`ok: ${text}`);
-      return;
+      res.writeHead(200); res.end(`ok: ${text}`); return;
     }
-
     if (url.pathname === '/view') {
       const v = (url.searchParams.get('v') || '').toLowerCase();
       if (!VALID_VIEWS.includes(v)) { res.writeHead(400); res.end(`validos: ${VALID_VIEWS.join(', ')}`); return; }
-      sendView(v);
-      res.writeHead(200); res.end(`ok: ${v}`);
-      return;
+      sendView(v); res.writeHead(200); res.end(`ok: ${v}`); return;
     }
-
     if (url.pathname === '/chat') {
       const action = (url.searchParams.get('action') || '').toLowerCase();
       if (action === 'open') createChatWindow();
-      else if (action === 'close') {
-        if (chatWindow && !chatWindow.isDestroyed()) {
-          chatWindow.hide();
-          if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
-        }
-      } else toggleChatWindow();
-      res.writeHead(200); res.end(`ok: chat ${action || 'toggled'}`);
-      return;
+      else if (action === 'close') { if (chatWindow && !chatWindow.isDestroyed()) { chatWindow.hide(); if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show(); } }
+      else toggleChatWindow();
+      res.writeHead(200); res.end(`ok: chat ${action || 'toggled'}`); return;
     }
-
     if (url.pathname === '/mic') {
       const idx = parseInt(url.searchParams.get('index') || '-1', 10);
       if (idx >= 0) restartVoiceListener(idx);
-      res.writeHead(200); res.end(`ok: mic index ${idx}`);
-      return;
+      res.writeHead(200); res.end(`ok: mic index ${idx}`); return;
     }
-
     res.writeHead(200); res.end(HELP_TEXT);
   });
-
-  server.listen(3131, '127.0.0.1', () => {
-    console.log('[march7th] API lista → http://localhost:3131/help');
-  });
-
-  server.on('error', (e) => {
-    if (e.code === 'EADDRINUSE')
-      console.log('[march7th] puerto 3131 ocupado, cierra otra instancia primero.');
-  });
+  server.listen(3131, '127.0.0.1', () => console.log('[march7th] API lista → http://localhost:3131/help'));
+  server.on('error', (e) => { if (e.code === 'EADDRINUSE') console.log('[march7th] puerto 3131 ocupado.'); });
 }
 
 // ── Voice Listener (Python) ───────────────────────────────────────────────────
 const { spawn } = require('child_process');
-
 const VOICE_COMMANDS_OPEN  = ['abre el chat','abre chat','abrir chat','muestra el chat','abre la ventana','chat'];
 const VOICE_COMMANDS_CLOSE = ['cierra el chat','cierra chat','cerrar chat','oculta el chat'];
-
-let voiceProc         = null;
-let voiceRestartTimer = null;
+let voiceProc = null, voiceRestartTimer = null;
 
 function startVoiceListener(micIndex = null) {
   const scriptPath = path.join(__dirname, 'voice_listener.py');
-  if (!fs.existsSync(scriptPath)) {
-    console.log('[voice] voice_listener.py no encontrado, omitiendo.');
-    return;
-  }
-
+  if (!fs.existsSync(scriptPath)) { console.log('[voice] voice_listener.py no encontrado.'); return; }
   const args = [scriptPath];
-  if (micIndex !== null && micIndex >= 0) {
-    args.push('--mic-index', String(micIndex));
-  }
-
-  voiceProc = spawn('python', args);
-
-  voiceProc.stdout.on('data', (data) => {
-    const lines = data.toString().split('\n').filter(l => l.trim());
-    for (const line of lines) {
-      try { handleVoiceEvent(JSON.parse(line)); } catch(_) {}
-    }
+  if (micIndex !== null && micIndex >= 0) args.push('--mic-index', String(micIndex));
+  voiceProc = spawn(PYTHON_BIN, args, {
+    env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' }
   });
-
+  voiceProc.stdout.on('data', (data) => {
+    data.toString().split('\n').filter(l => l.trim()).forEach(line => {
+      try { handleVoiceEvent(JSON.parse(line)); } catch(_) {}
+    });
+  });
   voiceProc.stderr.on('data', (d) => console.log('[voice stderr]', d.toString().trim()));
-
   voiceProc.on('close', (code) => {
     console.log(`[voice] proceso terminado (code ${code}), reiniciando en 3s...`);
     voiceProc = null;
     if (voiceRestartTimer) clearTimeout(voiceRestartTimer);
     voiceRestartTimer = setTimeout(() => startVoiceListener(selectedMicIndex), 3000);
   });
-
-  voiceProc.on('error', (e) => console.log('[voice] error al lanzar proceso:', e.message));
+  voiceProc.on('error', (e) => console.log('[voice] error:', e.message));
   console.log(`[voice] listener iniciado${micIndex !== null ? ` (mic ${micIndex})` : ''}`);
 }
 
 function restartVoiceListener(micIndex) {
-  console.log(`[voice] reiniciando con micrófono índice ${micIndex}...`);
+  console.log(`[voice] reiniciando con mic ${micIndex}...`);
   if (voiceRestartTimer) { clearTimeout(voiceRestartTimer); voiceRestartTimer = null; }
-  if (voiceProc && !voiceProc.killed) {
-    voiceProc.removeAllListeners('close');
-    voiceProc.kill();
-    voiceProc = null;
-  }
+  if (voiceProc && !voiceProc.killed) { voiceProc.removeAllListeners('close'); voiceProc.kill(); voiceProc = null; }
   setTimeout(() => startVoiceListener(micIndex), 500);
 }
 
 function handleVoiceEvent(msg) {
   switch (msg.type) {
-    case 'log':       console.log('[voice]', msg.msg); break;
-    case 'ready':     console.log('[voice] micrófono listo, calibrando...'); break;
-    case 'calibrated':console.log('[voice] calibrado, escuchando wake word'); break;
+    case 'log':        console.log('[voice]', msg.msg); break;
+    case 'ready':      console.log('[voice] micrófono listo, calibrando...'); break;
+    case 'calibrated': console.log('[voice] calibrado, escuchando wake word'); break;
     case 'wake':
-      console.log('[voice] wake word detectado!');
-      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('voice-wake');
-      break;
+      console.log('[voice] wake word!');
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('voice-wake'); break;
     case 'listening':
       console.log('[voice] esperando comando...');
-      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('voice-listening');
-      break;
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('voice-listening'); break;
     case 'command': {
       const text = msg.text.toLowerCase();
       console.log('[voice] comando:', text);
@@ -518,33 +408,116 @@ function handleVoiceEvent(msg) {
       break;
     }
     case 'timeout':
-      console.log('[voice] timeout esperando comando');
-      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('voice-idle');
-      break;
+      console.log('[voice] timeout');
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('voice-idle'); break;
     case 'error': console.log('[voice] error:', msg.msg); break;
   }
 }
 
 // ── IPC: config y keys ────────────────────────────────────────────────────────
-ipcMain.handle('get-config', () => {
-  return loadConfig();
-});
-
+ipcMain.handle('get-config', () => loadConfig());
 ipcMain.handle('save-llm-keys', (e, { groq, gemini, openai }) => {
-  saveConfig({
-    llm: {
-      primary:  'groq',
-      apiKeys:  { groq, gemini, openai },
-      fallback: ['gemini', 'openai'],
-    }
-  });
+  saveConfig({ llm: { primary: 'groq', apiKeys: { groq, gemini, openai }, fallback: ['gemini', 'openai'] } });
   console.log('[config] keys LLM actualizadas');
   return true;
+});
+
+// ── STT local (Python / faster-whisper) ──────────────────────────────────────
+// El chat pide iniciar grabación → main lanza stt_transcribe.py
+// El chat pide detener          → main mata el proceso → Python transcribe y
+//                                 devuelve {"type":"result","text":"..."} por stdout
+// El resultado se reenvía al chatWindow para que llene el textbox.
+
+let sttProc = null;
+
+ipcMain.on('stt-start', (e, { micIndex, lang }) => {
+  // Si ya hay un proceso corriendo, ignorar
+  if (sttProc && !sttProc.killed) {
+    console.log('[stt] ya hay un proceso activo, ignorando stt-start');
+    return;
+  }
+
+  const scriptPath = path.join(__dirname, 'stt_transcribe.py');
+  if (!fs.existsSync(scriptPath)) {
+    console.log('[stt] stt_transcribe.py no encontrado');
+    if (chatWindow && !chatWindow.isDestroyed())
+      chatWindow.webContents.send('stt-error', 'stt_transcribe.py no encontrado junto a main.js');
+    return;
+  }
+
+  const args = [scriptPath, '--lang', lang || 'es'];
+  if (micIndex !== null && micIndex >= 0)
+    args.push('--mic-index', String(micIndex));
+
+  console.log(`[stt] iniciando: python ${args.join(' ')}`);
+  sttProc = spawn(PYTHON_BIN, args, {
+    env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' }
+  });
+
+  sttProc.stdout.on('data', (data) => {
+    const lines = data.toString().split('\n').filter(l => l.trim());
+    for (const line of lines) {
+      try {
+        const msg = JSON.parse(line);
+        console.log('[stt]', JSON.stringify(msg));
+        if (!chatWindow || chatWindow.isDestroyed()) continue;
+
+        if (msg.type === 'ready' || msg.type === 'recording') {
+          chatWindow.webContents.send('stt-status', msg.type);
+        } else if (msg.type === 'partial') {
+          chatWindow.webContents.send('stt-partial', msg.text || '');
+        } else if (msg.type === 'sentence') {
+          chatWindow.webContents.send('stt-sentence', msg.text || '');
+        } else if (msg.type === 'result') {
+          chatWindow.webContents.send('stt-result', msg.text || '');
+        } else if (msg.type === 'error') {
+          chatWindow.webContents.send('stt-error', msg.msg);
+        }
+      } catch(_) {}
+    }
+  });
+
+  sttProc.stderr.on('data', (d) => {
+    // faster-whisper imprime logs de descarga/modelo en stderr — no son errores
+    console.log('[stt stderr]', d.toString().trim());
+  });
+
+  sttProc.on('close', (code) => {
+    console.log(`[stt] proceso cerrado (code ${code})`);
+    sttProc = null;
+  });
+
+  sttProc.on('error', (err) => {
+    console.log('[stt] error al lanzar proceso:', err.message);
+    if (chatWindow && !chatWindow.isDestroyed())
+      chatWindow.webContents.send('stt-error', `No se pudo lanzar Python: ${err.message}`);
+    sttProc = null;
+  });
+});
+
+ipcMain.on('stt-stop', () => {
+  if (!sttProc || sttProc.killed) {
+    console.log('[stt] no hay proceso activo');
+    return;
+  }
+  // En Windows SIGTERM no interrumpe procesos Python limpiamente.
+  // Usamos un archivo de señal que el script Python vigila cada 100ms.
+  const stopFile = path.join(__dirname, 'stt_transcribe.stop');
+  console.log('[stt] creando archivo de parada:', stopFile);
+  try {
+    fs.writeFileSync(stopFile, 'stop');
+  } catch(e) {
+    console.log('[stt] error creando stop file:', e.message);
+    sttProc.kill();
+  }
+  // El proceso termina solo al detectar el archivo; no lo matamos aquí.
+  // El resultado llega por stdout cuando Python termina de transcribir.
 });
 
 // ── App init ──────────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
   ensureLLMConfig();
+  setupMicPermissions();   // ← permisos ANTES de crear ventanas
   createWindow();
   createTray();
   startControlServer();
@@ -557,10 +530,5 @@ app.whenReady().then(() => {
   });
 });
 
-app.on('before-quit', () => {
-  if (voiceProc) { voiceProc.kill(); voiceProc = null; }
-});
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
+app.on('before-quit', () => { if (voiceProc) { voiceProc.kill(); voiceProc = null; } });
+app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
