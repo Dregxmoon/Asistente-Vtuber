@@ -7,9 +7,9 @@ const http = require('http');
 const fs   = require('fs');
 const { URL } = require('url');
 
+const MarchCore = require('./core/MarchCore.js');
+
 // ── Python executable ─────────────────────────────────────────────────────────
-// Ruta fija al intérprete para que Electron lo encuentre aunque 'python'
-// no esté en el PATH del sistema (común en Windows).
 const PYTHON_BIN = 'C:/Users/lukal/AppData/Local/Programs/Python/Python311/python.exe';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -65,10 +65,6 @@ if (process.platform === 'linux')
   app.commandLine.appendSwitch('enable-transparent-visuals');
 
 // ── Permisos globales de micrófono ────────────────────────────────────────────
-// Se aplican a la sesión default ANTES de crear ventanas.
-// Esto resuelve el error "network" en Web Speech API sin cambiar el protocolo
-// de carga (seguimos usando loadFile / file://) porque aprobamos el permiso
-// incondicionalmente en el proceso main.
 function setupMicPermissions() {
   const ses = session.defaultSession;
 
@@ -177,11 +173,7 @@ function createChatWindow() {
   });
 
   chatWindow.setMenuBarVisibility(false);
-
-  // ← loadFile normal, sin protocolo custom.
-  // Los permisos ya están aprobados en setupMicPermissions() arriba.
   chatWindow.loadFile(path.join(__dirname, 'src/chat.html'));
-
   chatWindow.webContents.on('console-message', (e, level, msg) => console.log(`[chat] ${msg}`));
 
   chatWindow.webContents.once('did-finish-load', () => {
@@ -192,7 +184,13 @@ function createChatWindow() {
 
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
 
+  // Iniciar sesión de memoria cuando se abre el chat
+  MarchCore.startSession().catch(e => console.error('[session] error:', e.message));
+
   chatWindow.on('closed', () => {
+    // Cerrar sesión y guardar memoria al cerrar el chat
+    MarchCore.closeSession().catch(e => console.error('[session] close error:', e.message));
+
     chatWindow = null;
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
     if (tray) tray.setContextMenu(buildTrayMenu());
@@ -292,6 +290,15 @@ ipcMain.on('chat-close', () => {
 });
 
 ipcMain.on('chat-theme-changed', (e, theme) => { chatTheme = theme; saveConfig({ chatTheme: theme }); });
+
+// ── IPC: memoria (Fase 1) ─────────────────────────────────────────────────────
+// IMPORTANTE: estos handlers se registran UNA SOLA VEZ al arrancar,
+// no dentro de createChatWindow() ni de ningún callback.
+ipcMain.on('memory-add-turn', (e, { role, content }) => {
+  MarchCore.addTurn(role, content);
+});
+
+ipcMain.handle('memory-stats', () => MarchCore.getStats());
 
 // ── Servidor HTTP local ───────────────────────────────────────────────────────
 const VALID_EMOTIONS = ['happy','excited','sad','tired','gentle','default'];
@@ -422,16 +429,10 @@ ipcMain.handle('save-llm-keys', (e, { groq, gemini, openai }) => {
   return true;
 });
 
-// ── STT local (Python / faster-whisper) ──────────────────────────────────────
-// El chat pide iniciar grabación → main lanza stt_transcribe.py
-// El chat pide detener          → main mata el proceso → Python transcribe y
-//                                 devuelve {"type":"result","text":"..."} por stdout
-// El resultado se reenvía al chatWindow para que llene el textbox.
-
+// ── STT local (Python / Vosk) ─────────────────────────────────────────────────
 let sttProc = null;
 
 ipcMain.on('stt-start', (e, { micIndex, lang }) => {
-  // Si ya hay un proceso corriendo, ignorar
   if (sttProc && !sttProc.killed) {
     console.log('[stt] ya hay un proceso activo, ignorando stt-start');
     return;
@@ -477,10 +478,7 @@ ipcMain.on('stt-start', (e, { micIndex, lang }) => {
     }
   });
 
-  sttProc.stderr.on('data', (d) => {
-    // faster-whisper imprime logs de descarga/modelo en stderr — no son errores
-    console.log('[stt stderr]', d.toString().trim());
-  });
+  sttProc.stderr.on('data', (d) => console.log('[stt stderr]', d.toString().trim()));
 
   sttProc.on('close', (code) => {
     console.log(`[stt] proceso cerrado (code ${code})`);
@@ -500,8 +498,6 @@ ipcMain.on('stt-stop', () => {
     console.log('[stt] no hay proceso activo');
     return;
   }
-  // En Windows SIGTERM no interrumpe procesos Python limpiamente.
-  // Usamos un archivo de señal que el script Python vigila cada 100ms.
   const stopFile = path.join(__dirname, 'stt_transcribe.stop');
   console.log('[stt] creando archivo de parada:', stopFile);
   try {
@@ -510,19 +506,18 @@ ipcMain.on('stt-stop', () => {
     console.log('[stt] error creando stop file:', e.message);
     sttProc.kill();
   }
-  // El proceso termina solo al detectar el archivo; no lo matamos aquí.
-  // El resultado llega por stdout cuando Python termina de transcribir.
 });
 
 // ── App init ──────────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
   ensureLLMConfig();
-  setupMicPermissions();   // ← permisos ANTES de crear ventanas
+  setupMicPermissions();
+  MarchCore.init(app);        // ← inicializa StateGraph + GroundingEngine
   createWindow();
   createTray();
   startControlServer();
   startVoiceListener(selectedMicIndex);
-  createChatWindow();
+  createChatWindow();         // ← startSession() se llama dentro de aquí
 
   screen.on('display-metrics-changed', () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -530,5 +525,10 @@ app.whenReady().then(() => {
   });
 });
 
-app.on('before-quit', () => { if (voiceProc) { voiceProc.kill(); voiceProc = null; } });
+app.on('before-quit', async () => {
+  // Guardar memoria antes de salir
+  await MarchCore.closeSession().catch(() => {});
+  if (voiceProc) { voiceProc.kill(); voiceProc = null; }
+});
+
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

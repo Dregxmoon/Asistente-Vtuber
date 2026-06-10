@@ -62,14 +62,12 @@ body::before { content:''; position:fixed; inset:0; background:var(--grain); poi
 #close-btn { -webkit-app-region:no-drag; width:28px; height:28px; border-radius:50%; border:1px solid var(--border); background:transparent; color:var(--text-secondary); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:14px; transition:all .2s; margin-left:4px; }
 #close-btn:hover { background:var(--bg-msg-user); color:var(--text-primary); border-color:var(--border-accent); }
 
-/* Banner sin keys */
 #keys-banner { display:none; align-items:center; gap:10px; padding:8px 14px; background:rgba(245,158,11,0.08); border-bottom:1px solid rgba(245,158,11,0.25); font-family:var(--font-mono); font-size:11px; color:#f59e0b; flex-shrink:0; z-index:2; }
 #keys-banner.visible { display:flex; }
 #keys-banner svg { width:14px; height:14px; flex-shrink:0; }
 #open-settings-btn { margin-left:auto; padding:3px 10px; border-radius:4px; border:1px solid rgba(245,158,11,0.5); background:transparent; color:#f59e0b; font-family:var(--font-mono); font-size:10px; cursor:pointer; transition:all .2s; }
 #open-settings-btn:hover { background:rgba(245,158,11,0.15); }
 
-/* Modal settings */
 #settings-modal { display:none; position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.6); backdrop-filter:blur(4px); align-items:center; justify-content:center; }
 #settings-modal.visible { display:flex; }
 #settings-box { background:var(--bg-panel); border:1px solid var(--border-accent); border-radius:12px; padding:24px; width:480px; max-width:90vw; animation:msgIn .2s ease forwards; }
@@ -89,7 +87,6 @@ body::before { content:''; position:fixed; inset:0; background:var(--grain); poi
 .btn-save:hover { filter:brightness(1.15); }
 .settings-status { font-family:var(--font-mono); font-size:10px; margin-top:12px; min-height:16px; }
 
-/* Chat panel */
 #chat-panel { display:flex; flex-direction:column; border-right:1px solid var(--border); background:var(--bg-panel); overflow:hidden; position:relative; transition:background var(--transition-theme),border-color var(--transition-theme); }
 [data-theme="dark"] #chat-panel::before { content:''; position:absolute; inset:0; pointer-events:none; background:radial-gradient(ellipse at 10% 20%,rgba(91,110,245,.05) 0%,transparent 50%),radial-gradient(ellipse at 90% 80%,rgba(192,132,252,.04) 0%,transparent 50%); }
 [data-theme="sakura"] #chat-panel::before { content:''; position:absolute; inset:0; pointer-events:none; background:radial-gradient(ellipse at 10% 20%,rgba(255,182,210,.15) 0%,transparent 50%),radial-gradient(ellipse at 90% 80%,rgba(200,150,255,.12) 0%,transparent 50%); }
@@ -303,14 +300,14 @@ body::before { content:''; position:fixed; inset:0; background:var(--grain); poi
 
 <script>
 const { ipcRenderer } = require('electron');
-
-// ── Python executable (mismo que en main.js) ──────────────────────────────────
-const PYTHON_BIN = 'C:/Users/lukal/AppData/Local/Programs/Python/Python311/python.exe';
 const path = require('path');
 const fs   = require('fs');
 const cp   = require('child_process');
 
 window.PIXI = PIXI;
+
+// ── Python executable ─────────────────────────────────────────────────────────
+const PYTHON_BIN = 'C:/Users/lukal/AppData/Local/Programs/Python/Python311/python.exe';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 const MODEL_PATH = path.join(__dirname, '..', 'models', 'March 7th', 'march 7th.model3.json');
@@ -325,6 +322,15 @@ const VIEW_PERSONALITY = {
   duration: { full:{min:30,max:80}, half:{min:18,max:45}, head:{min:10,max:25} },
 };
 
+// ── LLM — imports limpios (UNA sola vez cada uno) ────────────────────────────
+// El StateGraph vive en main.js. Aquí solo usamos buildContext como función,
+// que internamente accede al grafo via el path de userData si está disponible.
+// No instanciamos StateGraph en el renderer para no abrir la DB dos veces.
+const LLMProvider = require('../core/llm/LLMProvider.js');
+const Grounding   = require('../core/grounding/GroundingEngine.js');
+// Grounding.buildContext() está disponible como función standalone con fallback.
+// Si better-sqlite3 no está o el grafo no está listo, usa solo GroundingMinimo.
+
 // ── Estado global ─────────────────────────────────────────────────────────────
 let pixiApp, model, modelNaturalH;
 let currentView  = 'head';
@@ -332,6 +338,15 @@ let isSpeaking   = false;
 let isListening  = false;
 let audioCtx     = null;
 let pendingFiles = [];
+
+const sessionHistory      = [];
+const MAX_SESSION_HISTORY = 20;
+
+function pushToSession(role, content) {
+  sessionHistory.push({ role, content });
+  if (sessionHistory.length > MAX_SESSION_HISTORY)
+    sessionHistory.splice(0, sessionHistory.length - MAX_SESSION_HISTORY);
+}
 
 // ── Tema ──────────────────────────────────────────────────────────────────────
 const html        = document.documentElement;
@@ -405,19 +420,7 @@ function showThinking() {
 }
 function removeThinking() { const t = document.getElementById('thinking-msg'); if (t) t.remove(); }
 
-// ── LLM ───────────────────────────────────────────────────────────────────────
-const LLMProvider = require('../core/llm/LLMProvider.js');
-const Grounding   = require('../core/llm/GroundingMinimo.js');
-
-const sessionHistory      = [];
-const MAX_SESSION_HISTORY = 20;
-
-function pushToSession(role, content) {
-  sessionHistory.push({ role, content });
-  if (sessionHistory.length > MAX_SESSION_HISTORY)
-    sessionHistory.splice(0, sessionHistory.length - MAX_SESSION_HISTORY);
-}
-
+// ── Config LLM ────────────────────────────────────────────────────────────────
 async function loadLLMConfig() {
   try {
     const cfg = await ipcRenderer.invoke('get-config');
@@ -488,7 +491,12 @@ async function processMessage(text, files = []) {
   if (!trimmed && files.length === 0) return;
 
   addMessage('user', trimmed || '(archivo adjunto)', files);
-  if (trimmed) pushToSession('user', trimmed);
+
+  if (trimmed) {
+    pushToSession('user', trimmed);
+    // Registrar turno del usuario en memoria persistente (main.js lo guarda en SQLite)
+    ipcRenderer.send('memory-add-turn', { role: 'user', content: trimmed });
+  }
 
   showThinking();
   triggerMotion();
@@ -506,6 +514,8 @@ async function processMessage(text, files = []) {
 
   removeThinking();
   pushToSession('assistant', response);
+  // Registrar respuesta de March en memoria persistente
+  ipcRenderer.send('memory-add-turn', { role: 'assistant', content: response });
 
   const { bubble } = addMessage('march', '');
   bubble.textContent = '';
@@ -587,15 +597,9 @@ chatPanel.addEventListener('dragleave', () => { dragCounter--; if (dragCounter <
 chatPanel.addEventListener('dragover', (e) => e.preventDefault());
 chatPanel.addEventListener('drop', (e) => { e.preventDefault(); dragCounter = 0; dropOverlay.classList.remove('visible'); const files = Array.from(e.dataTransfer.files); if (files.length) addFiles(files); });
 
-// ── Voz — STT local via Python (faster-whisper) ───────────────────────────────
-// Ya no usamos Web Speech API (requiere Google + internet → error "network").
-// Ahora: clic → main lanza stt_transcribe.py → graba con sounddevice
-//         clic → main mata el proceso → Python transcribe con Whisper offline
-//         resultado llega por IPC → se coloca en el textbox listo para enviar.
-
+// ── STT ───────────────────────────────────────────────────────────────────────
 const voiceBtn = document.getElementById('voice-btn');
 
-// Estado visual del botón
 function setListeningState(active) {
   isListening = active;
   voiceBtn.classList.toggle('active', active);
@@ -606,97 +610,54 @@ function setListeningState(active) {
   if (!active) input.focus();
 }
 
-// Leer el mic index actual del selector
 function getCurrentMicIndex() {
   const val = micSelect.value;
   return (val === '' || val === null) ? null : Number(val);
 }
 
-// Iniciar grabación — avisa al main para que lance el script Python
 function startSTT() {
   if (isListening) return;
-  const micIndex = getCurrentMicIndex();
-  console.log('[stt] iniciando grabación, mic:', micIndex);
-  ipcRenderer.send('stt-start', { micIndex, lang: 'es' });
-  // El estado visual se activa cuando llega 'stt-status' → 'recording'
-  // (el script tarda ~1-2s en cargar el modelo la primera vez)
+  ipcRenderer.send('stt-start', { micIndex: getCurrentMicIndex(), lang: 'es' });
   voiceBtn.disabled = true;
   input.placeholder = '⏳ Cargando modelo de voz...';
 }
 
-// Detener grabación — avisa al main para que mate el proceso (SIGTERM)
-// Python transcribe lo grabado y emite el resultado antes de salir
 function stopSTT() {
   if (!isListening) return;
-  console.log('[stt] deteniendo grabación...');
   ipcRenderer.send('stt-stop');
-  // Estado intermedio mientras transcribe
   voiceBtn.disabled = true;
   input.placeholder = '⏳ Transcribiendo...';
-  hintEl.textContent = '⏳ Procesando audio con Whisper...';
+  hintEl.textContent = '⏳ Procesando audio con Vosk...';
 }
 
-// Clic en botón: toggle start/stop
-voiceBtn.addEventListener('click', () => {
-  if (isListening) stopSTT();
-  else             startSTT();
-});
+voiceBtn.addEventListener('click', () => { if (isListening) stopSTT(); else startSTT(); });
 
-// ── Respuestas IPC del proceso STT ────────────────────────────────────────────
-
-// El script Python está listo y abrió el micrófono → activar estado visual
 ipcRenderer.on('stt-status', (e, status) => {
-  console.log('[stt] status:', status);
   voiceBtn.disabled = false;
-  if (status === 'recording') {
-    isListening = true;
-    setListeningState(true);
-  }
+  if (status === 'recording') { isListening = true; setListeningState(true); }
 });
-
-// Texto parcial en tiempo real — se muestra mientras el usuario habla
 ipcRenderer.on('stt-partial', (e, text) => {
   if (!text) return;
-  input.value = text;
-  charCount.textContent = text.length;
-  input.style.height = 'auto';
-  input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+  input.value = text; charCount.textContent = text.length;
+  input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px';
 });
-
-// Oración completa confirmada (tras silencio) — igual que partial pero es final
 ipcRenderer.on('stt-sentence', (e, text) => {
   if (!text) return;
-  input.value = text;
-  charCount.textContent = text.length;
-  input.style.height = 'auto';
-  input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+  input.value = text; charCount.textContent = text.length;
+  input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px';
 });
-
-// Resultado final al soltar el botón → fijar texto y enfocar
 ipcRenderer.on('stt-result', (e, text) => {
-  console.log('[stt] resultado final:', text);
-  isListening = false;
-  voiceBtn.disabled = false;
-  setListeningState(false);
-
+  isListening = false; voiceBtn.disabled = false; setListeningState(false);
   if (text && text.trim()) {
-    input.value = text.trim();
-    charCount.textContent = input.value.length;
-    input.style.height = 'auto';
-    input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+    input.value = text.trim(); charCount.textContent = input.value.length;
+    input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px';
     input.focus();
   } else {
-    input.value = '';
-    input.placeholder = 'Escribe algo a March 7th...';
+    input.value = ''; input.placeholder = 'Escribe algo a March 7th...';
   }
 });
-
-// Error en el script Python → mostrar mensaje y resetear estado
 ipcRenderer.on('stt-error', (e, msg) => {
-  console.error('[stt] error:', msg);
-  isListening = false;
-  voiceBtn.disabled = false;
-  setListeningState(false);
+  isListening = false; voiceBtn.disabled = false; setListeningState(false);
   addMessage('march', `Error de micrófono: ${msg}`);
 });
 
@@ -707,7 +668,6 @@ let micDevicesLoaded = false;
 async function loadMicDevices() {
   if (micDevicesLoaded) return;
   try {
-    // Pedir permiso para que enumerateDevices devuelva labels
     await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => {});
     const devices = await navigator.mediaDevices.enumerateDevices();
     const mics    = devices.filter(d => d.kind === 'audioinput');
