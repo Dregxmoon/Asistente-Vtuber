@@ -503,8 +503,10 @@ async function processMessage(text, files = []) {
 
   let response;
   try {
-    const { messages, systemPrompt } = Grounding.buildContext([...sessionHistory]);
-    response = await LLMProvider.complete(messages, systemPrompt);
+    const context = await ipcRenderer.invoke('grounding-build-context', {
+  sessionHistory: [...sessionHistory]
+});
+response = await LLMProvider.complete(context.messages, context.systemPrompt);
   } catch(err) {
     console.error('[chat] error LLM:', err.message);
     response = LLMProvider.getActiveProvider()

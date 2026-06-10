@@ -266,7 +266,8 @@ class StateGraph {
   createRelation(fromId, toId, relType, weight = 1.0) {
     try {
       this._db.prepare(`
-        INSERT OR REPLACE INTO relations (from_id, to_id, rel_type, weight, created_at)
+          INSERT OR REPLACE INTO node_relations (from_id, to_id, rel_type, weight, created_at)
+
         VALUES (?, ?, ?, ?, ?)
       `).run(fromId, toId, relType, weight, Date.now());
     } catch(_) {}

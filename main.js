@@ -291,14 +291,29 @@ ipcMain.on('chat-close', () => {
 
 ipcMain.on('chat-theme-changed', (e, theme) => { chatTheme = theme; saveConfig({ chatTheme: theme }); });
 
-// ── IPC: memoria (Fase 1) ─────────────────────────────────────────────────────
-// IMPORTANTE: estos handlers se registran UNA SOLA VEZ al arrancar,
-// no dentro de createChatWindow() ni de ningún callback.
+// ── IPC: memoria ──────────────────────────────────────────────────────────────
+// Registrados UNA SOLA VEZ al arrancar, nunca dentro de callbacks.
 ipcMain.on('memory-add-turn', (e, { role, content }) => {
   MarchCore.addTurn(role, content);
 });
 
 ipcMain.handle('memory-stats', () => MarchCore.getStats());
+
+// ── IPC: grounding (FIX Bug 1 + 2) ───────────────────────────────────────────
+// El renderer NO puede instanciar GroundingEngine ni StateGraph directamente
+// porque la DB SQLite solo existe en el proceso main. Este handler es el
+// único punto de acceso: el renderer invoca, main responde con el context package.
+ipcMain.handle('grounding-build-context', (e, { sessionHistory }) => {
+  return MarchCore.buildContext(sessionHistory);
+});
+
+// ── IPC: config y keys ────────────────────────────────────────────────────────
+ipcMain.handle('get-config', () => loadConfig());
+ipcMain.handle('save-llm-keys', (e, { groq, gemini, openai }) => {
+  saveConfig({ llm: { primary: 'groq', apiKeys: { groq, gemini, openai }, fallback: ['gemini', 'openai'] } });
+  console.log('[config] keys LLM actualizadas');
+  return true;
+});
 
 // ── Servidor HTTP local ───────────────────────────────────────────────────────
 const VALID_EMOTIONS = ['happy','excited','sad','tired','gentle','default'];
@@ -421,14 +436,6 @@ function handleVoiceEvent(msg) {
   }
 }
 
-// ── IPC: config y keys ────────────────────────────────────────────────────────
-ipcMain.handle('get-config', () => loadConfig());
-ipcMain.handle('save-llm-keys', (e, { groq, gemini, openai }) => {
-  saveConfig({ llm: { primary: 'groq', apiKeys: { groq, gemini, openai }, fallback: ['gemini', 'openai'] } });
-  console.log('[config] keys LLM actualizadas');
-  return true;
-});
-
 // ── STT local (Python / Vosk) ─────────────────────────────────────────────────
 let sttProc = null;
 
@@ -526,7 +533,7 @@ app.whenReady().then(() => {
 });
 
 app.on('before-quit', async () => {
-  // Guardar memoria antes de salir
+  // Esperar que el análisis LLM termine antes de cerrar (Fix SessionManager)
   await MarchCore.closeSession().catch(() => {});
   if (voiceProc) { voiceProc.kill(); voiceProc = null; }
 });
