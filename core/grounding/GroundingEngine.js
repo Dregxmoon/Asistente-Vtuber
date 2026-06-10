@@ -176,6 +176,7 @@ class GroundingEngine {
    * @returns {string} system prompt
    */
   buildSystemPrompt(sessionHistory = []) {
+    console.log("graph ready:", this._graph?._ready);
     const identity   = getIdentity();
     const os         = getOSContext();
     const sections   = [];
