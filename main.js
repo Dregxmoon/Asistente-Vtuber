@@ -295,6 +295,7 @@ ipcMain.on('chat-theme-changed', (e, theme) => { chatTheme = theme; saveConfig({
 // Registrados UNA SOLA VEZ al arrancar, nunca dentro de callbacks.
 ipcMain.on('memory-add-turn', (e, { role, content }) => {
   MarchCore.addTurn(role, content);
+  if (role === 'user') MarchCore.detectInstant(content);
 });
 
 ipcMain.handle('memory-stats', () => MarchCore.getStats());
@@ -304,8 +305,11 @@ ipcMain.handle('memory-stats', () => MarchCore.getStats());
 // porque la DB SQLite solo existe en el proceso main. Este handler es el
 // único punto de acceso: el renderer invoca, main responde con el context package.
 ipcMain.handle('grounding-build-context', (e, { sessionHistory }) => {
-  return MarchCore.buildContext(sessionHistory);
+  const ctx = MarchCore.buildContext(sessionHistory);
+  console.log('[grounding-ipc] context generado, systemPrompt length:', ctx?.systemPrompt?.length);
+  return ctx;
 });
+
 
 // ── IPC: config y keys ────────────────────────────────────────────────────────
 ipcMain.handle('get-config', () => loadConfig());

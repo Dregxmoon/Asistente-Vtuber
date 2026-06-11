@@ -1,15 +1,9 @@
 /**
- * SessionManager.js — Fase 1 (fix: close() es awaitable)
- *
- * Bug anterior: close() disparaba el análisis LLM en background sin await.
- * Cuando la app se cerraba con before-quit, Node.js terminaba antes de que
- * el LLM respondiera y la DB nunca se escribía.
- *
- * Fix: close() retorna la Promise real. main.js hace await en before-quit,
- * dando tiempo al análisis LLM antes de salir.
+ * SessionManager.js — con deduplicación al inicio de sesión
  */
 
-const { StateUpdater } = require('./StateUpdater.js');
+const { StateUpdater }          = require('./StateUpdater.js');
+const { ContradictionResolver } = require('./ContradictionResolver.js');
 
 const DECAY_INTERVAL_HOURS = 20;
 
@@ -18,6 +12,7 @@ class SessionManager {
     this._graph        = stateGraph;
     this._grounding    = groundingEngine;
     this._updater      = new StateUpdater(stateGraph);
+    this._resolver     = new ContradictionResolver(stateGraph);
     this._sessionId    = null;
     this._history      = [];
     this._turnCount    = 0;
@@ -30,10 +25,16 @@ class SessionManager {
       await this._closePromise.catch(() => {});
       this._closePromise = null;
     }
+
     this._sessionId = this._graph.startSession();
     this._history   = [];
     this._turnCount = 0;
+
     console.log(`[session] sesión ${this._sessionId} iniciada`);
+
+    // Limpiar duplicados acumulados de sesiones anteriores
+    this._resolver.deduplicateNodes();
+
     this._maybeRunDecay(app);
     return this._sessionId;
   }
@@ -62,7 +63,7 @@ class SessionManager {
         console.log(`[session] memoria guardada: ${result.saved} nodos`);
       })
       .catch(err => {
-        console.error('[session] error guardando memoria:', err.message);
+        console.error('[session] error:', err.message);
         try { this._graph.endSession(sessionId, { turnCount, summary: null }); } catch(_) {}
       })
       .finally(() => { this._isClosing = false; });
@@ -74,9 +75,7 @@ class SessionManager {
     try {
       const fs   = require('fs');
       const path = require('path');
-      const marker = app
-        ? path.join(app.getPath('userData'), 'march_decay_marker.json')
-        : null;
+      const marker = app ? path.join(app.getPath('userData'), 'march_decay_marker.json') : null;
       if (!marker) { this._updater.runDecay(); return; }
       let lastRun = 0;
       if (fs.existsSync(marker)) {
@@ -88,7 +87,7 @@ class SessionManager {
         this._updater.runDecay();
         fs.writeFileSync(marker, JSON.stringify({ ts: Date.now() }), 'utf-8');
       }
-    } catch(e) { console.warn('[session] error en decay check:', e.message); }
+    } catch(e) { console.warn('[session] error decay:', e.message); }
   }
 
   getStats() {

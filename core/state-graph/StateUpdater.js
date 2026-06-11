@@ -1,77 +1,130 @@
 /**
- * StateUpdater.js — Fase 1
+ * StateUpdater.js — con ContradictionResolver integrado
  *
- * Analiza el historial de sesión con una llamada LLM y extrae
- * lo que vale la pena recordar entre sesiones.
- *
- * March decide qué es memorable — no un algoritmo ciego.
- *
- * Flujo:
- *   1. Al cerrar sesión, se envía el historial completo al LLM
- *   2. El LLM responde con JSON estructurado: nodos a crear/actualizar
- *   3. StateUpdater escribe esos nodos al StateGraph
- *   4. Se crea un nodo Episode que resume la sesión
+ * Ahora todo guardado pasa por el resolver — nunca directo a upsertNode.
+ * El resolver decide si overwrite, archive_and_replace, o append.
  */
 
-const LLMProvider = require('../llm/LLMProvider.js');
+const LLMProvider              = require('../llm/LLMProvider.js');
+const { ContradictionResolver } = require('./ContradictionResolver.js');
 
-// ── Prompt de extracción ──────────────────────────────────────────────────────
-const EXTRACTION_SYSTEM = `Eres el sistema de memoria de March 7th, una entidad digital persistente.
-Tu tarea es analizar una conversación y extraer lo que VALE LA PENA RECORDAR a largo plazo.
+const EXTRACTION_SYSTEM = `Eres la memoria de March 7th. Analiza la conversación y extrae lo memorable.
 
-Sé selectivo. No todo merece ser recordado. Prioriza:
-- Información sobre el usuario (nombre, trabajo, proyectos, preferencias)
-- Eventos significativos mencionados
-- Cosas que el usuario dijo explícitamente que son importantes
-- Cambios de estado (proyecto terminado, problema resuelto, decisión tomada)
+LABELS PERMITIDOS (usa EXACTAMENTE estos):
+- nombre_usuario → nombre del usuario
+- edad_usuario → edad actual
+- cumpleanos_usuario → fecha de cumpleaños  
+- ubicacion_usuario → dónde vive
+- trabajo_usuario → profesión o trabajo
+- color_favorito → colores favoritos
+- musica_favorita → música o artistas favoritos
+- proyecto_principal → proyecto más importante activo
+- personalidad_observada → rasgos de carácter observados
+Para proyectos secundarios: proyecto_[nombre] (ej: proyecto_march7th)
+Para preferencias extra: preferencia_[tema] (ej: preferencia_anime)
 
-IGNORA:
-- Saludos y despedidas genéricas
-- Preguntas triviales
-- Cosas que el usuario probablemente ya no recordará tampoco
+REGLAS CRÍTICAS:
+- Si el usuario CORRIGE algo ("en realidad", "me equivoqué", "ahora"), usa el valor NUEVO
+- El valor nuevo REEMPLAZA al viejo — no los combines
+- Guarda SOLO info explícita, nunca inferida
+- Si no hay nada memorable: nodes:[]
 
-Responde ÚNICAMENTE con JSON válido, sin texto adicional, sin backticks, sin explicaciones:
-
+JSON válido únicamente, sin texto extra ni backticks:
 {
-  "episode_summary": "Resumen breve de la sesión en 1-2 oraciones. Si fue trivial, escribe null.",
-  "episode_importance": 0.0 a 1.0,
+  "episode_summary": "1 oración o null",
+  "episode_importance": 0.0,
   "nodes": [
     {
       "type": "User|Episode|Belief|Preference|Project",
-      "label": "etiqueta corta única (ej: 'nombre_usuario', 'proyecto_march7th')",
-      "content": "contenido detallado de lo que hay que recordar",
-      "importance": 0.0 a 1.0,
-      "tags": ["tag1", "tag2"]
+      "label": "label_exacto_de_la_lista",
+      "content": "contenido a recordar",
+      "importance": 0.0,
+      "tags": []
     }
   ]
-}
+}`;
 
-Tipos de nodo:
-- User: información sobre quién es el usuario
-- Episode: algo que ocurrió en esta sesión específica  
-- Belief: algo que March observa/concluye sobre el usuario
-- Preference: preferencias observadas (herramientas, horarios, estilos)
-- Project: proyectos activos mencionados
+// Patrones de guardado inmediato — sin LLM
+const INSTANT_PATTERNS = [
+  {
+    regex: /(?:me llamo|mi nombre es)\s+([A-Za-záéíóúÁÉÍÓÚñÑ]{2,20})\b/i,
+    node: (m) => ({ type: 'User', label: 'nombre_usuario', content: `El usuario se llama ${m[1]}`, importance: 0.95, tags: ['nombre'] }),
+  },
+  {
+    regex: /(?:en realidad |ahora |ya )?tengo\s+(\d{1,3})\s+años/i,
+    node: (m) => ({ type: 'User', label: 'edad_usuario', content: `El usuario tiene ${m[1]} años`, importance: 0.85, tags: ['edad'] }),
+  },
+  {
+    regex: /(?:(?:el\s+)?(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre).*cumplea[ñn]os|cumplea[ñn]os.*(?:el\s+)?(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre))/i,
+    node: (m) => {
+      const dia = m[1] || m[3]; const mes = m[2] || m[4];
+      return { type: 'User', label: 'cumpleanos_usuario', content: `Cumpleaños: ${dia} de ${mes}`, importance: 0.92, tags: ['cumpleaños'] };
+    },
+  },
+  {
+    regex: /(?:mi\s+)?colou?r(?:es)?\s+favorito(?:s)?\s+(?:es|son|:)\s*(.{3,50})/i,
+    node: (m) => ({ type: 'Preference', label: 'color_favorito', content: `Colores favoritos: ${m[1].trim()}`, importance: 0.75, tags: ['color'] }),
+  },
+  {
+    regex: /(?:en realidad|ahora)\s+(?:mis?\s+colou?r(?:es)?\s+(?:favorito(?:s)?\s+)?(?:son|es|me gustan?)|(?:no\s+)?me\s+gusta(?:n)?\s+(?:el\s+|los\s+)?(?:azul|rojo|verde|amarillo|negro|blanco|morado|rosa|naranja|café|gris))\s*(?:,?\s*(?:sino|si no|pero sí|y)?\s*(?:son|es)?\s*)?(.{3,50})/i,
+    node: (m) => ({ type: 'Preference', label: 'color_favorito', content: `Colores favoritos: ${m[1].trim()}`, importance: 0.88, tags: ['color'] }),
+  },
+  {
+    regex: /(?:trabajo como|me dedico a|soy\s+(?:un\s+|una\s+)?(?:desarrollador|programador|diseñador|ingeniero|doctor|maestro|estudiante))/i,
+    node: (m) => ({ type: 'User', label: 'trabajo_usuario', content: `Trabajo: ${m[0].trim()}`, importance: 0.8, tags: ['trabajo'] }),
+  },
+  {
+    regex: /(?:estoy (?:desarrollando|construyendo|trabajando en|programando)|mi proyecto(?:\s+principal)? (?:es|se llama))\s*(?:un\s+|una\s+)?(.{3,60})/i,
+    node: (m) => ({ type: 'Project', label: 'proyecto_principal', content: `Proyecto: ${m[1].trim()}`, importance: 0.82, tags: ['proyecto'] }),
+  },
+  {
+    regex: /(?:vivo en|soy de)\s+([A-Za-záéíóúÁÉÍÓÚñÑ\s,]{3,40})/i,
+    node: (m) => ({ type: 'User', label: 'ubicacion_usuario', content: `Vive en: ${m[1].trim()}`, importance: 0.7, tags: ['ubicación'] }),
+  },
+  {
+    regex: /(?:recuerda(?:lo|la)?|no olvides)\s+(?:que\s+)?(.{5,100})/i,
+    node: (m) => ({ type: 'Belief', label: `recordar_${Date.now()}`, content: `Pidió recordar: ${m[1].trim()}`, importance: 0.88, tags: ['recordar'] }),
+  },
+];
 
-Si la conversación no tiene nada memorable, devuelve nodes: [] y episode_summary: null.`;
-
-// ── StateUpdater ──────────────────────────────────────────────────────────────
 class StateUpdater {
   constructor(stateGraph) {
-    this._graph = stateGraph;
+    this._graph    = stateGraph;
+    this._resolver = new ContradictionResolver(stateGraph);
   }
 
   /**
-   * Procesa una sesión terminada y escribe la memoria al grafo.
-   *
-   * @param {number} sessionId - ID de la sesión en DB
-   * @param {Array}  history   - [{role, content}] historial completo
-   * @param {number} turnCount - número de turnos de la sesión
-   * @returns {Promise<object>} resultado del procesamiento
+   * Guardado inmediato por regex — sin LLM, sin tokens.
+   * Todo pasa por el resolver para manejar contradicciones.
+   */
+  detectAndSaveInstant(userMessage) {
+    if (!userMessage || !this._graph?._ready) return 0;
+    let saved = 0;
+    const text = userMessage.trim();
+
+    for (const pattern of INSTANT_PATTERNS) {
+      try {
+        const match = text.match(pattern.regex);
+        if (match) {
+          const nodeData = pattern.node(match);
+          this._resolver.resolve(nodeData); // resolver en lugar de upsertNode
+          saved++;
+          console.log(`[state-updater] inmediato: ${nodeData.label}`);
+        }
+      } catch(e) {
+        console.warn('[state-updater] error regex:', e.message);
+      }
+    }
+    return saved;
+  }
+
+  /**
+   * Análisis LLM al cierre de sesión.
+   * Todo pasa por el resolver.
    */
   async processSession(sessionId, history, turnCount) {
     if (!history || history.length < 2) {
-      console.log('[state-updater] sesión muy corta, nada que guardar');
+      console.log('[state-updater] sesión muy corta');
       this._graph.endSession(sessionId, { turnCount, summary: null });
       return { saved: 0, skipped: true };
     }
@@ -82,118 +135,66 @@ class StateUpdater {
     try {
       extracted = await this._extractMemories(history);
     } catch(e) {
-      console.error('[state-updater] error en extracción LLM:', e.message);
-      // Fallback: guardar resumen básico sin LLM
-      this._graph.endSession(sessionId, {
-        turnCount,
-        summary: `Sesión de ${turnCount} turnos (sin análisis)`,
-      });
+      console.error('[state-updater] error LLM:', e.message);
+      this._graph.endSession(sessionId, { turnCount, summary: null });
       return { saved: 0, error: e.message };
     }
 
-    // Escribir nodos al grafo
     let saved = 0;
-    const nodeIds = [];
-
     for (const node of (extracted.nodes || [])) {
       try {
         if (!node.type || !node.label || !node.content) continue;
-
-        const id = this._graph.upsertNode({
+        this._resolver.resolve({
           type:       node.type,
           label:      node.label.toLowerCase().replace(/\s+/g, '_').slice(0, 80),
           content:    node.content,
           importance: Math.min(1.0, Math.max(0.1, node.importance ?? 0.6)),
           tags:       Array.isArray(node.tags) ? node.tags : [],
         });
-
-        nodeIds.push(id);
         saved++;
       } catch(e) {
         console.warn('[state-updater] error guardando nodo:', e.message);
       }
     }
 
-    // Crear nodo Episode para esta sesión si tiene resumen
     let episodeId = null;
     if (extracted.episode_summary) {
-      const epImportance = Math.min(1.0, Math.max(0.1, extracted.episode_importance ?? 0.5));
-      const dateStr      = new Date().toLocaleDateString('es-MX', {
-        weekday: 'long', day: 'numeric', month: 'long'
-      });
-
+      const dateStr = new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
       episodeId = this._graph.createNode({
-        type:       'Episode',
-        label:      `sesion_${Date.now()}`,
-        content:    `[${dateStr}] ${extracted.episode_summary}`,
-        importance: epImportance,
-        tags:       ['sesion', 'auto'],
+        type: 'Episode', label: `sesion_${Date.now()}`,
+        content: `[${dateStr}] ${extracted.episode_summary}`,
+        importance: Math.min(1.0, Math.max(0.1, extracted.episode_importance ?? 0.5)),
+        tags: ['sesion'],
       });
     }
 
-    // Cerrar la sesión en DB
-    this._graph.endSession(sessionId, {
-      turnCount,
-      summary:   extracted.episode_summary,
-      episodeId,
-    });
-
+    this._graph.endSession(sessionId, { turnCount, summary: extracted.episode_summary, episodeId });
     console.log(`[state-updater] guardados: ${saved} nodos, episodio: ${episodeId ? 'sí' : 'no'}`);
-    return { saved, episodeId, nodeIds };
+    return { saved, episodeId };
   }
 
-  /**
-   * Llama al LLM para extraer memorias del historial.
-   * @private
-   */
   async _extractMemories(history) {
-    // Serializar el historial de forma compacta
-    const conversation = history.map(m => {
-      const role = m.role === 'user' ? 'Usuario' : 'March';
-      return `${role}: ${m.content}`;
-    }).join('\n');
+    const recent = history.slice(-10);
+    const conversation = recent.map(m =>
+      `${m.role === 'user' ? 'Usuario' : 'March'}: ${m.content}`
+    ).join('\n');
 
-    const userMessage = `Analiza esta conversación y extrae lo que vale la pena recordar:\n\n${conversation}`;
-
-    const rawResponse = await LLMProvider.complete(
-      [{ role: 'user', content: userMessage }],
-      EXTRACTION_SYSTEM
+    const raw = await LLMProvider.complete(
+      [{ role: 'user', content: `Conversación:\n\n${conversation}` }],
+      EXTRACTION_SYSTEM,
+      { max_tokens: 256 }
     );
-
-    // Parsear JSON de forma robusta
-    return this._parseJSON(rawResponse);
+    return this._parseJSON(raw);
   }
 
-  /**
-   * Parsea JSON de la respuesta del LLM de forma tolerante.
-   * @private
-   */
   _parseJSON(raw) {
-    // Intentar parsear directo
-    try {
-      return JSON.parse(raw.trim());
-    } catch(_) {}
-
-    // Buscar JSON dentro del texto (por si el LLM añadió texto extra)
+    try { return JSON.parse(raw.trim()); } catch(_) {}
     const match = raw.match(/\{[\s\S]*\}/);
-    if (match) {
-      try {
-        return JSON.parse(match[0]);
-      } catch(_) {}
-    }
-
-    // Fallback seguro
-    console.warn('[state-updater] no se pudo parsear respuesta LLM, usando fallback');
+    if (match) { try { return JSON.parse(match[0]); } catch(_) {} }
     return { episode_summary: null, episode_importance: 0, nodes: [] };
   }
 
-  /**
-   * Aplica decay diario al grafo.
-   * Llamar una vez al día o al iniciar la app.
-   */
-  runDecay() {
-    this._graph.applyDecay();
-  }
+  runDecay() { this._graph.applyDecay(); }
 }
 
 module.exports = { StateUpdater };

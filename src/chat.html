@@ -502,17 +502,24 @@ async function processMessage(text, files = []) {
   triggerMotion();
 
   let response;
-  try {
-    const context = await ipcRenderer.invoke('grounding-build-context', {
-  sessionHistory: [...sessionHistory]
-});
-response = await LLMProvider.complete(context.messages, context.systemPrompt);
-  } catch(err) {
-    console.error('[chat] error LLM:', err.message);
-    response = LLMProvider.getActiveProvider()
-      ? 'Algo falló al conectar. Revisa tu conexión o la key.'
-      : 'Sin API keys. Usa el botón ⚙ para configurarlas.';
+try {
+  const context = await ipcRenderer.invoke('grounding-build-context', {
+    sessionHistory: [...sessionHistory]
+  });
+  
+  // Debug temporal — borrar después de confirmar que funciona
+  if (!context || !context.messages || !context.systemPrompt) {
+    console.error('[chat] context inválido:', JSON.stringify(context));
+    throw new Error('context inválido recibido del main process');
   }
+  
+  response = await LLMProvider.complete(context.messages, context.systemPrompt);
+} catch(err) {
+  console.error('[chat] error LLM:', err.message);
+  response = LLMProvider.getActiveProvider()
+    ? 'Algo falló al conectar. Revisa tu conexión o la key.'
+    : 'Sin API keys. Usa el botón ⚙ para configurarlas.';
+}
 
   removeThinking();
   pushToSession('assistant', response);
