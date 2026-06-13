@@ -9,6 +9,8 @@ const { URL } = require('url');
 
 const MarchCore = require('./core/MarchCore.js');
 
+// Fase 2: EventBus ya está dentro de MarchCore, no necesita import separado
+
 // ── Python executable ─────────────────────────────────────────────────────────
 const PYTHON_BIN = 'C:/Users/lukal/AppData/Local/Programs/Python/Python311/python.exe';
 
@@ -152,6 +154,7 @@ function createChatWindow() {
     if (!chatWindow.isVisible()) {
       chatWindow.show(); chatWindow.focus();
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
+      MarchCore.setChatOpen(true);
       if (tray) tray.setContextMenu(buildTrayMenu());
     } else {
       chatWindow.focus();
@@ -174,6 +177,7 @@ function createChatWindow() {
 
   chatWindow.setMenuBarVisibility(false);
   chatWindow.loadFile(path.join(__dirname, 'src/chat.html'));
+  chatWindow.webContents.openDevTools({ mode: 'detach' });
   chatWindow.webContents.on('console-message', (e, level, msg) => console.log(`[chat] ${msg}`));
 
   chatWindow.webContents.once('did-finish-load', () => {
@@ -187,9 +191,13 @@ function createChatWindow() {
   // Iniciar sesión de memoria cuando se abre el chat
   MarchCore.startSession().catch(e => console.error('[session] error:', e.message));
 
+  // Notificar al InitiativeEngine que el chat está abierto
+  MarchCore.setChatOpen(true);
+
   chatWindow.on('closed', () => {
     // Cerrar sesión y guardar memoria al cerrar el chat
     MarchCore.closeSession().catch(e => console.error('[session] close error:', e.message));
+    MarchCore.setChatOpen(false);  // ← NUEVO
 
     chatWindow = null;
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
@@ -205,10 +213,12 @@ function toggleChatWindow() {
   } else if (chatWindow.isVisible()) {
     chatWindow.hide();
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
+    MarchCore.setChatOpen(false);
     if (tray) tray.setContextMenu(buildTrayMenu());
   } else {
     chatWindow.show(); chatWindow.focus();
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
+    MarchCore.setChatOpen(true);
     if (tray) tray.setContextMenu(buildTrayMenu());
   }
 }
@@ -268,6 +278,7 @@ ipcMain.on('voice-command', (e, { action, text }) => {
     if (chatWindow && !chatWindow.isDestroyed() && chatWindow.isVisible()) {
       chatWindow.hide();
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
+      MarchCore.setChatOpen(false);
       if (tray) tray.setContextMenu(buildTrayMenu());
     }
   } else if (action === 'message' && text) {
@@ -286,6 +297,7 @@ ipcMain.on('set-mic-index', (e, { index, label }) => {
 ipcMain.on('chat-close', () => {
   if (chatWindow && !chatWindow.isDestroyed()) chatWindow.hide();
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
+  MarchCore.setChatOpen(false);
   if (tray) tray.setContextMenu(buildTrayMenu());
 });
 
@@ -304,12 +316,32 @@ ipcMain.handle('memory-stats', () => MarchCore.getStats());
 // El renderer NO puede instanciar GroundingEngine ni StateGraph directamente
 // porque la DB SQLite solo existe en el proceso main. Este handler es el
 // único punto de acceso: el renderer invoca, main responde con el context package.
-ipcMain.handle('grounding-build-context', (e, { sessionHistory }) => {
+ipcMain.handle('grounding-build-context', (e, { sessionHistory, activeProvider }) => {
+  // activeProvider se recibe por compatibilidad; MarchCore.buildContext ya
+  // resuelve internamente el provider activo y el serializer correspondiente.
+  
   const ctx = MarchCore.buildContext(sessionHistory);
   console.log('[grounding-ipc] context generado, systemPrompt length:', ctx?.systemPrompt?.length);
   return ctx;
 });
 
+// ── IPC: Fase 2 — OS Sensor y estadísticas ───────────────────────────────────
+
+ipcMain.handle('os-get-context', () => {
+  return MarchCore.getOSSensor()?.getCurrentContext() ?? null;
+});
+
+ipcMain.handle('os-get-today-history', () => {
+  return MarchCore.getOSSensor()?.getTodayHistory() ?? [];
+});
+
+ipcMain.handle('os-get-today-summary', () => {
+  return MarchCore.getOSSensor()?.getTodaySummary() ?? null;
+});
+
+ipcMain.handle('march-get-stats', () => {
+  return MarchCore.getStats();
+});
 
 // ── IPC: config y keys ────────────────────────────────────────────────────────
 ipcMain.handle('get-config', () => loadConfig());
@@ -353,7 +385,7 @@ function startControlServer() {
     if (url.pathname === '/chat') {
       const action = (url.searchParams.get('action') || '').toLowerCase();
       if (action === 'open') createChatWindow();
-      else if (action === 'close') { if (chatWindow && !chatWindow.isDestroyed()) { chatWindow.hide(); if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show(); } }
+      else if (action === 'close') { if (chatWindow && !chatWindow.isDestroyed()) { chatWindow.hide(); if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show(); MarchCore.setChatOpen(false); } }
       else toggleChatWindow();
       res.writeHead(200); res.end(`ok: chat ${action || 'toggled'}`); return;
     }
@@ -425,6 +457,7 @@ function handleVoiceEvent(msg) {
         if (chatWindow && !chatWindow.isDestroyed() && chatWindow.isVisible()) {
           chatWindow.hide();
           if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
+          MarchCore.setChatOpen(false);
           if (tray) tray.setContextMenu(buildTrayMenu());
         }
       } else {
@@ -523,7 +556,22 @@ ipcMain.on('stt-stop', () => {
 app.whenReady().then(() => {
   ensureLLMConfig();
   setupMicPermissions();
-  MarchCore.init(app);        // ← inicializa StateGraph + GroundingEngine
+
+  MarchCore.init(app);
+
+  // Fase 2: registrar callback para iniciativas proactivas de March
+  MarchCore.onInitiative((payload) => {
+    // Enviar mensaje proactivo al chat si está abierto
+    if (chatWindow && !chatWindow.isDestroyed() && chatWindow.isVisible()) {
+      chatWindow.webContents.send('march-initiative', payload);
+    } else {
+      // Si el chat no está abierto, mostrar en el overlay (speak)
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('speak', payload.suggestion);
+      }
+    }
+  });
+
   createWindow();
   createTray();
   startControlServer();

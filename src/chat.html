@@ -504,7 +504,8 @@ async function processMessage(text, files = []) {
   let response;
 try {
   const context = await ipcRenderer.invoke('grounding-build-context', {
-    sessionHistory: [...sessionHistory]
+    sessionHistory: [...sessionHistory],
+    activeProvider: LLMProvider.getActiveProvider()
   });
   
   // Debug temporal — borrar después de confirmar que funciona
@@ -786,19 +787,38 @@ async function loadModel() {
   showWelcome();
 }
 
-function showWelcome() {
-  const greetings = ['Aquí estoy.','March online.','Buenas. ¿Qué hay?','Encendida y escuchando.'];
-  const text = greetings[Math.floor(Math.random() * greetings.length)];
-  (async () => {
-    const { bubble } = addMessage('march', '');
-    bubble.textContent = '';
-    for (const char of text) {
-      bubble.textContent += char;
-      messagesEl.scrollTop = messagesEl.scrollHeight;
-      await new Promise(r => setTimeout(r, 20 + Math.random() * 12));
-    }
-    speak(text);
-  })();
+async function showWelcome() {
+  // Obtener contexto OS para personalizar el saludo
+  let osCtx = null;
+  try {
+    osCtx = await ipcRenderer.invoke('os-get-context');
+  } catch(e) {}
+
+  let text;
+
+  if (osCtx?.app && osCtx?.elapsed > 300) {
+    // Ha estado más de 5 minutos en alguna app — saludo contextual
+    const appName = osCtx.friendlyName || osCtx.app;
+    const contextualGreetings = [
+      `Aquí estoy. Veo que llevas rato en ${appName}.`,
+      `${appName} de nuevo. ¿Qué hay?`,
+      `Online. Tienes ${appName} abierto.`,
+    ];
+    text = contextualGreetings[Math.floor(Math.random() * contextualGreetings.length)];
+  } else {
+    // Saludo normal
+    const greetings = ['Aquí estoy.', 'March online.', 'Buenas. ¿Qué hay?', 'Encendida y escuchando.'];
+    text = greetings[Math.floor(Math.random() * greetings.length)];
+  }
+
+  const { bubble } = addMessage('march', '');
+  bubble.textContent = '';
+  for (const char of text) {
+    bubble.textContent += char;
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    await new Promise(r => setTimeout(r, 20 + Math.random() * 12));
+  }
+  speak(text);
 }
 
 function applyView(view, animate = false) {
@@ -868,6 +888,47 @@ document.getElementById('close-btn').addEventListener('click', () => ipcRenderer
 ipcRenderer.on('init-theme',   (e, theme) => setTheme(theme));
 ipcRenderer.on('chat-speak',   (e, text)  => speak(text));
 ipcRenderer.on('chat-message', (e, text)  => processMessage(text));
+
+ipcRenderer.on('march-initiative', (e, payload) => {
+  // March manda un mensaje proactivo basado en lo que detectó del OS
+  // Aparece como mensaje de March en el chat, con indicador especial
+  const { bubble } = addMessage('march', '');
+  bubble.textContent = '';
+
+  // Indicador visual de que es un mensaje proactivo
+  const badge = document.createElement('span');
+  badge.style.cssText = `
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--accent);
+    border: 1px solid var(--border-accent);
+    border-radius: 3px;
+    padding: 1px 5px;
+    margin-right: 6px;
+    opacity: 0.7;
+    vertical-align: middle;
+  `;
+  badge.textContent = '⚡ MARCH';
+  bubble.appendChild(badge);
+
+  const textNode = document.createElement('span');
+  bubble.appendChild(textNode);
+
+  // Animar el texto
+  (async () => {
+    for (const char of payload.suggestion) {
+      textNode.textContent += char;
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      await new Promise(r => setTimeout(r, 18 + Math.random() * 10));
+    }
+    speak(payload.suggestion);
+  })();
+
+  // Registrar en historial de sesión y memoria
+  pushToSession('assistant', payload.suggestion);
+  ipcRenderer.send('memory-add-turn', { role: 'assistant', content: payload.suggestion });
+});
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', loadModel);
