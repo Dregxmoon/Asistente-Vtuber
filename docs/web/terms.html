@@ -5,11 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Términos de Servicio — Kaoru</title>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 720px; margin: 60px auto; padding: 0 20px; line-height: 1.6; color: #222; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 760px; margin: 60px auto; padding: 0 20px; line-height: 1.65; color: #222; }
   h1 { font-size: 1.8em; }
-  h2 { font-size: 1.2em; margin-top: 1.6em; }
+  h2 { font-size: 1.2em; margin-top: 1.8em; border-bottom: 1px solid #eee; padding-bottom: 0.3em; }
   a { color: #2563eb; }
+  ul { padding-left: 1.2em; }
+  li { margin-bottom: 0.4em; }
   .updated { color: #888; font-size: 0.9em; }
+  .note { background: #fffbeb; border-left: 4px solid #f59e0b; padding: 10px 14px; margin: 1em 0; font-size: 0.95em; }
+  .toc { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 20px; font-size: 0.92em; }
+  .toc a { display: block; margin: 3px 0; }
 </style>
 </head>
 <body>
@@ -17,20 +22,36 @@
   <h1>Términos de Servicio de Kaoru</h1>
   <p class="updated">Última actualización: septiembre de 2026</p>
 
-  <h2>1. Aceptación</h2>
+  <nav class="toc">
+    <strong>Contenido</strong>
+    <a href="#aceptacion">1. Aceptación</a>
+    <a href="#descripcion">2. Descripción del servicio</a>
+    <a href="#autonomia">3. Modo agente y niveles de autonomía</a>
+    <a href="#ia">4. Modelos de lenguaje de terceros y exactitud de las respuestas</a>
+    <a href="#uso">5. Uso del servicio</a>
+    <a href="#responsable">6. Uso responsable y limitación de responsabilidad</a>
+    <a href="#terceros">7. Datos y servicios de terceros</a>
+    <a href="#edad">8. Edad mínima</a>
+    <a href="#ley">9. Ley aplicable</a>
+    <a href="#cambios">10. Cambios</a>
+    <a href="#contacto">11. Contacto</a>
+  </nav>
+
+  <h2 id="aceptacion">1. Aceptación</h2>
   <p>Al usar Kaoru, aceptas estos términos. Si no estás de acuerdo, no uses la aplicación.</p>
 
-  <h2>2. Descripción del servicio</h2>
+  <h2 id="descripcion">2. Descripción del servicio</h2>
   <p>
     Kaoru es una aplicación de escritorio de uso personal que actúa como <strong>agente</strong>: además de responder
     por voz y texto, puede <strong>ejecutar acciones</strong> en tu equipo — editar y crear archivos, ejecutar comandos
     de terminal, operar sobre repositorios Git (incluyendo GitHub, si conectas tu cuenta), y navegar la web mediante un
     navegador automatizado independiente. También puede observar tu actividad local (sensores) y, si lo autorizas,
-    conectarse a servicios de Google (Calendar, Gmail, Drive). Consulta nuestro
+    conectarse a servicios de Google (Calendar, Gmail, Drive, Docs, Sheets, Tasks, Contactos) en modo de solo lectura
+    o de lectura y escritura, según tú lo configures. Consulta nuestro
     <a href="privacy.html">Aviso de Privacidad</a> para el detalle completo.
   </p>
 
-  <h2>3. Modo agente y niveles de autonomía</h2>
+  <h2 id="autonomia">3. Modo agente y niveles de autonomía</h2>
   <p>
     Kaoru opera bajo un modelo de permisos configurable por ti, con tres niveles de autonomía:
   </p>
@@ -43,46 +64,92 @@
   </ul>
   <p>
     Eres responsable de configurar y revisar las reglas de permisos ("allow"/"ask"/"deny") de acuerdo con tu propio
-    nivel de tolerancia al riesgo. Cuanto más amplio sea el nivel de autonomía que elijas, mayor es el riesgo de que
-    una acción no deseada se ejecute sin tu revisión previa. Kaoru incluye mecanismos de mitigación (entorno de
-    ejecución restringido, verificación posterior a cambios de código, puntos de control y reversión de acciones),
-    pero estos son medidas de reducción de riesgo, <strong>no garantías</strong> de que ninguna acción cause un
-    resultado no deseado (por ejemplo, pérdida de datos, cambios no intencionados en un repositorio, o el envío de
-    información a un servicio externo si en el futuro se habilitan permisos de escritura hacia Google u otros
-    servicios).
+    nivel de tolerancia al riesgo. Cuanto más amplio sea el nivel de autonomía que elijas —y cuantos más servicios de
+    Google actives en modo de escritura—, mayor es el riesgo de que una acción no deseada se ejecute sin tu revisión
+    previa. Kaoru incluye mecanismos de mitigación (entorno de ejecución restringido, verificación posterior a
+    cambios de código, puntos de control y reversión de acciones), pero estos son medidas de reducción de riesgo,
+    <strong>no garantías</strong> de que ninguna acción cause un resultado no deseado (por ejemplo, pérdida de datos,
+    cambios no intencionados en un repositorio, o el envío o modificación de información en un servicio externo
+    conectado como Google o GitHub).
   </p>
 
-  <h2>4. Uso del servicio</h2>
+  <h2 id="ia">4. Modelos de lenguaje de terceros y exactitud de las respuestas</h2>
+  <p>
+    Kaoru genera sus respuestas usando un modelo de lenguaje de un proveedor externo que tú eliges y configuras con
+    tu propia clave de API. Trae integrados Groq, Google Gemini, OpenAI, Anthropic, xAI, NVIDIA, Hugging Face y
+    DeepSeek, y mediante el comando <code>/provider add</code> puedes conectar cualquier otro proveedor compatible
+    con la API de OpenAI, incluyendo modelos que corras localmente en tu equipo (ver
+    <a href="privacy.html#ia">Aviso de Privacidad, sección 3</a>). Como cualquier sistema de inteligencia artificial
+    generativa, estas respuestas <strong>pueden contener errores, omisiones o afirmaciones incorrectas</strong>
+    ("alucinaciones"), incluso cuando suenen convincentes — sin importar qué proveedor hayas elegido.
+  </p>
+  <div class="note">
+    No debes tomar decisiones importantes (médicas, legales, financieras, o que impliquen ejecutar acciones
+    irreversibles sobre tus archivos, cuentas o repositorios) basándote únicamente en lo que Kaoru te responda, sin
+    verificarlo de forma independiente. Esto aplica con mayor razón cuando el nivel de autonomía está en "Actuar".
+  </div>
+  <p>
+    El uso de cada proveedor de IA está además sujeto a sus propios términos de servicio:
+    <a href="https://groq.com/terms-of-use/" target="_blank" rel="noopener">Groq</a>,
+    <a href="https://policies.google.com/terms" target="_blank" rel="noopener">Google</a>,
+    <a href="https://openai.com/policies/terms-of-use" target="_blank" rel="noopener">OpenAI</a>,
+    <a href="https://www.anthropic.com/legal/consumer-terms" target="_blank" rel="noopener">Anthropic</a>,
+    <a href="https://x.ai/legal/terms-of-service" target="_blank" rel="noopener">xAI</a>,
+    <a href="https://www.nvidia.com/en-us/agreements/cloud-services/service-specific-terms-for-nvidia-ai-products/" target="_blank" rel="noopener">NVIDIA</a>,
+    <a href="https://huggingface.co/terms-of-service" target="_blank" rel="noopener">Hugging Face</a> y
+    <a href="https://deepseek.com/en/terms-of-use" target="_blank" rel="noopener">DeepSeek</a>. Si conectas otro
+    proveedor mediante <code>/provider add</code>, aplican los términos de ese proveedor.
+  </p>
+
+  <h2 id="uso">5. Uso del servicio</h2>
   <p>
     Kaoru se ofrece "tal cual", sin garantías de disponibilidad, exactitud o ausencia de errores. Eres responsable
-    de mantener la seguridad de tu propio equipo y credenciales, de decidir qué sensores de observación local activar,
-    y de revisar las acciones que el agente propone o ejecuta automáticamente según el nivel de autonomía elegido.
+    de mantener la seguridad de tu propio equipo y credenciales (incluyendo tus claves de API y credenciales de
+    Google/GitHub), de decidir qué sensores de observación local activar, y de revisar las acciones que el agente
+    propone o ejecuta automáticamente según el nivel de autonomía elegido.
   </p>
 
-  <h2>5. Uso responsable y limitación de responsabilidad</h2>
+  <h2 id="responsable">6. Uso responsable y limitación de responsabilidad</h2>
   <p>
     Kaoru está diseñado para que una persona use la aplicación sobre su <strong>propio</strong> equipo, para observar su
     <strong>propia</strong> actividad, y para ejecutar acciones bajo su propia autorización y configuración de permisos.
     Está prohibido instalar o usar Kaoru para monitorear o actuar en nombre de otras personas sin su consentimiento
     explícito, o en dispositivos o cuentas ajenas sin autorización de su propietario. El desarrollador no se hace
     responsable por el mal uso de la aplicación fuera de estos términos, por información sensible que el propio
-    usuario exponga voluntariamente a los sensores locales, ni por consecuencias derivadas de acciones ejecutadas
-    por el agente bajo reglas de permiso configuradas por el propio usuario.
+    usuario exponga voluntariamente a los sensores locales, por respuestas incorrectas generadas por el proveedor de
+    IA que el usuario configuró, ni por consecuencias derivadas de acciones ejecutadas por el agente bajo reglas de
+    permiso configuradas por el propio usuario.
   </p>
 
-  <h2>6. Datos y servicios de terceros</h2>
+  <h2 id="terceros">7. Datos y servicios de terceros</h2>
   <p>
     El acceso a servicios de Google está sujeto además a las
     <a href="https://policies.google.com/terms" target="_blank" rel="noopener">Condiciones de Servicio de Google</a>
     y su <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Política de Privacidad</a>.
     Si conectas tu cuenta de GitHub, aplica de igual forma la
     <a href="https://docs.github.com/site-policy/github-terms/github-terms-of-service" target="_blank" rel="noopener">Política de Términos de Servicio de GitHub</a>.
+    Si usas la voz hablada de Kaoru, la síntesis de audio se procesa mediante el servicio de Microsoft Edge, sujeto a
+    sus <a href="https://www.microsoft.com/es-mx/servicesagreement" target="_blank" rel="noopener">condiciones de servicio</a>.
+    Kaoru no es responsable por la disponibilidad, exactitud o políticas de estos servicios de terceros.
   </p>
 
-  <h2>7. Cambios</h2>
-  <p>Estos términos pueden actualizarse ocasionalmente. Los cambios se reflejarán en esta página.</p>
+  <h2 id="edad">8. Edad mínima</h2>
+  <p>
+    Kaoru está destinado a personas mayores de 18 años, o a la mayoría de edad legal en tu jurisdicción si esta es
+    distinta. Al usar Kaoru declaras que cumples con este requisito.
+  </p>
 
-  <h2>8. Contacto</h2>
+  <h2 id="ley">9. Ley aplicable</h2>
+  <p>
+    Estos términos se rigen por las leyes aplicables en México. Cualquier controversia relacionada con el uso de
+    Kaoru se buscará resolver primero de forma directa escribiendo a
+    <a href="mailto:dregxmoon@gmail.com">dregxmoon@gmail.com</a>.
+  </p>
+
+  <h2 id="cambios">10. Cambios</h2>
+  <p>Estos términos pueden actualizarse ocasionalmente, por ejemplo al agregar nuevos proveedores de IA o servicios conectados. Los cambios se reflejarán en esta página; revisa la fecha de "Última actualización" al inicio.</p>
+
+  <h2 id="contacto">11. Contacto</h2>
   <p>Preguntas sobre estos términos: <a href="mailto:dregxmoon@gmail.com">dregxmoon@gmail.com</a>.</p>
 </body>
 </html>

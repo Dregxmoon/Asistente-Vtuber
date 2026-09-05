@@ -5,32 +5,67 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Kaoru — Asistente personal con IA</title>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 720px; margin: 60px auto; padding: 0 20px; line-height: 1.6; color: #222; }
-  h1 { font-size: 2em; margin-bottom: 0.2em; }
-  .tagline { color: #666; margin-top: 0; }
-  nav a { margin-right: 20px; color: #2563eb; text-decoration: none; }
-  nav a:hover { text-decoration: underline; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 760px; margin: 60px auto; padding: 0 20px; line-height: 1.65; color: #222; }
+  h1 { font-size: 2.1em; margin-bottom: 0.2em; }
+  h2 { font-size: 1.25em; margin-top: 2em; border-bottom: 1px solid #eee; padding-bottom: 0.3em; }
+  .tagline { color: #666; margin-top: 0; font-size: 1.05em; }
+  nav.links a { margin-right: 20px; color: #2563eb; text-decoration: none; }
+  nav.links a:hover { text-decoration: underline; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.95em; }
+  th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: #f5f5f5; }
+  ul { padding-left: 1.2em; }
+  li { margin-bottom: 0.4em; }
+  a { color: #2563eb; }
+  .badge { display: inline-block; background: #eef2ff; color: #4338ca; font-size: 0.8em; padding: 2px 8px; border-radius: 10px; margin-left: 6px; }
   footer { margin-top: 60px; font-size: 0.85em; color: #888; }
 </style>
 </head>
 <body>
   <h1>Kaoru</h1>
-  <p class="tagline">Un asistente personal de escritorio con voz, memoria e integración con Google Workspace.</p>
+  <p class="tagline">Un asistente personal de escritorio con voz, memoria e integración opcional con Google Workspace.</p>
 
-  <nav>
+  <nav class="links">
     <a href="privacy.html">Aviso de Privacidad</a>
     <a href="terms.html">Términos de Servicio</a>
+    <a href="https://github.com/Dregxmoon/Kaoru-Agent">Código en GitHub</a>
   </nav>
 
   <h2>¿Qué es Kaoru?</h2>
   <p>
-    Kaoru es una aplicación de escritorio que actúa como asistente personal: responde por voz y texto,
-    recuerda contexto entre conversaciones, y puede conectarse a tus servicios de Google (Calendar, Gmail, Drive)
-    para consultar información y ayudarte con tareas del día a día, siempre con tu autorización explícita.
+    Kaoru es una aplicación de escritorio (Windows, macOS, Linux) que actúa como asistente personal: responde por
+    voz y texto, recuerda contexto entre conversaciones, y puede actuar como <strong>agente</strong> sobre tu propio
+    equipo — editar archivos, ejecutar comandos, trabajar con Git/GitHub — siempre bajo el nivel de autonomía y las
+    reglas de permiso que tú configures (Observar / Sugerir / Actuar).
+  </p>
+
+  <h2>Cómo funciona por dentro</h2>
+  <table>
+    <tr><th>Componente</th><th>Cómo funciona</th></tr>
+    <tr><td><strong>Conversación (LLM)</strong></td><td>Tú eliges y conectas con tu propia clave de API. Trae integrados <strong>Groq, Google Gemini, OpenAI, Anthropic, xAI, NVIDIA, Hugging Face y DeepSeek</strong>, con reintento y cambio automático entre ellos si uno falla. Con el comando <code>/provider add</code> puedes sumar cualquier otro proveedor compatible con la API de OpenAI, incluyendo un <strong>modelo local</strong> en tu propio equipo (Ollama, LM Studio, etc.).</td></tr>
+    <tr><td><strong>Reconocimiento de voz (STT)</strong></td><td>100% local y sin conexión, con el motor <strong>Vosk</strong>. Tu voz no sale de tu equipo para ser transcrita.</td></tr>
+    <tr><td><strong>Síntesis de voz (TTS)</strong></td><td>Usa el servicio en la nube de <strong>Microsoft Edge</strong> (edge-tts) para generar el audio de lo que Kaoru te dice.</td></tr>
+    <tr><td><strong>Memoria</strong></td><td>Grafo de memoria local (hechos, episodios de conversación, creencias inferidas con tu aprobación) en una base de datos SQLite en tu equipo, con búsqueda por significado 100% local y decaimiento automático de lo antiguo.</td></tr>
+    <tr><td><strong>Proactividad</strong></td><td>Kaoru puede tomar la iniciativa y hablarte primero según patrones que detecta (foco prolongado, errores de código, recordatorios próximos, etc.), siempre con un filtro determinista de "buen momento" y pidiendo tu confirmación antes de ejecutar cualquier acción real.</td></tr>
+    <tr><td><strong>Google Workspace (opcional)</strong></td><td>Tú conectas tu propia cuenta con tu propio proyecto de Google Cloud. Puedes elegir qué servicios activar (Calendar, Gmail, Drive, Docs, Sheets, Tasks, Contactos) y si el acceso es solo lectura o también escritura.</td></tr>
+    <tr><td><strong>Credenciales</strong></td><td>Tus claves de API y tokens se guardan cifrados en el almacén de credenciales de tu sistema operativo (Keychain / Credential Manager / Secret Service), nunca en un servidor de Dregxmoon.</td></tr>
+  </table>
+  <p>
+    Kaoru no opera ningún servidor central que reciba tus datos: todo corre en tu equipo, salvo las conexiones que tú
+    mismo autorizas hacia Google, tu proveedor de IA, o el servicio de voz. El detalle completo de qué se comparte y
+    con quién está en el <a href="privacy.html">Aviso de Privacidad</a>.
+  </p>
+
+  <h2>Modo agente</h2>
+  <p>
+    Además de responder, Kaoru puede tomar acciones concretas cuando se lo permites: editar y crear archivos,
+    ejecutar comandos de terminal, trabajar con repositorios Git y GitHub, y navegar la web con un navegador
+    automatizado independiente. Tú controlas cuánta autonomía le das, desde solo observar hasta actuar
+    automáticamente bajo reglas que tú mismo defines. Ver detalle en los <a href="terms.html">Términos de Servicio</a>.
   </p>
 
   <h2>Contacto</h2>
-  <p>Para dudas sobre privacidad o el manejo de datos: <a href="mailto:dregxmoon@gmail.com">dregxmoon@gmail.com</a></p>
+  <p>Para dudas sobre privacidad, términos, o el manejo de datos: <a href="mailto:dregxmoon@gmail.com">dregxmoon@gmail.com</a></p>
 
   <footer>
     Kaoru — proyecto independiente. Repositorio en <a href="https://github.com/Dregxmoon/Kaoru-Agent">GitHub</a>.
