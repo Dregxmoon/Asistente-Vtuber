@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aviso de Privacidad — Kaoru</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 760px; margin: 60px auto; padding: 0 20px; line-height: 1.65; color: #222; }
+  h1 { font-size: 1.8em; }
+  h2 { font-size: 1.25em; margin-top: 2em; border-bottom: 1px solid #eee; padding-bottom: 0.3em; }
+  h3 { font-size: 1.05em; margin-top: 1.2em; }
+  a { color: #2563eb; }
+  ul { padding-left: 1.2em; }
+  li { margin-bottom: 0.4em; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.95em; }
+  th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: #f5f5f5; }
+  .updated { color: #888; font-size: 0.9em; }
+  .badge { display: inline-block; background: #eef2ff; color: #4338ca; font-size: 0.8em; padding: 2px 8px; border-radius: 10px; margin-left: 6px; }
+  .note { background: #fffbeb; border-left: 4px solid #f59e0b; padding: 10px 14px; margin: 1em 0; font-size: 0.95em; }
+</style>
+</head>
+<body>
+  <p><a href="index.html">← Volver a Kaoru</a></p>
+  <h1>Aviso de Privacidad de Kaoru</h1>
+  <p class="updated">Última actualización: septiembre de 2026</p>
+
+  <p>
+    Este Aviso de Privacidad se emite en cumplimiento de la Ley Federal de Protección de Datos Personales
+    en Posesión de los Particulares (LFPDPPP) de México, y describe además, en términos claros, todo lo
+    que Kaoru puede observar en tu equipo — no solo lo relacionado con tu cuenta de Google.
+  </p>
+
+  <h2>1. Identidad y domicilio del responsable</h2>
+  <p>
+    Kaoru es un proyecto independiente desarrollado por Dregxmoon, operando desde Tijuana, Baja California,
+    México. Para cualquier asunto relacionado con tus datos personales, contacto:
+    <a href="mailto:dregxmoon@gmail.com">dregxmoon@gmail.com</a>.
+  </p>
+
+  <h2>2. Qué datos trata Kaoru</h2>
+  <p>Kaoru corre localmente en tu equipo. Divido los datos en dos grupos, según su origen:</p>
+
+  <h3>2.1 Datos de tu cuenta de Google (solo si tú los conectas)</h3>
+  <ul>
+    <li><strong>Google Calendar (solo lectura):</strong> tus eventos, para responder preguntas sobre tu agenda.</li>
+    <li><strong>Gmail (solo lectura):</strong> tus correos, para resumirlos o consultarlos cuando lo pidas.</li>
+    <li><strong>Google Drive (acceso por archivo):</strong> únicamente los archivos que tú abres o compartes explícitamente con Kaoru. Sin acceso general a todo tu Drive.</li>
+  </ul>
+
+  <h3>2.2 Datos observados localmente en tu equipo (sensores) <span class="badge">no se envían a Google ni a nadie</span></h3>
+  <p>Para poder ayudarte de forma proactiva, Kaoru puede observar señales de tu actividad en el equipo donde está instalado. Aquí está cada una, en lenguaje simple:</p>
+
+  <table>
+    <tr><th>Qué observa</th><th>Para qué</th><th>¿Se puede desactivar?</th></tr>
+    <tr><td>Aplicación y ventana activa, tiempo de inactividad</td><td>Saber en qué estás trabajando para ofrecer ayuda relevante y no interrumpir en mal momento</td><td>Sí, en configuración de sensores</td></tr>
+    <tr><td>Estado de tus repositorios Git (archivos sin commit, ramas, archivos <code>.env</code> sin ignorar)</td><td>Avisarte de riesgos comunes al programar</td><td>Sí</td></tr>
+    <tr><td>Errores reportados por tu editor de código (LSP)</td><td>Proponerte correcciones</td><td>Sí</td></tr>
+    <tr><td>Uso de CPU, RAM, disco y batería</td><td>Avisar sobre condiciones del sistema que podrían afectarte</td><td>Sí</td></tr>
+    <tr><td>Títulos de ventana con señales de error</td><td>Detectar errores visibles en pantalla</td><td>Sí</td></tr>
+    <tr><td><strong>Contenido copiado al portapapeles</strong></td><td>Detectar fragmentos de código o URLs útiles</td><td><strong>Desactivado por defecto — requiere que tú lo actives explícitamente (opt-in)</strong></td></tr>
+  </table>
+
+  <div class="note">
+    <strong>Aviso importante sobre el portapapeles y los títulos de ventana:</strong> estas dos señales, por su naturaleza,
+    podrían capturar accidentalmente información sensible que tú mismo copies o tengas visible (contraseñas, datos
+    financieros, información médica, mensajes de terceros). Kaoru no analiza intencionalmente ese contenido más allá
+    de detectar patrones técnicos (código, URLs, errores), pero como el dato pasa por el sistema, es tu responsabilidad
+    evaluar si quieres activar el sensor de portapapeles, y evitar copiar información sensible mientras esté activo.
+  </div>
+
+  <h3>2.3 Datos generados por la actividad del agente</h3>
+  <p>
+    Kaoru no solo observa: también puede <strong>actuar</strong> sobre tu equipo (editar archivos, ejecutar comandos,
+    operar Git) y, si lo conectas, sobre tu cuenta de GitHub (mediante su propio flujo de autorización OAuth). Estas
+    acciones generan datos adicionales, siempre almacenados localmente:
+  </p>
+  <ul>
+    <li><strong>GitHub (opcional):</strong> si conectas tu cuenta, Kaoru puede leer y crear issues/PRs u operar sobre tus repositorios según los permisos que autorices en GitHub.</li>
+    <li><strong>Navegador automatizado:</strong> Kaoru usa un navegador independiente (no tu navegador personal) para buscar y leer páginas web cuando se lo pides o cuando una tarea lo requiere. No tiene acceso a tus contraseñas guardadas ni sesiones iniciadas en tu navegador habitual, salvo que tú inicies sesión manualmente dentro de esa ventana automatizada.</li>
+    <li><strong>Puntos de control (checkpoints):</strong> antes de que el agente modifique archivos, Kaoru guarda una copia del estado previo para poder revertir cambios si algo sale mal. Estas copias se guardan localmente y se eliminan según la política de retención configurada.</li>
+  </ul>
+  <p>
+    El nivel de autonomía que elijas (Observar / Sugerir / Actuar) determina si estas acciones requieren tu confirmación
+    previa o pueden ejecutarse automáticamente bajo reglas de permiso que tú mismo configures. Consulta los
+    <a href="terms.html">Términos de Servicio</a> para el detalle de responsabilidades asociadas a cada nivel.
+  </p>
+  <p><strong>Finalidades necesarias</strong> (indispensables para que Kaoru funcione como asistente):</p>
+  <ul>
+    <li>Responder tus solicitudes usando el contexto que le compartes.</li>
+    <li>Recordar información relevante entre sesiones (memoria semántica local).</li>
+  </ul>
+  <p><strong>Finalidades voluntarias</strong> (requieren tu activación explícita, no son necesarias para el uso básico):</p>
+  <ul>
+    <li>Observación proactiva de sensores (Git, sistema, portapapeles, títulos de ventana) para que Kaoru te avise sin que se lo pidas.</li>
+    <li>Ejecución de acciones por el agente (editar archivos, ejecutar comandos, operar Git/GitHub, navegar la web) según el nivel de autonomía y reglas de permiso que configures.</li>
+    <li>Conexión con Google Calendar, Gmail o Drive.</li>
+  </ul>
+
+  <h2>4. Dónde se almacenan tus datos</h2>
+  <p>
+    Todo lo descrito arriba —tokens de Google, memoria semántica, historial de actividad observada por los sensores—
+    se almacena <strong>localmente en tu propio equipo</strong> (base de datos SQLite local). Kaoru no opera un servidor
+    central que reciba o almacene tus datos personales. No hay transferencia de tus datos a Dregxmoon ni a ningún tercero,
+    salvo las llamadas que tú mismo autorizas hacia la API de Google para usar Calendar/Gmail/Drive.
+  </p>
+
+  <h2>5. Retención y eliminación de datos</h2>
+  <p>
+    La memoria semántica aplica un decaimiento automático: la información antigua pierde relevancia con el tiempo y
+    puede ser descartada. Puedes borrar manualmente los datos almacenados por Kaoru desde tu propio equipo en cualquier
+    momento (eliminando el archivo local de base de datos, o mediante el comando de borrado de memoria de la aplicación).
+  </p>
+
+  <h2>6. Cómo revocar el acceso a Google</h2>
+  <p>
+    Puedes revocar el acceso de Kaoru a tu cuenta de Google en cualquier momento desde
+    <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a>.
+  </p>
+
+  <h2>7. Derechos ARCO</h2>
+  <p>
+    Como titular de tus datos personales, tienes derecho a <strong>Acceder, Rectificar, Cancelar</strong> tus datos, y a
+    <strong>Oponerte</strong> a su tratamiento (derechos ARCO), conforme a la LFPDPPP. Como todos tus datos se almacenan
+    localmente en tu propio equipo, en la práctica ejerces estos derechos directamente (revisando, editando o borrando
+    los archivos locales de Kaoru, o usando los comandos de la aplicación). Si tienes dudas sobre cómo hacerlo, escribe a
+    <a href="mailto:dregxmoon@gmail.com">dregxmoon@gmail.com</a>.
+  </p>
+
+  <h2>8. Uso responsable — solo para tu propio equipo</h2>
+  <p>
+    Kaoru está diseñado para que una persona observe su <strong>propia</strong> actividad en su <strong>propio</strong>
+    equipo. No debe instalarse en dispositivos ajenos o de terceros sin su consentimiento explícito, ni usarse para
+    monitorear a otras personas. Si usas Kaoru en un equipo proporcionado por tu empleador o institución, verifica que
+    esto no contravenga sus políticas internas de uso de equipo o monitoreo.
+  </p>
+
+  <h2>9. Contacto</h2>
+  <p>Preguntas sobre este aviso o el manejo de tus datos: <a href="mailto:dregxmoon@gmail.com">dregxmoon@gmail.com</a>.</p>
+</body>
+</html>

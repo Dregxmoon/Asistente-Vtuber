@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Términos de Servicio — Kaoru</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 720px; margin: 60px auto; padding: 0 20px; line-height: 1.6; color: #222; }
+  h1 { font-size: 1.8em; }
+  h2 { font-size: 1.2em; margin-top: 1.6em; }
+  a { color: #2563eb; }
+  .updated { color: #888; font-size: 0.9em; }
+</style>
+</head>
+<body>
+  <p><a href="index.html">← Volver a Kaoru</a></p>
+  <h1>Términos de Servicio de Kaoru</h1>
+  <p class="updated">Última actualización: septiembre de 2026</p>
+
+  <h2>1. Aceptación</h2>
+  <p>Al usar Kaoru, aceptas estos términos. Si no estás de acuerdo, no uses la aplicación.</p>
+
+  <h2>2. Descripción del servicio</h2>
+  <p>
+    Kaoru es una aplicación de escritorio de uso personal que actúa como <strong>agente</strong>: además de responder
+    por voz y texto, puede <strong>ejecutar acciones</strong> en tu equipo — editar y crear archivos, ejecutar comandos
+    de terminal, operar sobre repositorios Git (incluyendo GitHub, si conectas tu cuenta), y navegar la web mediante un
+    navegador automatizado independiente. También puede observar tu actividad local (sensores) y, si lo autorizas,
+    conectarse a servicios de Google (Calendar, Gmail, Drive). Consulta nuestro
+    <a href="privacy.html">Aviso de Privacidad</a> para el detalle completo.
+  </p>
+
+  <h2>3. Modo agente y niveles de autonomía</h2>
+  <p>
+    Kaoru opera bajo un modelo de permisos configurable por ti, con tres niveles de autonomía:
+  </p>
+  <ul>
+    <li><strong>Observar:</strong> Kaoru no ejecuta ninguna acción, solo percibe y responde.</li>
+    <li><strong>Sugerir</strong> (nivel por defecto): Kaoru propone acciones y espera tu confirmación antes de ejecutarlas.</li>
+    <li><strong>Actuar:</strong> Kaoru puede ejecutar automáticamente acciones que tú hayas marcado explícitamente como
+      permitidas ("allow"), sin pedirte confirmación en cada ocasión. Las acciones no cubiertas por una regla de
+      permiso explícita seguirán pidiéndote confirmación.</li>
+  </ul>
+  <p>
+    Eres responsable de configurar y revisar las reglas de permisos ("allow"/"ask"/"deny") de acuerdo con tu propio
+    nivel de tolerancia al riesgo. Cuanto más amplio sea el nivel de autonomía que elijas, mayor es el riesgo de que
+    una acción no deseada se ejecute sin tu revisión previa. Kaoru incluye mecanismos de mitigación (entorno de
+    ejecución restringido, verificación posterior a cambios de código, puntos de control y reversión de acciones),
+    pero estos son medidas de reducción de riesgo, <strong>no garantías</strong> de que ninguna acción cause un
+    resultado no deseado (por ejemplo, pérdida de datos, cambios no intencionados en un repositorio, o el envío de
+    información a un servicio externo si en el futuro se habilitan permisos de escritura hacia Google u otros
+    servicios).
+  </p>
+
+  <h2>4. Uso del servicio</h2>
+  <p>
+    Kaoru se ofrece "tal cual", sin garantías de disponibilidad, exactitud o ausencia de errores. Eres responsable
+    de mantener la seguridad de tu propio equipo y credenciales, de decidir qué sensores de observación local activar,
+    y de revisar las acciones que el agente propone o ejecuta automáticamente según el nivel de autonomía elegido.
+  </p>
+
+  <h2>5. Uso responsable y limitación de responsabilidad</h2>
+  <p>
+    Kaoru está diseñado para que una persona use la aplicación sobre su <strong>propio</strong> equipo, para observar su
+    <strong>propia</strong> actividad, y para ejecutar acciones bajo su propia autorización y configuración de permisos.
+    Está prohibido instalar o usar Kaoru para monitorear o actuar en nombre de otras personas sin su consentimiento
+    explícito, o en dispositivos o cuentas ajenas sin autorización de su propietario. El desarrollador no se hace
+    responsable por el mal uso de la aplicación fuera de estos términos, por información sensible que el propio
+    usuario exponga voluntariamente a los sensores locales, ni por consecuencias derivadas de acciones ejecutadas
+    por el agente bajo reglas de permiso configuradas por el propio usuario.
+  </p>
+
+  <h2>6. Datos y servicios de terceros</h2>
+  <p>
+    El acceso a servicios de Google está sujeto además a las
+    <a href="https://policies.google.com/terms" target="_blank" rel="noopener">Condiciones de Servicio de Google</a>
+    y su <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Política de Privacidad</a>.
+    Si conectas tu cuenta de GitHub, aplica de igual forma la
+    <a href="https://docs.github.com/site-policy/github-terms/github-terms-of-service" target="_blank" rel="noopener">Política de Términos de Servicio de GitHub</a>.
+  </p>
+
+  <h2>7. Cambios</h2>
+  <p>Estos términos pueden actualizarse ocasionalmente. Los cambios se reflejarán en esta página.</p>
+
+  <h2>8. Contacto</h2>
+  <p>Preguntas sobre estos términos: <a href="mailto:dregxmoon@gmail.com">dregxmoon@gmail.com</a>.</p>
+</body>
+</html>
