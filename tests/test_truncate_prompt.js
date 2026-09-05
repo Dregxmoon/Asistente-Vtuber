@@ -51,14 +51,14 @@ function buildAgentPrompt() {
 
 // Barrido de presupuestos (modo agent): para cada sección, calcula el mayor
 // presupuesto con el que desaparece. Deben desaparecer en orden de menor a
-// mayor importancia: skills → recall → catálogo → loop. La identidad nunca
+// mayor importancia: recall → skills → loop → catálogo. La identidad nunca
 // desaparece y el límite siempre se respeta.
 const p = buildAgentPrompt();
 const SECTIONS = [
-  { name: 'skills', marker: '**Skills activas' },
   { name: 'recall', marker: '# CONTEXTO RELEVANTE DE MEMORIA' },
-  { name: 'catálogo', marker: '# HERRAMIENTAS DISPONIBLES' },
+  { name: 'skills', marker: '**Skills activas' },
   { name: 'loop', marker: '# MODO AGENTE' },
+  { name: 'catálogo', marker: '# HERRAMIENTAS DISPONIBLES' },
 ];
 
 function lastBudgetWhereAbsent(marker, lo, hi) {
@@ -108,7 +108,8 @@ for (const budget of [p.length - 1, 200, 100, 60, 50]) {
   const p6 = base + '\n\n' + CATALOG;
   const out = truncateSystemPrompt(p6, { max: p6.length - 5 });
   assert(out.includes('IDENTIDAD'), 'identidad conservada (6)');
-  assert(!out.includes('# HERRAMIENTAS DISPONIBLES'), 'catálogo base eliminado (6)');
+  assert(out.includes(CATALOG), 'catálogo base intacto al recortar memoria (6)');
+  assert(!out.includes('## Lo que sé del usuario'), 'memoria eliminada antes del catálogo (6)');
   assert(out.length <= p6.length - 5, 'bajo el presupuesto (6)');
 }
 
@@ -146,13 +147,14 @@ for (const budget of [p.length - 1, 200, 100, 60, 50]) {
   const p8 = base8 + '\n\n' + LOOP + '\n\n' + CATALOG;
   const out14 = truncateSystemPrompt(p8, { max: 14000, tailSections: TAIL });
   const out30 = truncateSystemPrompt(p8, { max: 30000, tailSections: TAIL });
-  assert(!out14.includes('# MODO AGENTE'), 'chat budget: loop se recorta (8)');
-  assert(!out14.includes('# HERRAMIENTAS DISPONIBLES'), 'chat budget: catálogo se recorta (8)');
+  assert(out14.includes(LOOP), 'chat budget: loop sobrevive al recorte de memoria (8)');
+  assert(out14.includes(CATALOG), 'chat budget: catálogo sobrevive al recorte de memoria (8)');
   assert(out30.includes('# MODO AGENTE'), 'agent budget: loop sobrevive (8)');
   assert(out30.includes('# HERRAMIENTAS DISPONIBLES'), 'agent budget: catálogo sobrevive (8)');
   assert(out30 === p8, 'agent budget: sin recortes (8)');
 }
 
+console.log(`\nResultado: ${passed} passed  ${failed} failed`);
 console.log(
   `\n${C.bold('test_truncate_prompt')}: ${C.green(passed + ' pasaron')}${failed ? ', ' + C.red(failed + ' fallaron') : ''}`
 );

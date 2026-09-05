@@ -4,8 +4,21 @@
 
 const state = require('./state.js');
 
+function mcpOnAccountAuthenticated(callback) {
+  const { getMCPManager } = require('../mcp/MCPManager.js');
+  getMCPManager().setOnAccountAuthenticated(callback);
+}
+
 async function mcpListServers() {
   return state.mcp ? state.mcp.listServers() : [];
+}
+
+async function mcpStartGoogleAuth(id, service) {
+  if (!state.mcp) throw new Error('MCP no inicializado');
+  return state.mcp.callTool(id, 'start_google_auth', {
+    service_name: service,
+    user_google_email: '',
+  });
 }
 
 async function mcpAddServer(serverCfg) {
@@ -34,6 +47,8 @@ function mcpGetCategories() {
 }
 
 module.exports = {
+  mcpStartGoogleAuth,
+  mcpOnAccountAuthenticated,
   mcpListServers,
   mcpAddServer,
   mcpRemoveServer,

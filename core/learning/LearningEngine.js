@@ -57,6 +57,9 @@ const MAX_TASK_OUTCOMES = 500;
  * @property {number} [mutationCount]
  * @property {boolean} [rollbackAvailable]
  * @property {string[]} [skills]
+ * @property {string[]} [capabilities]
+ * @property {string[]} [toolSequence]
+ * @property {string|null} [taskDomain]
  */
 
 /**
@@ -212,6 +215,13 @@ class LearningEngine {
       skills: Array.isArray(outcome.skills)
         ? outcome.skills.slice(0, 5).map((s) => String(s).slice(0, 60))
         : [],
+      capabilities: Array.isArray(outcome.capabilities)
+        ? [...new Set(outcome.capabilities.map((item) => String(item).slice(0, 140)))].slice(0, 30)
+        : [],
+      toolSequence: Array.isArray(outcome.toolSequence)
+        ? outcome.toolSequence.map((item) => String(item).slice(0, 80)).slice(0, 30)
+        : [],
+      taskDomain: outcome.taskDomain ? String(outcome.taskDomain).slice(0, 80) : null,
     });
     this._data.taskOutcomes.push(entry);
     if (this._data.taskOutcomes.length > MAX_TASK_OUTCOMES) {
@@ -322,7 +332,7 @@ class LearningEngine {
    * umbral/ranking — las skills útiles en la práctica entran más fácil y
    * suben en el ranking, más allá de su cercanía semántica.
    * @param {{ minUses?: number }} [opts]
-   * @returns {Record<string, { uses: number, successes: number, rate: number }>}
+   * @returns {Record<string, { uses: number, successes: number, rate: number, consecutiveFailures:number, suspended:boolean }>}
    */
   skillStats({ minUses = 1 } = {}) {
     const tally = new Map();
@@ -335,13 +345,85 @@ class LearningEngine {
         tally.set(name, cur);
       }
     }
-    /** @type {Record<string, { uses: number, successes: number, rate: number }>} */
+    /** @type {Record<string, { uses: number, successes: number, rate: number, consecutiveFailures:number, suspended:boolean }>} */
     const out = {};
     for (const [name, s] of tally) {
       if (s.uses < minUses) continue;
-      out[name] = { uses: s.uses, successes: s.successes, rate: s.successes / s.uses };
+      let consecutiveFailures = 0;
+      for (const outcome of [...this._data.taskOutcomes].reverse()) {
+        if (!outcome.skills?.includes(name)) continue;
+        if (outcome.success) break;
+        consecutiveFailures++;
+      }
+      const rate = s.successes / s.uses;
+      out[name] = {
+        uses: s.uses,
+        successes: s.successes,
+        rate,
+        consecutiveFailures,
+        suspended: s.uses >= 5 && rate <= 0.2 && consecutiveFailures >= 3,
+      };
     }
     return out;
+  }
+
+  /** Estadísticas observables para el router de capacidades. */
+  capabilityStats({ minUses = 1 } = {}) {
+    const tally = new Map();
+    for (const outcome of this._data.taskOutcomes) {
+      for (const key of outcome.capabilities || []) {
+        const current = tally.get(key) || { uses: 0, successes: 0, elapsedMs: 0, timed: 0 };
+        current.uses++;
+        if (outcome.success) current.successes++;
+        if (Number.isFinite(outcome.elapsedMs)) {
+          current.elapsedMs += Number(outcome.elapsedMs);
+          current.timed++;
+        }
+        tally.set(key, current);
+      }
+    }
+    const stats = {};
+    for (const [key, value] of tally) {
+      if (value.uses < minUses) continue;
+      stats[key] = {
+        uses: value.uses,
+        successRate: value.successes / value.uses,
+        averageLatencyMs: value.timed ? Math.round(value.elapsedMs / value.timed) : null,
+      };
+    }
+    return stats;
+  }
+
+  /** Recupera una secuencia verificada, sin convertirla en autorización. */
+  recommendStrategy({ domain = null, minSuccesses = 2 } = {}) {
+    if (!domain) return null;
+    const groups = new Map();
+    for (const outcome of this._data.taskOutcomes) {
+      if (
+        !outcome.success ||
+        outcome.verificationStatus !== 'verified' ||
+        outcome.taskDomain !== domain ||
+        !outcome.toolSequence?.length
+      ) {
+        continue;
+      }
+      const signature = outcome.toolSequence.join(' → ');
+      const current = groups.get(signature) || { successes: 0, totalMs: 0 };
+      current.successes++;
+      current.totalMs += Number(outcome.elapsedMs) || 0;
+      groups.set(signature, current);
+    }
+    const ranked = [...groups.entries()]
+      .filter(([, value]) => value.successes >= minSuccesses)
+      .sort((a, b) => b[1].successes - a[1].successes || a[1].totalMs - b[1].totalMs);
+    if (!ranked.length) return null;
+    const [sequence, stats] = ranked[0];
+    return {
+      domain,
+      sequence: sequence.split(' → '),
+      successes: stats.successes,
+      averageLatencyMs: Math.round(stats.totalMs / stats.successes),
+    };
   }
 
   /**
@@ -387,7 +469,7 @@ class LearningEngine {
    * suficientes; si no hay nada significativo devuelve null (no se inyecta).
    * @returns {string|null}
    */
-  buildPromptSection() {
+  buildPromptSection(options = {}) {
     const lines = [];
 
     // Preferencias de proactividad aprendidas del feedback de propuestas.
@@ -426,6 +508,13 @@ class LearningEngine {
     )) {
       const instruction = proposal.proposedChange?.instruction;
       if (instruction) lines.push(`Estrategia aprobada v${proposal.version}: ${instruction}`);
+    }
+
+    const strategy = this.recommendStrategy({ domain: options.domain || null });
+    if (strategy) {
+      lines.push(
+        `Ruta verificada para ${strategy.domain} (${strategy.successes} éxitos): ${strategy.sequence.join(' → ')}. Adáptala al objetivo actual y conserva los permisos.`
+      );
     }
 
     if (!lines.length) return null;

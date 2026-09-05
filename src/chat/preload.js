@@ -59,6 +59,9 @@ const INVOKE_ALLOWLIST = new Set([
   'get-python-bin',
   'list-skills',
   // MCP / permisos
+  'mcp-google-workspace-info',
+  'mcp-google-workspace-console',
+  'mcp-google-workspace-connect',
   'mcp-add-server',
   'mcp-list-servers',
   'mcp-remove-server',

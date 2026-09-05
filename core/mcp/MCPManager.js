@@ -32,10 +32,15 @@
 const logger = require('../observability/Logger.js');
 
 const crypto = require('crypto');
+const { resolveMCPEnv } = require('../connectors/MCPSecretStore.js');
+const { authenticatedGoogleEmail } = require('../connectors/GoogleWorkspace.js');
 const { minimalChildEnv } = require('../utils/childEnv.js');
 const { wrapUntrusted } = require('../grounding/untrustedContent.js');
 const { Client } = require('@modelcontextprotocol/sdk/client/index.js');
 const { StdioClientTransport } = require('@modelcontextprotocol/sdk/client/stdio.js');
+const {
+  StreamableHTTPClientTransport,
+} = require('@modelcontextprotocol/sdk/client/streamableHttp.js');
 
 // Timeout generoso para la conexión inicial — la primera vez que corre un
 // servidor vía npx, Node/npm puede tardar en descargarlo. Las llamadas a
@@ -246,20 +251,11 @@ function _extractAuthInfo(packages = []) {
         name.includes('password') ||
         desc.includes('token') ||
         desc.includes('api key') ||
-        desc.includes('oauth')
+        desc.includes('oauth') ||
+        env.isRequired
       ) {
         auth.needsAuth = true;
-        if (
-          desc.includes('oauth') ||
-          name.includes('oauth') ||
-          name.includes('client_id') ||
-          name.includes('client_secret')
-        ) {
-          auth.type = 'oauth';
-          auth.oauth = { provider: _detectOAuthProvider(name, desc), description: env.description };
-        } else {
-          auth.type = 'api_key';
-        }
+        auth.type = 'api_key';
         auth.envVars.push({
           name: env.name,
           description: env.description || '',
@@ -440,7 +436,7 @@ const FALLBACK_CATALOG = [
     registryType: 'npm',
     identifier: '@modelcontextprotocol/server-github',
     args: [],
-    requiredEnv: ['GITHUB_TOKEN'],
+    requiredEnv: ['GITHUB_PERSONAL_ACCESS_TOKEN'],
   },
   {
     name: 'gitlab',
@@ -448,7 +444,7 @@ const FALLBACK_CATALOG = [
     registryType: 'npm',
     identifier: '@modelcontextprotocol/server-gitlab',
     args: [],
-    requiredEnv: ['GITLAB_TOKEN'],
+    requiredEnv: ['GITLAB_PERSONAL_ACCESS_TOKEN'],
   },
   {
     name: 'memory',
@@ -611,6 +607,8 @@ class MCPServerConnection {
     this.error = null;
     this.tools = []; // [{ name, description, inputSchema }]
     this._cancelReconnect = null;
+    this._onAccountAuthenticated = null;
+    this._stderrBuffer = '';
 
     this._intentionalDisconnect = false; // true si disconnect() lo pidió el usuario
     this._reconnectAttempts = 0;
@@ -740,6 +738,23 @@ class MCPServerConnection {
     this._health.halfOpenProbe = false;
   }
 
+  _consumeGoogleStderr(chunk) {
+    this._stderrBuffer += chunk.toString();
+    const lines = this._stderrBuffer.split(/\r?\n/);
+    this._stderrBuffer = lines.pop().slice(-8192);
+    for (const line of lines) {
+      const email = authenticatedGoogleEmail(line);
+      if (!email || email === this.config.env?.USER_GOOGLE_EMAIL) continue;
+      this.config.env = { ...this.config.env, USER_GOOGLE_EMAIL: email };
+      try {
+        this._onAccountAuthenticated?.({ id: this.id, email });
+      } catch (_) {
+        logger.warn('MCPManager', 'No se pudo guardar la cuenta Google autenticada');
+      }
+      this._onStatusChange?.();
+    }
+  }
+
   async connect() {
     if (this.status === 'connected' || this.status === 'connecting') return;
     this.status = 'connecting';
@@ -747,14 +762,44 @@ class MCPServerConnection {
     this._intentionalDisconnect = false;
 
     try {
+      const runtimeEnv = await resolveMCPEnv(this.config.env || {});
       // C1 (seguridad): NUNCA se pasa process.env a servidores MCP — son
       // terceros y podrían exfiltrar credenciales (GITHUB_TOKEN, API keys...).
       // Solo PATH/HOME + lo que el server declare explícitamente en su config.
-      this.transport = new StdioClientTransport({
-        command: this.config.command,
-        args: this.config.args || [],
-        env: minimalChildEnv(this.config.env || {}),
-      });
+      if (this.config.transport === 'streamable-http') {
+        const url = new URL(this.config.url);
+        if (
+          url.protocol !== 'https:' &&
+          !(url.protocol === 'http:' && ['127.0.0.1', '[::1]', 'localhost'].includes(url.hostname))
+        ) {
+          throw new Error('MCP remoto requiere HTTPS (HTTP solo en localhost)');
+        }
+        if (url.username || url.password)
+          throw new Error('Usa el campo de token para autenticar MCP');
+        const token = runtimeEnv.MCP_AUTH_TOKEN;
+        this.transport = new StreamableHTTPClientTransport(url, {
+          requestInit: token ? { headers: { Authorization: `Bearer ${token}` } } : {},
+        });
+      } else {
+        this.transport = new StdioClientTransport({
+          command: this.config.command,
+          args: this.config.args || [],
+          env: minimalChildEnv(runtimeEnv),
+          stderr:
+            this.config.connector === 'google-workspace' ||
+            this.config.args?.includes('workspace-mcp')
+              ? 'pipe'
+              : 'inherit',
+        });
+      }
+      if (
+        this.transport.stderr &&
+        (this.config.connector === 'google-workspace' ||
+          this.config.args?.includes('workspace-mcp'))
+      ) {
+        this._stderrBuffer = '';
+        this.transport.stderr.on('data', (chunk) => this._consumeGoogleStderr(chunk));
+      }
       this.client = new Client(
         { name: 'asistente-personal', version: '1.0.0' },
         { capabilities: {} }
@@ -769,23 +814,33 @@ class MCPServerConnection {
         logger.warn('MCPManager', `[mcp] error en servidor "${this.name}":`, err.message);
       };
 
-      await Promise.race([
-        this.client.connect(this.transport),
-        new Promise((_, reject) =>
-          setTimeout(
-            () =>
-              reject(
-                new Error(
-                  `timeout de conexión (${CONNECT_TIMEOUT_MS / 1000}s) — si es la primera vez, npx puede estar descargando el paquete`
-                )
-              ),
-            CONNECT_TIMEOUT_MS
-          )
-        ),
-      ]);
-
-      const listed = await this.client.listTools();
-      this.tools = listed.tools || [];
+      let timer;
+      try {
+        await Promise.race([
+          (async () => {
+            await this.client.connect(this.transport);
+            const tools = [];
+            let cursor;
+            const seen = new Set();
+            do {
+              const listed = await this.client.listTools(cursor ? { cursor } : undefined);
+              tools.push(...(listed.tools || []));
+              cursor = listed.nextCursor;
+              if (cursor && seen.has(cursor)) throw new Error('Paginación MCP repetida');
+              if (cursor) seen.add(cursor);
+            } while (cursor);
+            this.tools = tools;
+          })(),
+          new Promise((_, reject) => {
+            timer = setTimeout(
+              () => reject(new Error('Timeout conectando y descubriendo herramientas MCP')),
+              CONNECT_TIMEOUT_MS
+            );
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
       this.status = 'connected';
       this._reconnectAttempts = 0; // conexión sana — resetea el presupuesto de reintentos
       this._resetCircuit();
@@ -797,7 +852,9 @@ class MCPServerConnection {
       this.status = 'error';
       this.error = e.message;
       logger.warn('MCPManager', `[mcp] error conectando a "${this.name}":`, e.message);
+      this.tools = [];
       try {
+        if (this.client) this.client.onclose = undefined;
         await this.transport?.close();
       } catch (_) {
         /* best-effort */
@@ -901,7 +958,15 @@ class MCPServerConnection {
         undefined,
         { signal: options.signal, timeout, maxTotalTimeout: timeout }
       );
-      this._recordCallSuccess(Date.now() - startedAt, Date.now());
+      if (result?.isError) {
+        this._recordCallFailure(
+          new Error('La herramienta MCP devolvió un error'),
+          Date.now() - startedAt,
+          Date.now()
+        );
+      } else {
+        this._recordCallSuccess(Date.now() - startedAt, Date.now());
+      }
       // Límite de confianza: cualquier resultado de un servidor MCP externo se
       // envuelve como contenido no confiable antes de llegar al pipeline.
       return _trustMCPResult(result);
@@ -921,6 +986,12 @@ class MCPManager {
   constructor() {
     this._connections = new Map(); // id -> MCPServerConnection
     this._onChange = null; // callback opcional, para avisar a la UI en vivo
+    this._onAccountAuthenticated = null;
+    this._mutationQueue = Promise.resolve();
+  }
+
+  setOnAccountAuthenticated(cb) {
+    this._onAccountAuthenticated = cb;
   }
 
   setOnChange(cb) {
@@ -938,6 +1009,13 @@ class MCPManager {
 
   /** Conecta todos los servidores marcados enabled:true de la config guardada. */
   async init(serverConfigs = []) {
+    for (const cfg of serverConfigs.filter((server) => server.enabled === false)) {
+      if (!this._connections.has(cfg.id)) {
+        const conn = new MCPServerConnection(cfg);
+        conn._onStatusChange = () => this._notify();
+        this._connections.set(cfg.id, conn);
+      }
+    }
     const enabled = serverConfigs.filter((s) => s.enabled !== false);
     if (!enabled.length) {
       logger.info(
@@ -961,13 +1039,37 @@ class MCPManager {
     } else {
       conn.config = cfg;
     }
+    conn._onAccountAuthenticated = (account) => this._onAccountAuthenticated?.(account);
     await conn.connect();
     this._notify();
     return conn;
   }
 
   async addServer(cfg) {
-    const id = cfg.id || crypto.randomUUID();
+    const pending = this._mutationQueue.then(() => this._addServer(cfg));
+    this._mutationQueue = pending.catch(() => {});
+    return pending;
+  }
+
+  async _addServer(cfg) {
+    if (!cfg || typeof cfg.name !== 'string' || !cfg.name.trim())
+      throw new Error('Nombre MCP requerido');
+    const existing = [...this._connections.values()].find((conn) => conn.name === cfg.name);
+    if (cfg.id && existing && cfg.id !== existing.id)
+      throw new Error('El nombre pertenece a otro servidor MCP');
+    if (cfg.transport && !['stdio', 'streamable-http'].includes(cfg.transport))
+      throw new Error('Transporte MCP no soportado');
+    if (
+      cfg.transport !== 'streamable-http' &&
+      (typeof cfg.command !== 'string' || !cfg.command.trim())
+    )
+      throw new Error('Comando MCP requerido');
+    const id = existing?.id || cfg.id || crypto.randomUUID();
+    const previous = this._connections.get(id);
+    if (previous) {
+      await previous.disconnect();
+      this._connections.delete(id);
+    }
     const full = { ...cfg, id, enabled: cfg.enabled !== false };
     await this._connectOne(full);
     return this.getServerStatus(id);
@@ -1000,6 +1102,9 @@ class MCPManager {
     return [...this._connections.values()].map((c) => ({
       id: c.id,
       name: c.name,
+      identifier: c.config.identifier || null,
+      transport: c.config.transport || 'stdio',
+      accountEmail: c.config.env?.USER_GOOGLE_EMAIL || null,
       status: c.status,
       error: c.error,
       toolCount: c.tools.length,
@@ -1014,6 +1119,7 @@ class MCPManager {
     return {
       id: c.id,
       name: c.name,
+      accountEmail: c.config.env?.USER_GOOGLE_EMAIL || null,
       status: c.status,
       error: c.error,
       toolCount: c.tools.length,
@@ -1065,10 +1171,34 @@ class MCPManager {
       const pkg = (s.packages || []).find(
         (p) => p.registryType === 'npm' && (!p.transport || p.transport.type === 'stdio')
       );
-      if (!pkg) continue;
+      if (!pkg) {
+        const remote = (s.remotes || []).find((r) => r.type === 'streamable-http');
+        if (!remote || (remote.headers || []).some((h) => h.name.toLowerCase() !== 'authorization'))
+          continue;
+        const needsAuth = (remote.headers || []).some(
+          (h) => h.name.toLowerCase() === 'authorization'
+        );
+        out.push({
+          name: s.title || s.name,
+          description: s.description || '',
+          identifier: s.name,
+          transport: 'streamable-http',
+          url: remote.url,
+          args: [],
+          requiredEnv: [],
+          source: 'live',
+          category: _detectCategory(s.title || s.name, s.description),
+          auth: {
+            needsAuth,
+            type: needsAuth ? 'api_key' : 'none',
+            envVars: needsAuth ? [{ name: 'MCP_AUTH_TOKEN' }] : [],
+          },
+        });
+        continue;
+      }
 
       const category = _detectCategory(s.title || s.name, s.description, s.packages);
-      const auth = _extractAuthInfo(s.packages);
+      const auth = _extractAuthInfo([pkg]);
 
       out.push({
         name: s.title || s.name,
@@ -1112,7 +1242,14 @@ class MCPManager {
             ...s,
             source: 'static',
             category: _detectCategory(s.name, s.description),
-            auth: { needsAuth: false, type: 'none', envVars: [] },
+            auth: _extractAuthInfo([
+              {
+                environmentVariables: (s.requiredEnv || []).map((name) => ({
+                  name,
+                  isRequired: true,
+                })),
+              },
+            ]),
             popularReason: popularMap.get(s.identifier),
           })
         );
@@ -1137,7 +1274,14 @@ class MCPManager {
           ...s,
           source: 'static',
           category: _detectCategory(s.name, s.description),
-          auth: { needsAuth: false, type: 'none', envVars: [] },
+          auth: _extractAuthInfo([
+            {
+              environmentVariables: (s.requiredEnv || []).map((name) => ({
+                name,
+                isRequired: true,
+              })),
+            },
+          ]),
           popularReason: popularMap.get(s.identifier),
         }))
         .slice(0, limit);
@@ -1199,7 +1343,14 @@ class MCPManager {
           ...s,
           source: 'static',
           category: _detectCategory(s.name, s.description),
-          auth: { needsAuth: false, type: 'none', envVars: [] },
+          auth: _extractAuthInfo([
+            {
+              environmentVariables: (s.requiredEnv || []).map((name) => ({
+                name,
+                isRequired: true,
+              })),
+            },
+          ]),
         }))
         .slice(0, limit);
     }

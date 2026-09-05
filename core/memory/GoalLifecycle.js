@@ -128,6 +128,7 @@ function settleGoal({ graph, commitment, workspace, result, evaluation }) {
   const verifiedCompletion =
     evaluation.success &&
     evaluation.terminalSuccess &&
+    (!Array.isArray(result?.plan?.stepStates) || result.plan.coverageComplete === true) &&
     (evaluation.verificationStatus === 'verified' ||
       (evaluation.verificationStatus === 'not_applicable' && evaluation.mutationCount === 0));
   const verification = {
@@ -135,6 +136,7 @@ function settleGoal({ graph, commitment, workspace, result, evaluation }) {
     reason: evaluation.verificationReason,
     source: 'agent_run',
     at: Date.now(),
+    stepEvidenceRequired: Array.isArray(result?.plan?.stepStates),
   };
 
   if (verifiedCompletion) {

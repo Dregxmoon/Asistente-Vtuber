@@ -37,6 +37,8 @@ const {
 } = require('./core/session.js');
 const { setActiveWorkspace, getWorkspace } = require('./core/workspace.js');
 const {
+  mcpStartGoogleAuth,
+  mcpOnAccountAuthenticated,
   mcpListServers,
   mcpAddServer,
   mcpRemoveServer,
@@ -167,6 +169,8 @@ module.exports = {
   isOpenClawAvailable,
   getOpenClawStatus,
   runAgent,
+  mcpStartGoogleAuth,
+  mcpOnAccountAuthenticated,
   mcpListServers,
   mcpAddServer,
   mcpRemoveServer,

@@ -3,8 +3,12 @@
 const logger = require('../core/observability/Logger.js');
 
 const crypto = require('crypto');
-const { ipcMain, dialog } = require('electron');
+const { ipcMain, dialog, shell } = require('electron');
+const { OAuthCallbackServer } = require('../core/connectors/OAuthCallbackServer.js');
 const SafeStorageCrypto = require('../infrastructure/config/SafeStorageCrypto.js');
+const { buildGoogleWorkspaceConfig, findUvx } = require('../core/connectors/GoogleWorkspace.js');
+const { storeGoogleSecret } = require('../core/connectors/MCPSecretStore.js');
+const { resolveConnectorScopes } = require('../core/connectors/ConnectorRegistry.js');
 
 // TTL de estados OAuth pendientes: si un state nunca completa el flujo
 // (usuario cierra la ventana, cancela, o simplemente lo abandona), antes
@@ -75,12 +79,7 @@ function register(ctx) {
 
   ipcMain.handle('mcp-get-oauth-providers', async () => {
     try {
-      // Devuelve lista de proveedores OAuth que tienen client ID configurado
-      const configured = [];
-      for (const [provider, config] of Object.entries(_getOAuthConfig('').configs || {})) {
-        if (config.clientId) configured.push(provider);
-      }
-      // Alternativa: comprobar cada proveedor individualmente
+      // Solo anunciar proveedores con configuración utilizable.
       const providers = [
         'github',
         'gitlab',
@@ -104,14 +103,111 @@ function register(ctx) {
     }
   });
 
+  Core.mcpOnAccountAuthenticated?.(({ id, email }) => {
+    const servers = loadConfig()?.mcp?.servers || [];
+    const server = servers.find((item) => item.id === id);
+    if (!server || server.env?.USER_GOOGLE_EMAIL === email) return;
+    saveConfig({
+      mcp: {
+        servers: servers.map((item) =>
+          item.id === id ? { ...item, env: { ...item.env, USER_GOOGLE_EMAIL: email } } : item
+        ),
+      },
+    });
+  });
+
+  ipcMain.handle('mcp-google-workspace-info', async () => {
+    const server = (loadConfig()?.mcp?.servers || []).find(
+      (item) => item.name === 'google-workspace'
+    );
+    let uvxPath = '';
+    try {
+      uvxPath = await findUvx(server?.command || '');
+    } catch (_) {}
+    return { uvxPath, configured: !!server, email: server?.env?.USER_GOOGLE_EMAIL || null };
+  });
+
+  ipcMain.handle('mcp-google-workspace-console', async () => {
+    await shell.openExternal('https://console.cloud.google.com/projectcreate');
+    return { ok: true };
+  });
+
+  let googleSave = Promise.resolve();
+  ipcMain.handle('mcp-google-workspace-connect', (_e, input) => {
+    const pending = googleSave.then(async () => {
+      try {
+        const serverCfg = await buildGoogleWorkspaceConfig(input);
+        const existing = (loadConfig()?.mcp?.servers || []).find(
+          (item) => item.name === serverCfg.name
+        );
+        const id = existing?.id || crypto.randomUUID();
+        const secret = await storeGoogleSecret(id, serverCfg.env.GOOGLE_OAUTH_CLIENT_SECRET);
+        serverCfg.env.GOOGLE_OAUTH_CLIENT_SECRET = secret.value;
+        // Conservar la cuenta solo si el usuario sigue usando el mismo cliente OAuth.
+        if (
+          existing?.env?.GOOGLE_OAUTH_CLIENT_ID === serverCfg.env.GOOGLE_OAUTH_CLIENT_ID &&
+          existing.env.USER_GOOGLE_EMAIL
+        ) {
+          serverCfg.env.USER_GOOGLE_EMAIL = existing.env.USER_GOOGLE_EMAIL;
+        }
+        const cfg = { ...serverCfg, id, enabled: true };
+        const servers = loadConfig()?.mcp?.servers || [];
+        saveConfig({
+          mcp: {
+            servers: [...servers.filter((item) => item.id !== id && item.name !== cfg.name), cfg],
+          },
+        });
+        const status = await Core.mcpAddServer(cfg);
+        let authStarted = false;
+        let authError = null;
+        if (status?.status === 'connected' && !status.accountEmail) {
+          try {
+            const result = await Core.mcpStartGoogleAuth(id, input.services[0]);
+            const content = (result?.content || [])
+              .filter((item) => item.type === 'text')
+              .map((item) => item.text)
+              .join('\n');
+            const urls = content.match(/https:\/\/accounts\.google\.com\/[^\s<>"\]]+/g) || [];
+            const authUrl = urls
+              .map((value) => new URL(value))
+              .find(
+                (url) =>
+                  url.origin === 'https://accounts.google.com' &&
+                  url.pathname.startsWith('/o/oauth2/') &&
+                  !url.username &&
+                  !url.password
+              );
+            if (result?.isError || !authUrl)
+              throw new Error(
+                'No se pudo iniciar la autorización de Google. Revisa tus credenciales e inténtalo otra vez.'
+              );
+            await shell.openExternal(authUrl.href);
+            authStarted = true;
+          } catch (error) {
+            authError = error.message;
+          }
+        }
+        return { ok: true, status, credentialStorage: secret.storage, authStarted, authError };
+      } catch (error) {
+        return { ok: false, error: error.message };
+      }
+    });
+    googleSave = pending.catch(() => {});
+    return pending;
+  });
+
   ipcMain.handle('mcp-add-server', async (e, { serverCfg }) => {
     try {
       // Conectar con las credenciales en texto plano (el proceso hijo las
       // necesita así) — el cifrado es solo para lo que toca disco.
+      const existing = (loadConfig()?.mcp?.servers || []).find(
+        (item) => item.name === serverCfg.name
+      );
+      serverCfg = { ...serverCfg, id: existing?.id || serverCfg.id };
       const status = await Core.mcpAddServer(serverCfg);
       const cfg = loadConfig();
       const servers = cfg?.mcp?.servers || [];
-      const withoutDup = servers.filter((s) => s.id !== status.id);
+      const withoutDup = servers.filter((s) => s.id !== status.id && s.name !== serverCfg.name);
       const persistedCfg = {
         ...serverCfg,
         id: status.id,
@@ -165,8 +261,39 @@ function register(ctx) {
     }
   });
 
+  async function installOAuthServer(oauthData) {
+    const serverCfg = {
+      name: oauthData.serverName,
+      identifier: oauthData.serverIdentifier,
+      command: 'npx',
+      args: ['-y', oauthData.serverIdentifier, ...oauthData.serverArgs],
+      env: oauthData.tokens,
+    };
+    const status = await Core.mcpAddServer(serverCfg);
+    const servers = loadConfig()?.mcp?.servers || [];
+    saveConfig({
+      mcp: {
+        servers: [
+          ...servers.filter((server) => server.id !== status.id),
+          {
+            ...serverCfg,
+            id: status.id,
+            enabled: true,
+            env: SafeStorageCrypto.encryptAllKeys(serverCfg.env),
+          },
+        ],
+      },
+    });
+    return status;
+  }
+
   // OAuth flow for MCP servers that need authentication
   const oauthStates = new Map(); // state -> { provider, serverName, serverIdentifier, serverArgs, codeVerifier, redirectUri }
+
+  const callbackServer = new OAuthCallbackServer(oauthStates, _exchangeCodeForTokens, {
+    port: Number(process.env.MCP_OAUTH_CALLBACK_PORT || 18790),
+    ttlMs: OAUTH_STATE_TTL_MS,
+  });
 
   function _generateCodeVerifier() {
     const bytes = crypto.randomBytes(32);
@@ -235,13 +362,30 @@ function register(ctx) {
         scope: 'read:jira-work read:jira-user',
       },
     };
+    // Estos proveedores aceptan el intercambio form/PKCE implementado aquí.
+    // Los demás se configuran con las credenciales declaradas por el servidor.
+    if (!['github', 'gitlab', 'google', 'microsoft'].includes(provider)) return null;
+    if (provider === 'github' && !process.env.GITHUB_CLIENT_SECRET) return null;
     return configs[provider] || null;
   }
 
   ipcMain.handle(
     'mcp-oauth-start',
-    async (e, { provider, serverName, serverIdentifier, serverArgs }) => {
+    async (e, { provider, serverName, serverIdentifier, serverArgs, capabilities }) => {
       try {
+        if (
+          typeof serverIdentifier !== 'string' ||
+          !/^(?:@[a-z0-9._-]+\/)?[a-z0-9._-]+(?:@[a-zA-Z0-9.*^~+-]+)?$/.test(serverIdentifier) ||
+          serverIdentifier.startsWith('-')
+        ) {
+          throw new Error('Identificador npm inválido para OAuth');
+        }
+        if (
+          !Array.isArray(serverArgs || []) ||
+          (serverArgs || []).some((arg) => typeof arg !== 'string' || /^<.*>$/.test(arg))
+        ) {
+          throw new Error('Configura los argumentos del servidor antes de OAuth');
+        }
         const config = _getOAuthConfig(provider);
         if (!config || !config.clientId) {
           return {
@@ -251,17 +395,21 @@ function register(ctx) {
         }
 
         _sweepExpiredOAuthStates(oauthStates);
+        const connectorRequest = resolveConnectorScopes(provider, capabilities);
+        const requestedScope = connectorRequest ? connectorRequest.scope : config.scope;
 
         const state = crypto.randomUUID();
         const codeVerifier = _generateCodeVerifier();
         const codeChallenge = _generateCodeChallenge(codeVerifier);
-        const redirectUri = 'http://127.0.0.1:18789/mcp/oauth/callback';
+        const redirectUri = await callbackServer.start();
 
         oauthStates.set(state, {
           provider,
           serverName,
           serverIdentifier,
           serverArgs: serverArgs || [],
+          capabilities: connectorRequest?.capabilities || [],
+          access: connectorRequest?.access || 'provider_default',
           codeVerifier,
           redirectUri,
           createdAt: Date.now(),
@@ -271,14 +419,32 @@ function register(ctx) {
           client_id: config.clientId,
           redirect_uri: redirectUri,
           response_type: 'code',
-          scope: config.scope,
+          scope: requestedScope,
           state,
           code_challenge: codeChallenge,
           code_challenge_method: 'S256',
         });
 
         const authUrl = `${config.authUrl}?${params.toString()}`;
-        return { ok: true, authUrl, state };
+        try {
+          await shell.openExternal(authUrl);
+        } catch (_) {
+          oauthStates.delete(state);
+          throw new Error('No se pudo abrir el navegador para autorizar la conexión');
+        }
+        return {
+          ok: true,
+          authUrl,
+          state,
+          consent: connectorRequest
+            ? {
+                provider,
+                capabilities: connectorRequest.capabilities,
+                access: connectorRequest.access,
+                scopes: connectorRequest.scopes,
+              }
+            : null,
+        };
       } catch (err) {
         logger.error('mcp-handlers', '[mcp] OAuth start error:', err.message);
         return { ok: false, error: err.message };
@@ -297,10 +463,15 @@ function register(ctx) {
 
       // El callback HTTP real recibe el code y lo intercambia por tokens
       // Aquí solo verificamos si ya se completó (el servidor HTTP lo guarda en oauthData.tokens)
-      if (oauthData.tokens) {
-        const tokens = oauthData.tokens;
+      if (oauthData.error) {
         oauthStates.delete(state);
-        return { completed: true, tokens };
+        return { completed: false, error: oauthData.error };
+      }
+      if (oauthData.tokens) {
+        // Consumir el estado antes de instalar: no duplicar procesos al sondear.
+        oauthStates.delete(state);
+        const status = await installOAuthServer(oauthData);
+        return { completed: true, status };
       }
       return { completed: false };
     } catch (err) {
@@ -308,55 +479,7 @@ function register(ctx) {
     }
   });
 
-  // Callback HTTP para OAuth (se monta en main.js)
-  function _setupOAuthCallback(app) {
-    const { session } = require('electron');
-    const ses = session.defaultSession;
-
-    // Interceptar la callback
-    const filter = { urls: ['http://127.0.0.1:18789/mcp/oauth/callback*'] };
-    ses.webRequest.onBeforeRequest(filter, (details, callback) => {
-      const url = new URL(details.url);
-      const code = url.searchParams.get('code');
-      const state = url.searchParams.get('state');
-      const error = url.searchParams.get('error');
-
-      if (error) {
-        callback({ cancel: true });
-        // Redirigir a página de error
-        return;
-      }
-
-      if (!code || !state) {
-        callback({ cancel: true });
-        return;
-      }
-
-      const oauthData = oauthStates.get(state);
-      if (!oauthData) {
-        callback({ cancel: true });
-        return;
-      }
-
-      // Intercambiar code por tokens
-      _exchangeCodeForTokens(oauthData, code, state)
-        .then((tokens) => {
-          oauthData.tokens = tokens;
-        })
-        .catch((err) => {
-          logger.error('mcp-handlers', '[mcp] OAuth token exchange failed:', err.message);
-          oauthData.error = err.message;
-        });
-
-      // Responder con página de éxito
-      callback({
-        cancel: true,
-        redirectURL: `data:text/html,<html><body style="font-family:monospace;text-align:center;padding:50px;background:#0d0d0d;color:#e0e0e0"><h2>✅ Autorización completada</h2><p>Puedes cerrar esta ventana y volver a Kaoru.</p><script>window.close()</script></body></html>`,
-      });
-    });
-  }
-
-  async function _exchangeCodeForTokens(oauthData, code, state) {
+  async function _exchangeCodeForTokens(oauthData, code) {
     const config = _getOAuthConfig(oauthData.provider);
     if (!config) throw new Error('Provider config not found');
 
@@ -368,34 +491,37 @@ function register(ctx) {
       code_verifier: oauthData.codeVerifier,
     });
 
-    // Para GitHub, el client_secret va en el body; para otros en Basic Auth
     const headers = {
       'Content-Type': 'application/x-www-form-urlencoded',
       Accept: 'application/json',
     };
-    if (oauthData.provider === 'github' && process.env.GITHUB_CLIENT_SECRET) {
-      params.append('client_secret', process.env.GITHUB_CLIENT_SECRET);
-    }
+    const secret = process.env[`${oauthData.provider.toUpperCase()}_CLIENT_SECRET`];
+    if (secret) params.append('client_secret', secret);
 
-    const auth =
-      config.clientId && process.env[`${oauthData.provider.toUpperCase()}_CLIENT_SECRET`]
-        ? 'Basic ' +
-          Buffer.from(
-            `${config.clientId}:${process.env[`${oauthData.provider.toUpperCase()}_CLIENT_SECRET`]}`
-          ).toString('base64')
-        : null;
-    if (auth) headers.Authorization = auth;
-
-    const res = await fetch(config.tokenUrl, { method: 'POST', headers, body: params.toString() });
+    const res = await fetch(config.tokenUrl, {
+      method: 'POST',
+      headers,
+      body: params.toString(),
+      signal: AbortSignal.timeout(30000),
+    });
     const data = await res.json();
 
-    if (!res.ok || data.error) {
-      throw new Error(data.error_description || data.error || 'Token exchange failed');
+    if (!res.ok || data.error || !data.access_token) {
+      throw new Error(
+        'El proveedor rechazó el intercambio OAuth. Revisa la configuración y vuelve a conectar.'
+      );
     }
 
     // Mapear tokens a variables de entorno según el provider
     const envVars = {};
-    if (data.access_token) envVars[`${oauthData.provider.toUpperCase()}_TOKEN`] = data.access_token;
+    const tokenEnv =
+      {
+        github: 'GITHUB_PERSONAL_ACCESS_TOKEN',
+        gitlab: 'GITLAB_PERSONAL_ACCESS_TOKEN',
+        slack: 'SLACK_BOT_TOKEN',
+        notion: 'NOTION_API_KEY',
+      }[oauthData.provider] || `${oauthData.provider.toUpperCase()}_TOKEN`;
+    envVars[tokenEnv] = data.access_token;
     if (data.refresh_token)
       envVars[`${oauthData.provider.toUpperCase()}_REFRESH_TOKEN`] = data.refresh_token;
     if (data.expires_in)
@@ -405,7 +531,7 @@ function register(ctx) {
   }
 
   // Exportar para que main.js lo use
-  global.__mcpOAuthSetup = _setupOAuthCallback;
+  global.__mcpOAuthSetup = (app) => app.once('before-quit', () => callbackServer.close());
 
   ipcMain.handle('telemetry-report', () => {
     return Core.getTelemetryReport();

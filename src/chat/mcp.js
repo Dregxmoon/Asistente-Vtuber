@@ -52,7 +52,11 @@ function getHardcodedFallbackServers() {
       identifier: '@modelcontextprotocol/server-github',
       description: 'Gestión de issues, PRs, repositorios y código en GitHub',
       category: 'code',
-      auth: { needsAuth: true, type: 'oauth', oauth: { provider: 'github' } },
+      auth: {
+        needsAuth: true,
+        type: 'oauth',
+        oauth: { provider: 'github', capabilities: ['identity', 'read'] },
+      },
       popularReason: 'Issues, PRs, repos, código',
       tools: [{ name: 'create_issue' }, { name: 'list_prs' }, { name: 'search_repos' }],
       toolCount: 25,
@@ -172,7 +176,11 @@ function getHardcodedFallbackServers() {
       identifier: '@modelcontextprotocol/server-notion',
       description: 'Notion — páginas, bases de datos, bloques, búsqueda',
       category: 'productivity',
-      auth: { needsAuth: true, type: 'oauth', oauth: { provider: 'notion' } },
+      auth: {
+        needsAuth: true,
+        type: 'oauth',
+        oauth: { provider: 'notion', capabilities: ['identity', 'read'] },
+      },
       popularReason: 'Notion páginas, bases de datos',
       tools: [],
       toolCount: 15,
@@ -232,7 +240,11 @@ function getHardcodedFallbackServers() {
       identifier: '@modelcontextprotocol/server-gmail',
       description: 'Gmail — emails, etiquetas, hilos, adjuntos, búsqueda',
       category: 'comm',
-      auth: { needsAuth: true, type: 'oauth', oauth: { provider: 'google' } },
+      auth: {
+        needsAuth: true,
+        type: 'oauth',
+        oauth: { provider: 'google', capabilities: ['identity', 'mail_read'] },
+      },
       popularReason: 'Gmail emails y etiquetas',
       tools: [],
       toolCount: 12,
@@ -242,7 +254,11 @@ function getHardcodedFallbackServers() {
       identifier: '@modelcontextprotocol/server-google-calendar',
       description: 'Google Calendar — eventos, calendarios, disponibilidad',
       category: 'productivity',
-      auth: { needsAuth: true, type: 'oauth', oauth: { provider: 'google' } },
+      auth: {
+        needsAuth: true,
+        type: 'oauth',
+        oauth: { provider: 'google', capabilities: ['identity', 'calendar_read'] },
+      },
       popularReason: 'Google Calendar eventos',
       tools: [],
       toolCount: 8,
@@ -553,11 +569,12 @@ function attachCardListeners() {
       const enabling = !btn.classList.contains('on');
       btn.style.opacity = '0.5';
       try {
-        await assistant.invoke('mcp-toggle-server', { id, enabled: enabling });
+        const result = await assistant.invoke('mcp-toggle-server', { id, enabled: enabling });
+        if (!result.ok) throw new Error(result.error);
         await renderInstalled();
         await refreshMcpBadge();
       } catch (e) {
-        console.error('[mcp] error toggle:', e.message);
+        showToast(e.message, 'error');
       } finally {
         btn.style.opacity = '1';
       }
@@ -586,7 +603,7 @@ async function installServer(server, btnEl) {
   btnEl.querySelector('.btn-text').style.display = 'none';
   btnEl.querySelector('.btn-loader').style.display = 'inline';
 
-  if (server.auth?.needsAuth) {
+  if (server.auth?.needsAuth || (server.args || []).some((arg) => /^<.*>$/.test(arg))) {
     await startAuthFlow(server, btnEl);
     return;
   }
@@ -601,12 +618,27 @@ async function startAuthFlow(server, btnEl) {
 }
 
 async function renderAuthFlow(server, btnEl) {
-  const modal = document.getElementById('mcp-modal');
-  const content = modal.querySelector('.mcp-content');
+  const content = document.getElementById('mcp-auth-view');
+  document.getElementById('mcp-store-view').style.display = 'none';
+  document.getElementById('mcp-installed-view').style.display = 'none';
+  content.style.display = 'block';
 
-  const auth = server.auth;
+  const auth = server.auth || { envVars: [] };
   const isOAuth = auth.type === 'oauth';
   const provider = auth.oauth?.provider || 'generic';
+  const tokenNames = {
+    github: 'GITHUB_PERSONAL_ACCESS_TOKEN',
+    gitlab: 'GITLAB_PERSONAL_ACCESS_TOKEN',
+    slack: 'SLACK_BOT_TOKEN',
+    notion: 'NOTION_API_KEY',
+    google: 'GOOGLE_TOKEN',
+  };
+  const fields = auth.envVars?.length
+    ? auth.envVars
+    : auth.needsAuth
+      ? [{ name: tokenNames[provider] || 'API_KEY', required: true }]
+      : [];
+  const pendingArgs = (server.args || []).filter((arg) => /^<.*>$/.test(arg));
 
   // Verificar si el proveedor OAuth está configurado
   let oauthConfigured = false;
@@ -631,8 +663,8 @@ async function renderAuthFlow(server, btnEl) {
         <p class="mcp-auth-desc">
           ${
             isOAuth
-              ? `Este servidor necesita acceso a tu cuenta de <strong>${provider}</strong>. Te redirigiremos para autorizar y Kaoru guardará el token de forma segura en tu llavero.`
-              : `Este servidor requiere una <strong>API Key</strong>. Pégala abajo y se guardará en tu llavero (nunca en config.json).`
+              ? `Este servidor necesita acceso a tu cuenta de <strong>${escapeHtml(provider)}</strong>. Puedes autorizar con OAuth o introducir sus credenciales.`
+              : `Introduce la configuración requerida por este conector. Las credenciales se protegen al guardarlas.`
           }
         </p>
 
@@ -654,23 +686,34 @@ async function renderAuthFlow(server, btnEl) {
               <p>Agrega la variable de entorno y reinicia la app para usar OAuth.</p>
             </div>
           `
-            : `
-            <div class="mcp-apikey-form">
-              <label>Variable de entorno: <strong>${auth.envVars[0]?.name || 'API_KEY'}</strong></label>
-              <input type="password" id="mcp-apikey-input" placeholder="Pega tu API key aquí" autocomplete="off">
-              <small>La key se guarda en el llavero del sistema (Keychain/Secret Service)</small>
-              <button class="btn-save" id="mcp-apikey-save">Guardar y continuar</button>
-            </div>
-          `
+            : ''
         }
+        <div class="mcp-apikey-form">
+          ${fields
+            .map(
+              (field, index) => `
+            <label for="mcp-env-${index}">${escapeHtml(field.name)}</label>
+            <input type="password" id="mcp-env-${index}" autocomplete="off" placeholder="${escapeHtml(field.description || field.name)}">
+          `
+            )
+            .join('')}
+          ${pendingArgs
+            .map(
+              (arg, index) => `
+            <label for="mcp-arg-${index}">${escapeHtml(arg)}</label>
+            <input type="text" id="mcp-arg-${index}" placeholder="${escapeHtml(arg)}">
+          `
+            )
+            .join('')}
+          <button class="btn-save" id="mcp-apikey-save">Guardar y conectar</button>
+        </div>
       </div>
     </div>
   `;
 
   document.getElementById('mcp-auth-back').addEventListener('click', () => {
     mcpState.authFlow = null;
-    mcpState.currentView = 'store';
-    renderFeatured();
+    document.getElementById('mcp-tab-store').click();
     renderCategories();
   });
 
@@ -678,15 +721,23 @@ async function renderAuthFlow(server, btnEl) {
     document.querySelectorAll('.mcp-oauth-btn').forEach((b) => {
       b.addEventListener('click', () => startOAuthFlow(server, b.dataset.provider, btnEl));
     });
-  } else {
-    document.getElementById('mcp-apikey-save').addEventListener('click', () => {
-      const key = document.getElementById('mcp-apikey-input').value.trim();
-      if (!key) return alert('Pega la API key');
-      mcpState.authFlow.data.apiKey = key;
-      mcpState.authFlow.data.envVar = auth.envVars[0]?.name || 'API_KEY';
-      doInstall(server, btnEl, mcpState.authFlow.data);
-    });
   }
+  document.getElementById('mcp-apikey-save').addEventListener('click', () => {
+    const env = {};
+    for (const [index, field] of fields.entries()) {
+      const value = document.getElementById(`mcp-env-${index}`).value.trim();
+      if (!value && field.required !== false) return showToast(`Falta ${field.name}`, 'warning');
+      if (value) env[field.name] = value;
+    }
+    const values = pendingArgs.map((_, index) =>
+      document.getElementById(`mcp-arg-${index}`).value.trim()
+    );
+    if (values.some((value) => !value))
+      return showToast('Completa los argumentos del servidor', 'warning');
+    let index = 0;
+    const args = (server.args || []).map((arg) => (/^<.*>$/.test(arg) ? values[index++] : arg));
+    doInstall({ ...server, args }, btnEl, { env });
+  });
 }
 
 function getOAuthIcon(provider) {
@@ -727,11 +778,11 @@ async function startOAuthFlow(server, provider, btnEl) {
       serverName: server.name,
       serverIdentifier: server.identifier,
       serverArgs: server.args,
+      capabilities: server.auth?.oauth?.capabilities || ['identity'],
     });
 
     if (res.ok && res.authUrl) {
-      // Abrir en navegador
-      require('electron').shell.openExternal(res.authUrl);
+      // El proceso main abre el navegador; el renderer solo consulta el estado.
       // Poll for completion
       pollOAuthCompletion(server, res.state, btnEl);
     } else {
@@ -748,17 +799,25 @@ async function startOAuthFlow(server, provider, btnEl) {
 async function pollOAuthCompletion(server, state, btnEl) {
   const check = async () => {
     try {
+      if (!mcpState.authFlow || mcpState.authFlow.server !== server) return;
       const res = await assistant.invoke('mcp-oauth-check', { state });
+      if (res.error) throw new Error(res.error);
       if (res.completed) {
-        if (res.tokens) {
-          mcpState.authFlow.data.tokens = res.tokens;
-          await doInstall(server, btnEl, mcpState.authFlow.data);
-        }
+        mcpState.authFlow = null;
+        document.getElementById('mcp-tab-installed').click();
+        showToast(
+          res.status?.status === 'connected'
+            ? `Conectado a ${server.name}`
+            : `Conexión pendiente: ${res.status?.error || 'revisa la configuración'}`,
+          res.status?.status === 'connected' ? 'success' : 'warning'
+        );
+        await renderInstalled();
+        await refreshMcpBadge();
         return;
       }
       setTimeout(check, 3000);
     } catch (e) {
-      console.error('[mcp] OAuth poll error:', e);
+      showToast(e.message, 'error');
       btnEl.disabled = false;
       btnEl.textContent = 'Instalar';
     }
@@ -770,11 +829,15 @@ async function doInstall(server, btnEl, authData = {}) {
   try {
     const serverCfg = {
       name: server.name,
-      command: 'npx',
-      args: ['-y', server.identifier, ...(server.args || []).filter((a) => !a.startsWith('<'))],
+      identifier: server.identifier,
+      command: server.transport === 'streamable-http' ? undefined : 'npx',
+      transport: server.transport || 'stdio',
+      url: server.url,
+      args: ['-y', server.identifier, ...(server.args || [])],
       env: {},
     };
 
+    Object.assign(serverCfg.env, authData.env || {});
     if (authData.apiKey) {
       serverCfg.env[authData.envVar] = authData.apiKey;
     }
@@ -782,6 +845,9 @@ async function doInstall(server, btnEl, authData = {}) {
       Object.assign(serverCfg.env, authData.tokens);
     }
 
+    if (serverCfg.transport === 'stdio' && serverCfg.args.some((arg) => /^<.*>$/.test(arg))) {
+      throw new Error('Este servidor necesita argumentos de configuración antes de conectar');
+    }
     const res = await assistant.invoke('mcp-add-server', { serverCfg });
 
     if (res.ok && res.status?.status === 'connected') {
@@ -790,6 +856,7 @@ async function doInstall(server, btnEl, authData = {}) {
         'success'
       );
       mcpState.authFlow = null;
+      document.getElementById('mcp-tab-installed').click();
       await renderInstalled();
       await renderFeatured();
       await refreshMcpBadge();
@@ -806,8 +873,10 @@ async function doInstall(server, btnEl, authData = {}) {
   } finally {
     if (btnEl) {
       btnEl.disabled = false;
-      btnEl.querySelector('.btn-text').style.display = 'inline';
-      btnEl.querySelector('.btn-loader').style.display = 'none';
+      const label = btnEl.querySelector('.btn-text');
+      const loader = btnEl.querySelector('.btn-loader');
+      if (label) label.style.display = 'inline';
+      if (loader) loader.style.display = 'none';
     }
   }
 }
@@ -939,7 +1008,8 @@ document.getElementById('mcp-json-add-btn')?.addEventListener('click', async () 
   } catch (e) {
     return showToast('JSON inválido: ' + e.message, 'error');
   }
-  if (!parsed.name || !parsed.command) return showToast('Falta "name" o "command"', 'warning');
+  if (!parsed.name || (parsed.transport === 'streamable-http' ? !parsed.url : !parsed.command))
+    return showToast('Falta el nombre y el comando o URL del servidor', 'warning');
 
   const btn = document.getElementById('mcp-json-add-btn');
   btn.disabled = true;

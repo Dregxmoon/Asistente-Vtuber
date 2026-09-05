@@ -2530,8 +2530,10 @@ async function testPlanGeneratedAndInjected() {
     JSON.stringify(result.plan)
   );
   assert(
-    result.plan.total === 2 && result.plan.done === 1,
-    'progreso: 1 paso completado de 2',
+    result.plan.total === 2 &&
+      result.plan.done === 0 &&
+      result.plan.stepStates?.[0]?.status === 'awaiting_verification',
+    'progreso: la mutación queda pendiente de evidencia verificadora',
     JSON.stringify(result.plan)
   );
   assert(

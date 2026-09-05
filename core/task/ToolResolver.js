@@ -3,8 +3,7 @@
 
 const { getToolSchemas } = require('../llm/ToolSchemas.js');
 const { getToolRegistry } = require('./ToolRegistry.js');
-
-const PRECEDENCE_ORDER = ['skill', 'mcp', 'openclaw'];
+const { CapabilityRouter } = require('./CapabilityRouter.js');
 
 // Dominios por servidor MCP conocido. OJO con 'filesystem': reclama SOLO
 // 'filesystem' (no 'code'): el server MCP filesystem ofrece read/write/edit/
@@ -33,6 +32,7 @@ async function resolveToolset(context = {}) {
     mcpManager = null,
     db = null,
     matchedSkills = null,
+    capabilityStatsProvider = null,
   } = context;
 
   const registry = toolRegistry || getToolRegistry();
@@ -44,6 +44,7 @@ async function resolveToolset(context = {}) {
     precedence: 'openclaw',
     matchedSkills: [],
     nativeMcpMap: {},
+    routing: [],
   };
 
   // 1. Resolve matched skills
@@ -64,8 +65,21 @@ async function resolveToolset(context = {}) {
   const lspTools = registry._getLSPTools ? registry._getLSPTools() : [];
   const gitTools = registry._getGitTools ? registry._getGitTools() : [];
   const githubTools = registry._getGitHubTools ? registry._getGitHubTools() : [];
-  const mcpTools = mcpManager ? _getMCPTools(mcpManager) : [];
-  const allTools = [];
+  const mcpHealth = {};
+  try {
+    for (const server of mcpManager?.listServers?.() || []) {
+      mcpHealth[server.name] = server.health || {};
+    }
+  } catch (_) {}
+  let capabilityStats = {};
+  try {
+    capabilityStats =
+      typeof capabilityStatsProvider === 'function' ? (await capabilityStatsProvider()) || {} : {};
+  } catch (_) {}
+  const router = new CapabilityRouter({ stats: capabilityStats, mcpHealth });
+  const mcpTools = (mcpManager ? _getMCPTools(mcpManager) : []).filter(
+    (tool) => !router.score(tool).unavailable
+  );
 
   const openclawByDomain = _indexToolsByDomain(openclawTools);
   const mcpByDomain = _indexMCPByDomain(mcpTools);
@@ -109,33 +123,50 @@ async function resolveToolset(context = {}) {
   });
 
   // 5. Build result
-  const finalTools = [...filteredOpenclaw, ...lspTools, ...gitTools, ...githubTools, ...mcpTools];
+  const ranked = router.rank([
+    ...filteredOpenclaw,
+    ...lspTools,
+    ...gitTools,
+    ...githubTools,
+    ...mcpTools,
+  ]);
+  const finalTools = ranked.filter((item) => !item.route.unavailable).map((item) => item.tool);
+  result.routing = ranked.map((item) => ({
+    source: item.tool.source,
+    server: item.tool.server || null,
+    tool: item.tool.name,
+    ...item.route,
+  }));
 
   // Native tool schemas (for tool-calling API)
   const allSchemas = getToolSchemas();
   if (finalTools.length > 0) {
-    const baseSchemas = allSchemas.filter((schema) =>
-      finalTools.some((tool) => tool.source !== 'mcp' && tool.name === schema.name)
-    );
+    const schemaByName = new Map(allSchemas.map((schema) => [schema.name, schema]));
+    const baseSchemas = finalTools
+      .filter((tool) => tool.source !== 'mcp')
+      .map((tool) => schemaByName.get(tool.name))
+      .filter(Boolean);
     const usedNames = new Set(baseSchemas.map((schema) => schema.name));
-    const dynamicMcpSchemas = mcpTools.map((tool, index) => {
-      const safe = (value) =>
-        String(value || 'tool')
-          .replace(/[^a-zA-Z0-9_]/g, '_')
-          .replace(/_+/g, '_');
-      let name = `mcp_${index}_${safe(tool.server)}_${safe(tool.name)}`.slice(0, 64);
-      while (usedNames.has(name)) name = `${name.slice(0, 58)}_${index}`;
-      usedNames.add(name);
-      result.nativeMcpMap[name] = { server: tool.server, tool: tool.name };
-      return {
-        name,
-        description: `[MCP ${tool.server}] ${tool.description || tool.name}`.slice(0, 500),
-        inputSchema:
-          tool.inputSchema && typeof tool.inputSchema === 'object'
-            ? tool.inputSchema
-            : { type: 'object', properties: {} },
-      };
-    });
+    const dynamicMcpSchemas = finalTools
+      .filter((tool) => tool.source === 'mcp')
+      .map((tool, index) => {
+        const safe = (value) =>
+          String(value || 'tool')
+            .replace(/[^a-zA-Z0-9_]/g, '_')
+            .replace(/_+/g, '_');
+        let name = `mcp_${index}_${safe(tool.server)}_${safe(tool.name)}`.slice(0, 64);
+        while (usedNames.has(name)) name = `${name.slice(0, 58)}_${index}`;
+        usedNames.add(name);
+        result.nativeMcpMap[name] = { server: tool.server, tool: tool.name };
+        return {
+          name,
+          description: `[MCP ${tool.server}] ${tool.description || tool.name}`.slice(0, 500),
+          inputSchema:
+            tool.inputSchema && typeof tool.inputSchema === 'object'
+              ? tool.inputSchema
+              : { type: 'object', properties: {} },
+        };
+      });
     result.nativeToolSchemas = [...baseSchemas, ...dynamicMcpSchemas];
   }
 

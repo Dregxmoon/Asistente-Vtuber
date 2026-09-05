@@ -278,6 +278,10 @@ async function runAgent(userMessage, opts = {}) {
     toolResolver: { resolveToolset },
     skillManager: state.skillManager || null,
     mcpManager: state.mcp || null,
+    capabilityStatsProvider:
+      state.learning && typeof state.learning.capabilityStats === 'function'
+        ? () => state.learning.capabilityStats({ minUses: 2 })
+        : null,
     skillDb: state.graph && !state.graph.usingFallback && state.graph._db ? state.graph._db : null,
     pluginManager: state.pluginManager || null,
     permissionManager: state.permissionManager || null,
@@ -322,12 +326,25 @@ async function runAgent(userMessage, opts = {}) {
     } catch (_) {}
   }
   loopOpts.currentGoalId = durableGoal?.id || null;
+  if (durableGoal?.id) {
+    try {
+      loopOpts.currentGoalPlan = state.graph?.getGoalPlan?.(durableGoal.id) || [];
+    } catch (_) {
+      loopOpts.currentGoalPlan = [];
+    }
+  }
 
   // ── Fase 3 ítem 2: lo aprendido (feedback de proactividad + outcomes de
   //    tareas) entra al loop como sección corta. El loop la recorta primero
   //    bajo presión de presupuesto (es lo menos importante).
   try {
-    const learningSection = state.learning?.buildPromptSection?.();
+    const detected = state.taskDetector?.detect?.(effectiveMessage) || null;
+    const learningSection = state.learning?.buildPromptSection?.({
+      domain:
+        typeof detected?.domain === 'string'
+          ? detected.domain
+          : detected?.domain?.id || detected?.domain?.label || null,
+    });
     const causalSection = state.graph?.buildCausalMemorySection?.();
     const learnedSections = [learningSection, causalSection].filter(Boolean);
     if (learnedSections.length) loopOpts.learningSection = learnedSections.join('\n\n');
@@ -611,6 +628,20 @@ async function runAgent(userMessage, opts = {}) {
       taskIntent,
       messageCount: sessionHistory.length,
     });
+    const toolSequence = (result.toolResults || [])
+      .filter((item) => item?.ok)
+      .map((item) => String(item.tool || item._action?.tool || ''))
+      .filter(Boolean);
+    const capabilities = (result.toolResults || []).filter(Boolean).map((item) => {
+      const tool = String(item._action?.tool || item.tool || 'unknown');
+      const action = item._action || {};
+      if (tool === 'mcp') {
+        return `mcp:${String(action.params?.server || 'unknown')}/${String(action.params?.tool || 'unknown')}`;
+      }
+      if (tool.startsWith('github_')) return `github:${tool}`;
+      if (tool.startsWith('git_')) return `git:${tool}`;
+      return `openclaw:${tool}`;
+    });
     const outcome = {
       mode,
       provider,
@@ -629,6 +660,12 @@ async function runAgent(userMessage, opts = {}) {
       difficulty,
       costUsd,
       goal: effectiveMessage,
+      taskDomain:
+        typeof taskIntent?.domain === 'string'
+          ? taskIntent.domain
+          : taskIntent?.domain?.id || taskIntent?.domain?.label || null,
+      toolSequence,
+      capabilities,
       // Loop de feedback de SKILLS: qué skills estaban inyectadas en ESTE run.
       // Guard de frescura (15 min) por si una ejecución concurrente pisó el
       // lastInjection del manager entre la inyección y este punto.

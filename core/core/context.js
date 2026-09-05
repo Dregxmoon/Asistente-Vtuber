@@ -464,6 +464,10 @@ async function buildContext(sessionHistory, activeProvider, options = {}) {
       skillManager: state.skillManager || null,
       mcpManager: state.mcp || null,
       db: state.graph && !state.graph.usingFallback && state.graph._db ? state.graph._db : null,
+      capabilityStatsProvider:
+        state.learning && typeof state.learning.capabilityStats === 'function'
+          ? () => state.learning.capabilityStats({ minUses: 2 })
+          : null,
     });
     toolCatalog = resolvedTools?.promptCatalog || null;
   } catch (e) {
@@ -632,8 +636,8 @@ async function buildContext(sessionHistory, activeProvider, options = {}) {
   }
 
   // ── Fase 3 ítem 2: lo aprendido (chat) ────────────────────────────────────
-  // Se anexa al final (lo MENOS importante) para que el truncado inteligente
-  // lo elimine primero bajo presión de presupuesto, sin tocar el resto.
+  // Se anexa al final; el recortador lo elimina después de memoria y episodios,
+  // antes de tocar el catálogo de herramientas.
   try {
     const learningSection = state.learning?.buildPromptSection?.();
     if (learningSection) result.systemPrompt += '\n\n' + learningSection;
@@ -666,10 +670,10 @@ async function buildContext(sessionHistory, activeProvider, options = {}) {
  * @param {string} systemPrompt prompt ya ensamblado del todo.
  * @param {{max?: number, tailSections?: Array<{name: string, marker: string}>}} [opts]
  *   - max: presupuesto en chars (por defecto MAX_SYSTEM_CHARS).
- *   - tailSections: bloques opcionales añadidos al FINAL del ensamblado (modo
- *     agent: skills → recall de memoria → catálogo → loop). Se eliminan desde
- *     el inicio de su encabezado hasta el final del prompt, de menor a mayor
- *     importancia, antes de tocar las secciones del prompt base.
+ *   - tailSections: encabezados de bloques opcionales añadidos al ensamblado.
+ *     Se integran con las secciones base: memoria → episodios → feedback →
+ *     otros bloques opcionales → catálogo. Cada corte termina en el siguiente
+ *     bloque; nunca elimina todo el resto del prompt.
  * @returns {string}
  */
 function truncateSystemPrompt(systemPrompt, opts = {}) {
@@ -682,55 +686,70 @@ function truncateSystemPrompt(systemPrompt, opts = {}) {
 
   let out = systemPrompt;
 
-  // 1) Bloques tail del modo agent: se quitan desde su encabezado hasta el
-  //    final del prompt, de menor a mayor importancia. Son bloques añadidos
-  //    después del ensamblado base y NO están delimitados por `---`, así que
-  //    el corte es por línea de encabezado (skills → recall → catálogo → loop).
-  for (const section of opts.tailSections || []) {
-    if (out.length <= max) break;
-    const markerIdx = out.indexOf(section.marker);
-    if (markerIdx === -1) continue;
-    const lineStart = out.lastIndexOf('\n', markerIdx - 1) + 1;
-    const removed = out.slice(lineStart);
-    out = out.slice(0, lineStart);
-    logger.info('context', `[core] sección "${section.name}" eliminada (${removed.length} chars)`);
-  }
-
-  // 2) Secciones `---`-delimitadas del prompt base, de menor a mayor
-  //    importancia: impresiones → MCP → OpenClaw → episodios → memoria → OS →
-  //    comportamiento → tools intent → identidad. Las impresiones (modelo
-  //    inferido del usuario, F3.3) son la sección NO crítica por excelencia:
-  //    se recortan PRIMERO, antes que la identidad (critical, nunca se toca).
+  // Un único orden para memoria base y bloques añadidos por AgentLoop.
+  // El catálogo es el último recurso, independientemente de dónde se añadió.
   const sectionMarkers = [
-    { name: 'Impresiones', marker: '## Impresiones (no confirmadas', keepIf: null },
-    { name: 'Adaptación', marker: '## Adaptación al usuario', keepIf: null },
-    { name: 'MCP', marker: '# HERRAMIENTAS MCP', keepIf: null },
-    { name: 'OpenClaw', marker: '# HERRAMIENTAS DISPONIBLES', keepIf: null },
-    { name: 'Plan', marker: '# MODO PLAN', keepIf: null },
-    { name: 'Execute', marker: '# MODO EJECUCIÓN', keepIf: null },
-    { name: 'Episodios', marker: '## Recuerdos episódicos', keepIf: null },
-    { name: 'Memoria', marker: '## Lo que sé del usuario', keepIf: null },
-    { name: 'OS', marker: '## Contexto actual', keepIf: null },
-    { name: 'Behavior', marker: '# COMPORTAMIENTO ESTE TURNO', keepIf: null },
-    { name: 'Intent', marker: '## INTENCIÓN DE HERRAMIENTA', keepIf: null },
+    { name: 'Impresiones', marker: '## Impresiones (no confirmadas' },
+    { name: 'Memoria', marker: '## Lo que sé del usuario' },
+    { name: 'Memoria recall', marker: '# CONTEXTO RELEVANTE DE MEMORIA' },
+    { name: 'Episodios', marker: '## Recuerdos episódicos' },
+    { name: 'Lo aprendido (feedback)', marker: '# LO APRENDIDO (FEEDBACK)' },
+    { name: 'Adaptación', marker: '## Adaptación al usuario' },
+    { name: 'Skills', marker: '---\n\n**Skills activas' },
+    { name: 'Intenciones pendientes', marker: '# INTENCIONES ACTIVAS PENDIENTES' },
+    { name: 'OS', marker: '## Contexto actual' },
+    { name: 'Behavior', marker: '# COMPORTAMIENTO ESTE TURNO' },
+    { name: 'Intent', marker: '## INTENCIÓN DE HERRAMIENTA' },
+    { name: 'Plan', marker: '# MODO PLAN' },
+    { name: 'Execute', marker: '# MODO EJECUCIÓN' },
+    { name: 'Loop agente', marker: '# MODO AGENTE' },
   ];
-  for (const section of sectionMarkers) {
+  const catalogs = [
+    { name: 'MCP', marker: '# HERRAMIENTAS MCP' },
+    { name: 'Catálogo de tools', marker: '# HERRAMIENTAS DISPONIBLES' },
+  ];
+  const knownMarkers = new Set([...sectionMarkers, ...catalogs].map((section) => section.marker));
+  const extraSections = (opts.tailSections || []).filter(
+    (section) => !knownMarkers.has(section.marker)
+  );
+  const ordered = [...sectionMarkers, ...extraSections, ...catalogs];
+
+  // Solo encabezados al inicio de línea: no interpretar menciones en prosa.
+  const findMarker = (text, marker, offset = 0) => {
+    let index = text.indexOf(marker, offset);
+    while (index > 0 && text[index - 1] !== '\n') index = text.indexOf(marker, index + 1);
+    return index;
+  };
+  for (const section of ordered) {
+    while (out.length > max) {
+      const from = findMarker(out, section.marker);
+      if (from === -1) break;
+      const contentStart = from + section.marker.length;
+      let end = out.length;
+      // Nunca borrar secciones posteriores junto con el bloque seleccionado.
+      for (const boundary of ordered) {
+        const next = findMarker(out, boundary.marker, contentStart);
+        if (next !== -1) end = Math.min(end, next);
+      }
+      const separator = out.indexOf('\n\n---\n\n', contentStart);
+      if (separator !== -1) end = Math.min(end, separator);
+      // También conservar bloques nuevos no incluidos en la lista de recorte.
+      const heading = out.indexOf('\n# ', contentStart);
+      if (heading !== -1) end = Math.min(end, heading + 1);
+      if (catalogs.some((catalog) => catalog.marker === section.marker)) {
+        logger.warn(
+          'context',
+          '[core] intentando recortar catálogo de tools — esto puede causar tool_calls_total=0'
+        );
+      }
+      const removed = out.slice(from, end);
+      out = out.slice(0, from) + out.slice(end);
+      logger.info(
+        'context',
+        `[core] sección "${section.name}" eliminada (${removed.length} chars)`
+      );
+    }
     if (out.length <= max) break;
-    const markerIdx = out.indexOf(section.marker);
-    if (markerIdx === -1) continue;
-    // Encontrar el inicio de la sección (línea anterior ---\n\n o principio)
-    const sectionStart = out.lastIndexOf('\n\n---\n\n', markerIdx);
-    const from = sectionStart >= 0 ? sectionStart + 6 : markerIdx;
-    // Encontrar el fin (siguiente --- o fin del string)
-    const remaining = out.slice(from + 1);
-    const nextSep = remaining.indexOf('\n\n---\n\n');
-    const sectionEnd = nextSep >= 0 ? from + 1 + nextSep : out.length;
-    const sectionText = out.slice(from, sectionEnd);
-    out = out.slice(0, from) + out.slice(sectionEnd);
-    logger.info(
-      'context',
-      `[core] sección "${section.name}" eliminada (${sectionText.length} chars)`
-    );
   }
 
   // 3) Si sigue excediendo después de eliminar secciones opcionales, truncado

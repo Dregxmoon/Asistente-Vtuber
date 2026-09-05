@@ -26,6 +26,7 @@ const {
   formatSubagentDiscrepancy,
 } = require('./subagent-report.js');
 const { getSubagentRegistry, _toolAllowed } = require('./SubagentRegistry.js');
+const { buildStepProgress } = require('./StepExecutionLedger.js');
 
 const VALID_MODES = new Set(['smart', 'fast', 'task', 'conversational']);
 
@@ -364,16 +365,16 @@ const PLANNING_MIN_STEPS = 2;
 const PLANNING_DIFFICULTY_THRESHOLD = 0.5;
 
 // Bloques que AgentLoop añade al prompt DESPUÉS del ensamblado base. El
-// truncado final (truncateSystemPrompt) los elimina desde el inicio de su
-// encabezado hasta el final, de menor a mayor importancia, para respetar el
-// presupuesto contando TODO lo ensamblado (no solo el base).
+// truncado final (truncateSystemPrompt) delimita cada bloque e integra su
+// prioridad con la memoria base. El catálogo se recorta como último recurso,
+// contando TODO lo ensamblado (no solo el base).
 const TAIL_SECTIONS = [
   { name: 'Lo aprendido (feedback)', marker: '# LO APRENDIDO (FEEDBACK)' },
   { name: 'Skills', marker: '---\n\n**Skills activas' },
   { name: 'Intenciones pendientes', marker: '# INTENCIONES ACTIVAS PENDIENTES' },
   { name: 'Memoria recall', marker: '# CONTEXTO RELEVANTE DE MEMORIA' },
-  { name: 'Catálogo de tools', marker: '# HERRAMIENTAS DISPONIBLES' },
   { name: 'Loop agente', marker: '# MODO AGENTE' },
+  { name: 'Catálogo de tools', marker: '# HERRAMIENTAS DISPONIBLES' },
 ];
 
 // Presupuesto del system prompt del MODO AGENTE. El prompt base de buildContext
@@ -654,19 +655,14 @@ class AgentLoop {
     let result;
     try {
       result = await this._runInternal(userMessage, systemPrompt, messages, opts);
-      // Progreso del plan explícito (si hubo): cuántos pasos se completaron
-      // con herramientas exitosas. El caller (agent.js) lo usa para persistir
-      // la intención si el run se interrumpe.
-      if (this._plan && result && !result.plan) {
-        const done = (result.toolResults || []).filter(
-          (t) => t && t.ok && _marksProgress(t)
-        ).length;
-        result.plan = {
-          steps: this._plan.steps,
-          criteria: this._plan.criteria,
-          done: Math.min(done, this._plan.steps.length),
-          total: this._plan.steps.length,
-        };
+      // Ledger por paso: una tool exitosa deja evidencia, pero solo completa
+      // el paso si esa evidencia es compatible o el verificador la confirma.
+      if (this._plan && result) {
+        result.plan = buildStepProgress(
+          this._plan,
+          Array.isArray(result.toolResults) ? result.toolResults : [],
+          result.verify || null
+        );
       }
       return result;
     } finally {
@@ -734,6 +730,8 @@ class AgentLoop {
     let toolCatalog = this._toolRegistry.serializeToPrompt(domain);
     let resolvedSkills = null;
     let nativeMcpMap = {};
+    /** @type {string[]} */
+    const injectedSkills = [];
     // Los subagentes con perfil restringido inyectan un catálogo YA filtrado
     // (las tools prohibidas no se anuncian en el prompt del run anidado).
     if (opts.toolCatalog) toolCatalog = opts.toolCatalog;
@@ -749,6 +747,7 @@ class AgentLoop {
           mcpManager: opts.mcpManager || null,
           db: opts.skillDb || null,
           matchedSkills: opts.matchedSkills || null,
+          capabilityStatsProvider: opts.capabilityStatsProvider || null,
         });
         if (resolved.nativeToolSchemas) tools = resolved.nativeToolSchemas;
         if (resolved.promptCatalog) toolCatalog = resolved.promptCatalog;
@@ -832,7 +831,7 @@ class AgentLoop {
 
     // ── Fase 3 ítem 2: lo aprendido (feedback de proactividad + outcomes de
     //    tareas). El LearningEngine lo produce; el loop lo anexa como el
-    //    bloque MENOS importante (primero en cortarse bajo presupuesto).
+    //    bloque opcional (se recorta después de memoria y episodios).
     if (typeof opts.learningSection === 'string' && opts.learningSection.trim()) {
       agentPrompt += '\n\n' + opts.learningSection;
     }
@@ -841,8 +840,8 @@ class AgentLoop {
     // El presupuesto de MAX_SYSTEM_CHARS debe contar AGENT_LOOP_SYSTEM +
     // catálogo + recall + skills, no solo el systemPrompt base (que en modo
     // agent ya no se trunca en buildContext). Se eliminan bloques COMPLETOS
-    // desde el menos importante (skills → recall → catálogo → loop), nunca a
-    // mitad de una instrucción.
+    // priorizando memoria, episodios y feedback antes que las herramientas,
+    // sin borrar bloques posteriores al seleccionado.
     agentPrompt = truncateSystemPrompt(agentPrompt, {
       max: AGENT_MAX_SYSTEM_CHARS,
       tailSections: TAIL_SECTIONS,
@@ -855,13 +854,34 @@ class AgentLoop {
     // reflexión compara contra él, y el resultado expone el progreso. Si el
     // modelo no entrega pasos parseables o la llamada falla, el run sigue sin
     // plan: nunca bloquea la tarea.
-    this._plan = null;
+    const storedGoalPlan = Array.isArray(opts.currentGoalPlan) ? opts.currentGoalPlan : [];
+    this._plan = storedGoalPlan.length
+      ? {
+          steps: storedGoalPlan.map((step) => String(step.description || '')),
+          criteria: storedGoalPlan.map((step) => String(step.successCriteria?.[0] || '')),
+          stepStates: storedGoalPlan.map((step) => ({
+            ordinal: Number(step.ordinal),
+            status: String(step.status || 'pending'),
+            evidence: Array.isArray(step.verification?.evidence) ? step.verification.evidence : [],
+          })),
+          text: this._renderPlanSection(
+            storedGoalPlan.map((step) => String(step.description || '')),
+            storedGoalPlan.map((step) => String(step.successCriteria?.[0] || ''))
+          ),
+        }
+      : null;
     // Tool de alto impacto cuya aprobación expiró (sin respuesta del usuario a
     // tiempo) en este run. Si el run cierra con texto, el aviso se anexa a la
     // respuesta final: nunca puede sonar a "todo listo" si una acción quedó
     // denegada por timeout sin que el usuario lo supiera activamente.
     this._approvalExpiredTool = null;
-    if (this._shouldPlan(userMessage, taskIntent, opts)) {
+    if (this._plan) {
+      agentPrompt += '\n\n' + this._plan.text;
+      logger.info(
+        'AgentLoop',
+        `[agent-loop] retomando plan persistente de ${this._plan.steps.length} pasos`
+      );
+    } else if (this._shouldPlan(userMessage, taskIntent, opts)) {
       try {
         const plan = await this._buildPlan({
           userMessage,
@@ -874,6 +894,15 @@ class AgentLoop {
         if (plan && plan.steps && plan.steps.length) {
           this._plan = plan;
           agentPrompt = agentPrompt + '\n\n' + plan.text;
+          if (opts.currentGoalId && this._graph?.createGoalPlan) {
+            this._graph.createGoalPlan(
+              Number(opts.currentGoalId),
+              plan.steps.map((description, index) => ({
+                description,
+                successCriteria: plan.criteria[index] ? [plan.criteria[index]] : [],
+              }))
+            );
+          }
           logger.info(
             'AgentLoop',
             `[agent-loop] plan de ${plan.steps.length} pasos generado e inyectado`
@@ -918,9 +947,6 @@ class AgentLoop {
     // Self-critique (opts.selfCritique): cuántas pasadas de crítica se
     // agotaron en este run — acota el bucle de corrección (no infinito).
     let critiqueRounds = 0;
-    // Skills inyectadas en este run (para chips visuales en la respuesta).
-    /** @type {string[]} */
-    const injectedSkills = [];
     // Verificación de artefactos (web + sintaxis universal): rondas de
     // corrección cuando archivos mutados fallan validación al cierre.
     let webVerifyRounds = 0;
@@ -1704,13 +1730,14 @@ class AgentLoop {
       // el renderer actualice el widget de plan en vivo (opts.onPlan).
       if (this._plan && typeof opts.onPlan === 'function') {
         try {
-          const okProgress = toolResults.filter((t) => t && t.ok && _marksProgress(t)).length;
+          const progress = buildStepProgress(this._plan, toolResults, null);
           opts.onPlan({
             kind: 'progress',
             steps: this._plan.steps,
             criteria: this._plan.criteria,
-            done: Math.min(okProgress, this._plan.steps.length),
+            done: progress.done,
             total: this._plan.steps.length,
+            stepStates: progress.stepStates,
           });
         } catch (_) {}
       }
@@ -2113,9 +2140,9 @@ class AgentLoop {
           .map((c) => c.text)
           .join('\n') || JSON.stringify(result);
       return {
-        ok: true,
+        ok: result?.isError !== true,
         result: text,
-        error: null,
+        error: result?.isError ? text : null,
         tool: `mcp:${server}:${tool}`,
         elapsed: Date.now() - t0,
       };

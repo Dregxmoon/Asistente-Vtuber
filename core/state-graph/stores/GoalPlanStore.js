@@ -29,7 +29,7 @@ function _json(raw, fallback) {
 
 /**
  * @typedef {{description?:string, label?:string, step?:string, dependsOn?:unknown[], parentOrdinal?:number, status?:string, successCriteria?:unknown[], verification?:object|null, triggerContext?:{event?:string,match?:Record<string,unknown>}|null, dueAt?:number|null}} GoalStepInput
- * @typedef {{status?:string, reason?:string, source?:string, at?:number}} VerificationEvidence
+ * @typedef {{status?:string, reason?:string, source?:string, at?:number, evidence?:any[], stepEvidenceRequired?:boolean}} VerificationEvidence
  * @typedef {{id:number|null, intentionId:number, ordinal:number, parentOrdinal:number|null, description:string, status:string, dependsOn:number[], successCriteria:string[], verification:object|null, triggerContext:{event?:string,match?:Record<string,unknown>}|null, dueAt:number|null, createdAt:number|null, updatedAt:number|null}} GoalStep
  * @typedef {{intentionId:number, ordinal:number|null, type:string, metadata:object, createdAt:number}} GoalEvent
  */
@@ -246,9 +246,29 @@ class GoalPlanStore {
     };
   }
 
-  /** @param {number} intentionId @param {{done?:number,total?:number}} plan */
+  /** @param {number} intentionId @param {{done?:number,total?:number,stepStates?:any[]}} plan */
   recordRunProgress(intentionId, plan = {}) {
     const steps = this.listSteps(intentionId);
+    if (Array.isArray(plan.stepStates)) {
+      for (const state of plan.stepStates) {
+        const ordinal = Number(state?.ordinal);
+        const stored = steps.find((step) => step.ordinal === ordinal);
+        if (!stored) continue;
+        const status = STEP_STATUS.has(String(state.status)) ? String(state.status) : 'pending';
+        const evidence = Array.isArray(state.evidence) ? state.evidence.slice(-20) : [];
+        this.updateStep(intentionId, ordinal, {
+          status,
+          verification: {
+            status: status === 'completed' ? 'verified' : 'unverified',
+            source: 'step_evidence_ledger',
+            evidence,
+            at: Date.now(),
+          },
+          reason: `Estado derivado de ${evidence.length} evidencia(s) atribuida(s) al paso.`,
+        });
+      }
+      return this.getResumePoint(intentionId);
+    }
     const observed = Math.min(Math.max(0, Number(plan.done) || 0), steps.length);
     for (let index = 0; index < observed; index++) {
       const step = steps[index];
@@ -271,6 +291,15 @@ class GoalPlanStore {
   completePlan(intentionId, verification) {
     if (!COMPLETION_EVIDENCE.has(String(verification?.status || ''))) return false;
     const steps = this.listSteps(intentionId);
+    if (
+      verification?.stepEvidenceRequired &&
+      steps.some((step) => !['completed', 'skipped'].includes(step.status))
+    ) {
+      this.recordEvent(intentionId, null, 'plan_completion_rejected', {
+        reason: 'step_evidence_incomplete',
+      });
+      return false;
+    }
     for (const step of steps) {
       if (step.status !== 'skipped') {
         this.updateStep(intentionId, step.ordinal, { status: 'completed', verification });

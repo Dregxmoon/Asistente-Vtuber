@@ -60,6 +60,9 @@ const INVOKE_ALLOWLIST = new Set([
   // Skills / plugins
   'list-skills',
   // MCP
+  'mcp-google-workspace-info',
+  'mcp-google-workspace-console',
+  'mcp-google-workspace-connect',
   'mcp-add-server',
   'mcp-list-servers',
   'mcp-remove-server',

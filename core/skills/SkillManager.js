@@ -288,17 +288,16 @@ class SkillManager {
       try {
         const raw = this.statsProvider();
         if (raw && typeof raw === 'object') {
-          stats = new Map(
-            Object.entries(raw).map(([name, s]) => [
-              name,
-              { uses: s.uses || 0, successes: s.successes || 0, rate: s.rate ?? 0 },
-            ])
-          );
+          stats = new Map(Object.entries(raw).map(([name, s]) => [name, { ...s }]));
         }
       } catch {}
     }
 
     const merged = rows.filter((r) => {
+      if (stats?.get(r.name)?.suspended) {
+        logger.warn('SkillManager', `[skills] "${r.name}" en cuarentena por fallos repetidos`);
+        return false;
+      }
       const sim = distanceToSimilarity(r.distance);
       // Umbral adaptativo por skill según outcomes reales.
       const { threshold } = this._effectiveThresholdFor(r.name, stats);
@@ -381,11 +380,16 @@ class SkillManager {
 
   getAllSkills() {
     if (!this._skillsCache) return [];
+    let stats = {};
+    try {
+      stats = this.statsProvider?.() || {};
+    } catch (_) {}
     return this._skillsCache.map((s) => ({
       name: s.name,
       description: s.description,
       version: s.version,
       domains: s.domains,
+      health: stats[s.name] || null,
     }));
   }
 
