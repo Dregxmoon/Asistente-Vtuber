@@ -187,6 +187,10 @@ console.log(C.bold(C.cyan('═════════════════�
         hasCancelBtn: !!document.getElementById('cancel-btn'),
         hasNoSendBtn: !document.getElementById('send-btn'),
         hasThemeToggle: !!document.getElementById('theme-toggle'),
+        hasModelsBtn: !!document.getElementById('models-btn'),
+        hasMcpBtn: !!document.getElementById('mcp-btn'),
+        hasPermsBtn: !!document.getElementById('perms-btn'),
+        hasCommandsBtn: !!document.getElementById('commands-btn'),
         hasCloseBtn: !!document.getElementById('close-btn'),
         hasUpdateBanner: !!document.getElementById('update-banner'),
         hasKeysBanner: !!document.getElementById('keys-banner'),
@@ -200,6 +204,10 @@ console.log(C.bold(C.cyan('═════════════════�
     assert(headerOk.hasCancelBtn, 'botón de cancelar generación presente');
     assert(headerOk.hasNoSendBtn, 'sin botón enviar — envío con Enter (diseño minimizado)');
     assert(headerOk.hasThemeToggle, 'toggle de tema presente');
+    assert(headerOk.hasModelsBtn, 'acceso directo a modelos presente');
+    assert(headerOk.hasMcpBtn, 'acceso directo a MCP presente');
+    assert(headerOk.hasPermsBtn, 'acceso directo a permisos presente');
+    assert(headerOk.hasCommandsBtn, 'acceso directo a comandos presente');
     assert(headerOk.hasCloseBtn, 'botón de cerrar presente');
     assert(headerOk.hasUpdateBanner, 'banner de auto-update presente (oculto en dev)');
     assert(headerOk.hasKeysBanner, 'banner de API keys presente');
@@ -219,17 +227,25 @@ console.log(C.bold(C.cyan('═════════════════�
     // completan la actionability (rAF del renderer sandboxed muy throttled en
     // entornos sin WM), pero el handler del toggle corre igual.
     await chat.waitForLoadState('load');
-    const themeBefore = await chat.evaluate(() =>
-      document.documentElement.getAttribute('data-theme')
-    );
+    const themeBefore = await chat.evaluate(() => ({
+      name: document.documentElement.getAttribute('data-theme'),
+      background: window.getComputedStyle(document.documentElement).getPropertyValue('--term-bg'),
+      panel: window.getComputedStyle(document.documentElement).getPropertyValue('--term-panel'),
+    }));
     await chat.evaluate(() => document.getElementById('theme-toggle').click());
     await sleep(150);
-    const themeAfter = await chat.evaluate(() =>
-      document.documentElement.getAttribute('data-theme')
+    const themeAfter = await chat.evaluate(() => ({
+      name: document.documentElement.getAttribute('data-theme'),
+      background: window.getComputedStyle(document.documentElement).getPropertyValue('--term-bg'),
+      panel: window.getComputedStyle(document.documentElement).getPropertyValue('--term-panel'),
+    }));
+    assert(
+      themeAfter.name && themeAfter.name !== themeBefore.name,
+      `toggle de tema cambia data-theme (${themeBefore.name || '?'} → ${themeAfter.name})`
     );
     assert(
-      themeAfter && themeAfter !== themeBefore,
-      `toggle de tema cambia data-theme (${themeBefore || '?'} → ${themeAfter})`
+      themeAfter.background !== themeBefore.background && themeAfter.panel !== themeBefore.panel,
+      'el tema cambia fondos y superficies además del acento'
     );
 
     // ── Modal de settings (ahora el picker de modelos) ───────────────────
@@ -249,6 +265,35 @@ console.log(C.bold(C.cyan('═════════════════�
       () => !document.getElementById('settings-modal').classList.contains('visible')
     );
     assert(settingsClosed, 'picker de modelos se cierra con ×');
+
+    // ── Accesos directos a módulos ───────────────────────────────────────
+    await chat.evaluate(() => document.getElementById('mcp-btn').click());
+    await sleep(200);
+    assert(
+      await chat.evaluate(() => document.getElementById('mcp-modal').classList.contains('visible')),
+      'acceso MCP abre su módulo'
+    );
+    await chat.evaluate(() => document.getElementById('mcp-close').click());
+
+    await chat.evaluate(() => document.getElementById('perms-btn').click());
+    await sleep(200);
+    assert(
+      await chat.evaluate(() =>
+        document.getElementById('perms-modal').classList.contains('visible')
+      ),
+      'acceso Permisos abre su módulo'
+    );
+    await chat.evaluate(() => document.getElementById('perms-close-x').click());
+
+    await chat.fill('#msg-input', '');
+    await chat.evaluate(() => document.getElementById('commands-btn').click());
+    await sleep(100);
+    assert((await chat.inputValue('#msg-input')) === '/', 'acceso Comandos abre la paleta inline');
+    assert(
+      await chat.evaluate(() => Boolean(document.querySelector('.command-suggestion-description'))),
+      'la paleta explica para qué sirve cada comando'
+    );
+    await chat.fill('#msg-input', '');
 
     // ── Browser de modelos inline (/model) ────────────────────────────────
     await chat.fill('#msg-input', '/model');

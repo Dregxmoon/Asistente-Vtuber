@@ -44,7 +44,7 @@
         .join('')}</fieldset>
       <fieldset><legend>C · Acceso</legend><label><input type="checkbox" id="google-read-only" checked> Solo lectura</label><p>Desactívalo si quieres permitir acciones como crear eventos o enviar correos.</p></fieldset>
       <fieldset><legend>D · Credenciales de tu aplicación</legend>
-        <label for="google-client-id">Client ID</label><input id="google-client-id" type="text" required autocomplete="off" pattern="[A-Za-z0-9_-]+\\.apps\\.googleusercontent\\.com" placeholder="…apps.googleusercontent.com" style="display:block;width:100%">
+        <label for="google-client-id">Client ID</label><input id="google-client-id" type="text" required autocomplete="off" pattern="[A-Za-z0-9_\\x2d]+\\.apps\\.googleusercontent\\.com" placeholder="…apps.googleusercontent.com" style="display:block;width:100%">
         <label for="google-client-secret">Client Secret</label><input id="google-client-secret" type="password" required minlength="8" maxlength="512" autocomplete="new-password" style="display:block;width:100%">
         <p>Kaoru intentará guardar el secreto en el llavero del sistema.</p>
       </fieldset>

@@ -54,6 +54,21 @@ input.addEventListener('focus', _updateCursor);
 input.addEventListener('keyup', _updateCursor);
 document.addEventListener('selectionchange', _updateCursor);
 
+const commandsBtn = document.getElementById('commands-btn');
+if (commandsBtn) {
+  commandsBtn.addEventListener('click', () => {
+    if (!input.value.trim()) {
+      input.value = '/';
+      input.dispatchEvent(new Event('input'));
+    } else {
+      _showCmdSuggestions('');
+    }
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+    _updateCursor();
+  });
+}
+
 function updateLlmHint() {
   // Con sandbox:true el índice de comandos y los providers llegan por caché
   // (el preload fino los refresca tras configurar el LLM), así que los nombres
@@ -191,13 +206,14 @@ function _showCmdSuggestions(query) {
   }
 
   el.innerHTML = cmds
-    .map(
-      (c, i) =>
-        `<div class="at-suggestion-item" data-index="${i}" data-cmd="${c}">
-      <span style="color:var(--accent);font-weight:600">/${c}</span>
-      <span style="opacity:.5;margin-left:auto;font-size:10px">cmd</span>
-    </div>`
-    )
+    .map((c, i) => {
+      const command = CommandRegistry.getCommand(c);
+      const description = command && command.description ? command.description : 'Comando de Kaoru';
+      return `<div class="at-suggestion-item command-suggestion" data-index="${i}" data-cmd="${c}">
+        <span class="command-suggestion-name">/${c}</span>
+        <span class="command-suggestion-description">${escapeHtml(description)}</span>
+      </div>`;
+    })
     .join('');
   el.style.display = 'block';
   _atSelectedIdx = -1;

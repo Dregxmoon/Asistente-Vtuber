@@ -17,7 +17,9 @@ async function mcpStartGoogleAuth(id, service) {
   if (!state.mcp) throw new Error('MCP no inicializado');
   return state.mcp.callTool(id, 'start_google_auth', {
     service_name: service,
-    user_google_email: '',
+    // workspace-mcp reconoce 'default' como selección de cuenta sin login_hint.
+    // Una cadena vacía es rechazada por start_google_auth antes de iniciar OAuth.
+    user_google_email: 'default',
   });
 }
 

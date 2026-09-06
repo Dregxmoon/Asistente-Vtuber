@@ -486,12 +486,31 @@ const html = document.documentElement;
 const themeToggle = document.getElementById('theme-toggle');
 
 function setTheme(t) {
-  html.setAttribute('data-theme', t);
-  ipcRenderer.send('chat-theme-changed', t);
+  const theme = t === 'sakura' ? 'light' : t;
+  html.setAttribute('data-theme', theme);
+  const isLight = theme === 'light';
+  themeToggle.setAttribute('aria-checked', String(isLight));
+  themeToggle.setAttribute('aria-label', isLight ? 'Usar tema oscuro' : 'Usar tema claro');
+  themeToggle.title = isLight ? 'Cambiar a tema oscuro' : 'Cambiar a tema claro';
+  ipcRenderer.send('chat-theme-changed', theme);
 }
 themeToggle.addEventListener('click', () =>
-  setTheme(html.getAttribute('data-theme') === 'dark' ? 'sakura' : 'dark')
+  setTheme(html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark')
 );
+
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  const openModal = [
+    ['#mcp-modal.visible', '#mcp-close'],
+    ['#perms-modal.visible', '#perms-close-x'],
+    ['#prefs-modal.visible', '#prefs-close'],
+    ['#sessions-modal.visible', '#sessions-close'],
+    ['#settings-modal.visible', '#picker-close'],
+  ].find(([modalSelector]) => document.querySelector(modalSelector));
+  if (!openModal) return;
+  const closeButton = document.querySelector(openModal[1]);
+  if (closeButton) closeButton.click();
+});
 
 function now() {
   return new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });

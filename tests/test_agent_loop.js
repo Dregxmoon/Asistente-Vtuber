@@ -261,6 +261,53 @@ async function testTextResponse() {
   );
 }
 
+async function testMutationRequestCannotStopAfterInspection() {
+  console.log(C.bold('\n── Cumplimiento: inspección no completa una mutación ───────────'));
+  const { AgentLoop } = require('../core/planner/AgentLoop.js');
+  const AP = require('../core/planner/ActionParser.js');
+  const projectCwd = teardown() || setup();
+  AP.setProjectCWD(projectCwd);
+  const target = path.join(projectCwd, 'index.html');
+  const mockLLM = createMockLLM([
+    `\`\`\`action\nACCIÓN: list_directory | RUTA: ${projectCwd}\n\`\`\``,
+    'La carpeta está lista para trabajar.',
+    `\`\`\`action\nACCIÓN: create_file | ARCHIVO: ${target}\nCONTENIDO: <!doctype html><title>Portafolio</title>\n\`\`\``,
+    'Landing creada.',
+  ]);
+  const loop = new AgentLoop({
+    maxIterations: 6,
+    llm: mockLLM,
+    bridge: createMockBridge(projectCwd),
+  });
+
+  const result = await loop.run(
+    'crea una landing sencilla en esta carpeta',
+    'Eres un asistente.',
+    [],
+    {}
+  );
+
+  assert(fs.existsSync(target), 'la guarda obligó a crear el archivo');
+  assert(mockLLM.callCount() === 4, `el modelo replanteó antes de cerrar (${mockLLM.callCount()})`);
+  assert(
+    result.toolResults.some((item) => item.ok && item.tool === 'write'),
+    'write tuvo éxito'
+  );
+  teardown();
+}
+
+async function testMutationExplanationDoesNotForceTools() {
+  console.log(C.bold('\n── Cumplimiento: una explicación no exige mutación ─────────────'));
+  const { AgentLoop } = require('../core/planner/AgentLoop.js');
+  const mockLLM = createMockLLM(['Puedes crearla con HTML y CSS.']);
+  const loop = new AgentLoop({ maxIterations: 4, llm: mockLLM });
+  const result = await loop.run('cómo crear una landing', 'Eres un asistente.', [], {});
+
+  assert(result.iterations === 1, 'la pregunta explicativa termina en una iteración');
+  assert(mockLLM.callCount() === 1, 'no fuerza llamadas adicionales');
+  assert(result.toolResults.length === 0, 'no ejecuta mutaciones');
+}
+
 // ── Test 2: Loop se adapta al resultado real (archivo no existe → create) ─────
 
 async function testAdaptsToRealResult() {
@@ -2686,6 +2733,8 @@ async function main() {
   console.log(C.bold(C.cyan('  March 7th — Test Suite: AgentLoop Fase 0')));
   console.log(C.bold(C.cyan('════════════════════════════════════════════════════════')));
   await testTextResponse();
+  await testMutationRequestCannotStopAfterInspection();
+  await testMutationExplanationDoesNotForceTools();
   await testArtifactVerifyCorrection();
   await testAdaptsToRealResult();
   await testMaxIterations();

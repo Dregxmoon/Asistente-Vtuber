@@ -52,10 +52,17 @@ function testCatalogs() {
   assert(builtin.length >= 8, `mínimo 8 providers built-in`, `actual: ${builtin.length}`);
 
   for (const p of builtin) {
-    assert(
-      Array.isArray(p.catalog) && p.catalog.length >= 2,
-      `${p.id} expone catálogo con ≥2 modelos (${p.catalog.length})`
-    );
+    if (p.type === 'codex-cli') {
+      assert(
+        Array.isArray(p.catalog) && p.catalog.length === 1,
+        `${p.id} expone la cuenta local como modelo único`
+      );
+    } else {
+      assert(
+        Array.isArray(p.catalog) && p.catalog.length >= 2,
+        `${p.id} expone catálogo con ≥2 modelos (${p.catalog.length})`
+      );
+    }
   }
 
   // El catálogo contiene los modelos por defecto fast/smart

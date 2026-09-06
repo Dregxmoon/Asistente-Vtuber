@@ -243,6 +243,35 @@ async function testFilesystemMCPDoesNotExcludeExec() {
   );
 }
 
+// Un MCP filesystem parcial solo reemplaza capacidades equivalentes. Este es
+// el caso de producción que dejaba al agente en solo lectura: list_directory
+// estaba disponible, pero write/edit desaparecían del catálogo.
+async function testReadOnlyFilesystemMCPKeepsMutations() {
+  const registry = makeRegistry([
+    makeTool('read', ['filesystem', 'code']),
+    makeTool('write', ['filesystem', 'code']),
+    makeTool('edit', ['filesystem', 'code']),
+    makeTool('grep', ['filesystem', 'code']),
+    makeTool('glob', ['filesystem', 'code']),
+  ]);
+  const mcpManager = makeMCPServer('filesystem', [
+    { name: 'list_directory', description: 'List directory' },
+    { name: 'read_file', description: 'Read file' },
+  ]);
+
+  const result = await resolveToolset({ toolRegistry: registry, mcpManager });
+  const excludedNames = result.excluded.map((entry) => entry.tool);
+  const nativeNames = result.nativeToolSchemas.map((schema) => schema.name);
+
+  assert(excludedNames.includes('read'), 'read se reemplaza por read_file');
+  assert(!excludedNames.includes('write'), 'write sobrevive si MCP no puede escribir');
+  assert(!excludedNames.includes('edit'), 'edit sobrevive si MCP no puede editar');
+  assert(!excludedNames.includes('grep'), 'grep sobrevive si MCP no puede buscar');
+  assert(!excludedNames.includes('glob'), 'glob sobrevive si MCP no puede buscar');
+  assert(nativeNames.includes('write'), 'schema write sigue visible');
+  assert(nativeNames.includes('edit'), 'schema edit sigue visible');
+}
+
 // ── Test 5: Skill gana sobre MCP cuando ambas cubren mismo dominio ────
 async function testSkillBeatsMCP() {
   const registry = makeRegistry([
@@ -443,6 +472,7 @@ async function main() {
   console.log(C.bold('\n── MCP ──────────────────────────────────────────────'));
   await testMCPReplacesOpenClaw();
   await testFilesystemMCPDoesNotExcludeExec();
+  await testReadOnlyFilesystemMCPKeepsMutations();
   await testMCPNoOverlap();
 
   console.log(C.bold('\n── Skills + MCP combinados ──────────────────────────'));

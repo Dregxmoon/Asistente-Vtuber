@@ -590,6 +590,8 @@ if (headerModelEl) {
   headerModelEl.addEventListener('click', openPicker);
   headerModelEl.style.cursor = 'pointer';
 }
+const modelsBtn = document.getElementById('models-btn');
+if (modelsBtn) modelsBtn.addEventListener('click', openPicker);
 pickerModal.addEventListener('click', (e) => {
   if (e.target === pickerModal) closePicker();
 });

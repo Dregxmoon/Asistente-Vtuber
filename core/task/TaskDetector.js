@@ -32,6 +32,7 @@ const TASK_PATTERNS = [
           '\\s+(código|script|función|programa|clase|plugin|módulo|api|endpoint)',
         'i'
       ),
+      /(crea(r|)|haz|diseña(r|)|desarrolla(r|)|construye|construir)\s+(un|una|el|la)?\s*(sitio|página|landing|web|aplicación|app|interfaz|portafolio)/i,
       new RegExp(
         'implementa(r|)\\s+' +
           ART +
@@ -79,6 +80,8 @@ const TASK_PATTERNS = [
       ),
       new RegExp('elimina(r|)\\s+' + ART + '\\s+(archivo|fichero|carpeta|directorio)', 'i'),
       new RegExp('borra(r|)\\s+' + ART + '\\s+(archivo|fichero|carpeta|directorio)', 'i'),
+      /(borra(r|)|elimina(r|))\s+(todo|el contenido|los archivos)\s+(lo que hay\s+)?(de|del|en|dentro de)\s+(la|el|esta|este)?\s*(carpeta|directorio)/i,
+      /vac[ií]a(r|)\s+(la|el|esta|este)?\s*(carpeta|directorio)/i,
       new RegExp('mueve(r|)\\s+' + ART + '\\s+(archivo|fichero|carpeta)\\s+(a|hacia)', 'i'),
       new RegExp('copia(r|)\\s+' + ART + '\\s+(archivo|fichero|carpeta)\\s+(a|hacia)', 'i'),
       new RegExp('renombra(r|)\\s+' + ART + '\\s+(archivo|fichero|carpeta)', 'i'),

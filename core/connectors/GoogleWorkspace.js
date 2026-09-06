@@ -90,8 +90,12 @@ async function buildGoogleWorkspaceConfig(input) {
 
 /** @param {string} line @returns {string|null} */
 function authenticatedGoogleEmail(line) {
+  // Eliminar los colores ANSI emitidos por el proceso hijo.
+  // eslint-disable-next-line no-control-regex
   const clean = line.replace(/\x1b\[[0-9;]*m/g, '');
-  const match = clean.match(/Authenticated via stdio_single_session:\s*([^\s<>]+@[^\s<>]+)\s*$/);
+  const match =
+    clean.match(/Authenticated via stdio_single_session:\s*([^\s<>]+@[^\s<>]+)\s*$/) ||
+    clean.match(/OAuth callback: Successfully authenticated user:\s*([^\s<>]+@[^\s<>]+)\.\s*$/);
   return match && /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(match[1])
     ? match[1]
     : null;

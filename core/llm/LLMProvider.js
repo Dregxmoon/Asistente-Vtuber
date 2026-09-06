@@ -7,6 +7,7 @@ const http = require('http');
 
 const { ProviderQueue } = require('./RequestQueue.js');
 const { UsageTracker } = require('../observability/UsageTracker.js');
+const { callCodexCli, findCodexCommand } = require('./CodexCliProvider.js');
 
 const KEEP_ALIVE_AGENT = new https.Agent({ keepAlive: true, maxSockets: 4 });
 const KEEP_ALIVE_AGENT_HTTP = new http.Agent({ keepAlive: true, maxSockets: 4 });
@@ -112,6 +113,33 @@ for (const def of BUILTIN_PROVIDERS) {
     free: def.free,
   });
 }
+
+registerProvider({
+  id: 'codex-cli',
+  name: 'Codex CLI (experimental)',
+  type: 'codex-cli',
+  baseURL: null,
+  models: { fast: 'local-account', smart: 'local-account' },
+  catalog: ['local-account'],
+  modelMeta: {
+    'local-account': {
+      label: 'Codex · cuenta local',
+      context: 0,
+      maxOutput: 0,
+      tools: true,
+      vision: false,
+      reasoning: true,
+      free: false,
+      cost: { in: 0, out: 0 },
+      aliases: ['codex', 'local'],
+      roles: ['charla', 'tareas de agente'],
+    },
+  },
+  timeoutMs: { fast: 180_000, smart: 300_000 },
+  builtin: true,
+  localAuth: true,
+  experimental: true,
+});
 
 // ── Límites ────────────────────────────────────────────────────────────────────
 const MAX_OUTPUT = { fast: 1024, smart: 8192 };
@@ -1323,6 +1351,12 @@ function _getCaller(providerId) {
       return callGeminiProvider;
     case 'anthropic':
       return callAnthropic;
+    case 'codex-cli':
+      return (id, messages, systemPrompt, mode, opts = {}) =>
+        callCodexCli(messages, systemPrompt, mode, [], {
+          ...opts,
+          timeoutMs: opts.timeoutMs || def.timeoutMs?.[_resolveMode(mode)],
+        });
     default:
       return null;
   }
@@ -1348,8 +1382,6 @@ function _rebuildMaps() {
 }
 
 // ── Tool-calling ──────────────────────────────────────────────────────────────
-const { TOOL_SCHEMAS } = require('./ToolSchemas.js');
-
 function _buildOpenAITools(tools) {
   return tools.map((t) => ({
     type: 'function',
@@ -1604,6 +1636,12 @@ function _getToolCaller(providerId) {
       return callGeminiWithTools;
     case 'anthropic':
       return callAnthropicWithTools;
+    case 'codex-cli':
+      return (id, messages, systemPrompt, mode, tools, opts = {}) =>
+        callCodexCli(messages, systemPrompt, mode, tools, {
+          ...opts,
+          timeoutMs: opts.timeoutMs || def.timeoutMs?.[_resolveMode(mode)],
+        });
     default:
       return null;
   }
@@ -1935,6 +1973,7 @@ async function _callWithFallbackTools(messages, systemPrompt, mode = 'smart', to
 }
 
 function defHasKey(providerId) {
+  if (providerId === 'codex-cli') return !!findCodexCommand();
   return !!_getApiKey(providerId);
 }
 
@@ -1997,7 +2036,7 @@ function getAvailableProviders() {
     free: !!p.free,
     custom: !!p.custom,
     remote: !!p.remote,
-    hasKey: !!_getApiKey(p.id),
+    hasKey: defHasKey(p.id),
     baseURL: p.baseURL,
     models: p.models,
     // Fase Q: el selector de modelos muestra el catálogo completo del
@@ -2061,7 +2100,7 @@ function _providerPickerStates() {
       builtin: !!p.builtin,
       custom: !!p.custom,
       remote: false,
-      hasKey: !!_getApiKey(p.id),
+      hasKey: defHasKey(p.id),
       connectable: true,
     });
   }

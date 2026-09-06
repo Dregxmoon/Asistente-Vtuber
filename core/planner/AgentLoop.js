@@ -169,9 +169,7 @@ function _fnv1a(str) {
  * @returns {string|null} resumen del claim, o null si no hay problema
  */
 function _detectUnverifiedEditClaims(responseText, toolResults) {
-  const hadSuccessfulMutation = (toolResults || []).some(
-    (r) => r?.ok && MUTATOR_TOOLS.has(r?._action?.tool || r?.tool || '')
-  );
+  const hadSuccessfulMutation = (toolResults || []).some(_isSuccessfulMutation);
   if (hadSuccessfulMutation) return null;
   const text = String(responseText || '');
   if (!text.trim()) return null;
@@ -183,6 +181,35 @@ function _detectUnverifiedEditClaims(responseText, toolResults) {
     return `afirma "${m[0]}"`;
   }
   return null;
+}
+
+const MUTATION_FOLLOW_THROUGH_MAX_ROUNDS = 2;
+const MUTATION_ACTION_RE =
+  /\b(crea(r)?|haz|diseña(r)?|desarrolla(r)?|construye|implementa(r)?|edita(r)?|modifica(r)?|cambia(r)?|corrige|corregir|arregla(r)?|escribe|escribir|añade|agrega|elimina(r)?|borra(r)?|vac[ií]a(r)?|create|build|implement|edit|modify|change|fix|write|add|delete|remove)\b/i;
+const MUTATION_TARGET_RE =
+  /\b(archivo|carpeta|directorio|c[oó]digo|proyecto|sitio|p[aá]gina|landing|web|aplicaci[oó]n|app|interfaz|componente|funci[oó]n|configuraci[oó]n|file|folder|directory|code|project|site|page|application|component|function|config)\b/i;
+const EXPLANATION_REQUEST_RE =
+  /^\s*(c[oó]mo|how\s+to|explica|expl[ií]came|ens[eé][ñn]ame|dime\s+c[oó]mo|qu[eé]\s+har[ií]as|what\s+would)\b/i;
+
+/** La petición exige un cambio observable, no sólo una explicación. */
+function _expectsMutation(userMessage) {
+  const text = String(userMessage || '').trim();
+  if (!text || EXPLANATION_REQUEST_RE.test(text)) return false;
+  return MUTATION_ACTION_RE.test(text) && MUTATION_TARGET_RE.test(text);
+}
+
+/** Reconoce mutaciones exitosas aunque hayan pasado por MCP o exec. */
+function _isSuccessfulMutation(result) {
+  if (!result?.ok) return false;
+  const action = result._action || {};
+  const tool = action.tool || result.tool || '';
+  if (MUTATOR_TOOLS.has(tool) || tool === 'code_execution') return true;
+  if (tool === 'mcp') return !AP.isMCPToolReadOnly(action.params?.tool || '');
+  if (tool !== 'exec') return false;
+  const command = String(action.params?.command || '');
+  return /(?:^|\s)(?:rm|mv|cp|mkdir|touch|truncate|install)\b|(?:^|\s)sed\s+-i\b|(?:^|\s)(?:npm|pnpm|yarn)\s+(?:i|install|add|remove)\b|(?:>|>>)/i.test(
+    command
+  );
 }
 
 function _toolCallKey(tool, params) {
@@ -385,7 +412,7 @@ const TAIL_SECTIONS = [
 // que podía usar herramientas y respondía sin ejecutar nada (tool_calls_total:
 // 0 en producción). El modo agent tiene presupuesto propio y más amplio; chat/
 // plan/execute conservan MAX_SYSTEM_CHARS (14K) intacto.
-const AGENT_MAX_SYSTEM_CHARS = 30_000;
+const AGENT_MAX_SYSTEM_CHARS = 40_000;
 
 // G.1: compactación de contexto. Cuando la historia de iteraciones crece, los
 // turnos viejos se condensan en un resumen determinista (no se re-envía todo
@@ -741,7 +768,7 @@ class AgentLoop {
       try {
         const resolved = await toolResolver.resolveToolset({
           userMessage,
-          domain: taskIntent,
+          domain,
           toolRegistry: this._toolRegistry,
           skillManager: opts.skillManager || null,
           mcpManager: opts.mcpManager || null,
@@ -947,6 +974,10 @@ class AgentLoop {
     // Self-critique (opts.selfCritique): cuántas pasadas de crítica se
     // agotaron en este run — acota el bucle de corrección (no infinito).
     let critiqueRounds = 0;
+    // Guarda determinista: una petición imperativa de cambio no puede cerrarse
+    // después de sólo leer/listar o de una tool fallida. Es independiente de
+    // selfCritique para que también proteja el modo fast.
+    let mutationFollowThroughRounds = 0;
     // Verificación de artefactos (web + sintaxis universal): rondas de
     // corrección cuando archivos mutados fallan validación al cierre.
     let webVerifyRounds = 0;
@@ -1093,6 +1124,35 @@ class AgentLoop {
       }
 
       if (actions.length === 0) {
+        const mutationExpected = !opts.reportMode && _expectsMutation(userMessage);
+        const mutationObserved = toolResults.some(_isSuccessfulMutation);
+        const permissionStopped = toolResults.some(
+          (result) =>
+            !result?.ok &&
+            /deneg|rechaz|approval|aprobaci[oó]n|permiso/i.test(String(result?.error || ''))
+        );
+        if (
+          mutationExpected &&
+          !mutationObserved &&
+          !permissionStopped &&
+          mutationFollowThroughRounds < MUTATION_FOLLOW_THROUGH_MAX_ROUNDS &&
+          i + 1 < this.maxIterations
+        ) {
+          mutationFollowThroughRounds++;
+          iterationHistory.push({
+            role: 'user',
+            content:
+              '[CUMPLIMIENTO PENDIENTE] La petición original exige un cambio observable, pero ninguna herramienta de mutación terminó correctamente. ' +
+              'No cierres con una explicación ni declares que terminaste: revisa los resultados, cambia de estrategia y usa una herramienta disponible de escritura/edición. ' +
+              'La autorización y ejecución siguen a cargo de Kaoru.',
+          });
+          logger.warn(
+            'AgentLoop',
+            `[agent-loop] cambio solicitado sin mutación exitosa — replanteo ${mutationFollowThroughRounds}/${MUTATION_FOLLOW_THROUGH_MAX_ROUNDS}`
+          );
+          continue;
+        }
+
         // Self-critique (opcional): antes de dar por terminado el run con una
         // respuesta de texto, un paso extra le pide al LLM comparar el
         // resultado contra la INTENCIÓN original del usuario (no solo tests/

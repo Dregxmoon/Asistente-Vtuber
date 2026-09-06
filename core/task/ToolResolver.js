@@ -19,6 +19,28 @@ const PREDEFINED_MCP_DOMAINS = {
   everything: ['test'],
 };
 
+// Equivalencias reales entre las tools genéricas de OpenClaw y nombres
+// habituales del servidor MCP filesystem. La mera presencia de una tool del
+// mismo dominio no basta para reemplazar todas las capacidades del dominio:
+// un servidor de solo lectura nunca debe ocultar write/edit.
+const FILESYSTEM_MCP_EQUIVALENTS = {
+  read: new Set(['read', 'read_file', 'read_text_file', 'read_multiple_files']),
+  write: new Set(['write', 'write_file']),
+  edit: new Set(['edit', 'edit_file']),
+  grep: new Set(['grep', 'search', 'search_files']),
+  glob: new Set(['glob', 'find_files', 'search_files']),
+};
+
+function _mcpReplacesOpenClaw(tool, mcpTools) {
+  const domains = tool.domain || [];
+  if (!domains.includes('filesystem')) return false;
+  const equivalents = FILESYSTEM_MCP_EQUIVALENTS[tool.name];
+  if (!equivalents) return false;
+  return mcpTools.some(
+    (candidate) => candidate.server === 'filesystem' && equivalents.has(candidate.name)
+  );
+}
+
 function _getMCPDomains(serverName) {
   return PREDEFINED_MCP_DOMAINS[serverName] || ['mcp'];
 }
@@ -81,9 +103,6 @@ async function resolveToolset(context = {}) {
     (tool) => !router.score(tool).unavailable
   );
 
-  const openclawByDomain = _indexToolsByDomain(openclawTools);
-  const mcpByDomain = _indexMCPByDomain(mcpTools);
-
   // 3. Determine excluded domains
   const excludedDomains = new Set();
 
@@ -100,13 +119,6 @@ async function resolveToolset(context = {}) {
     }
   }
 
-  // MCP excludes overlapping OpenClaw domains
-  for (const [domain] of mcpByDomain) {
-    if (openclawByDomain.has(domain)) {
-      excludedDomains.add(domain);
-    }
-  }
-
   // Determine precedence winner
   if (skills.length > 0) {
     result.precedence = 'skill';
@@ -117,9 +129,12 @@ async function resolveToolset(context = {}) {
   // 4. Build filtered OpenClaw tools
   const filteredOpenclaw = openclawTools.filter((t) => {
     const tDomains = t.domain || [];
-    const hasExcluded = tDomains.some((d) => excludedDomains.has(d));
-    if (hasExcluded) result.excluded.push({ source: 'openclaw', tool: t.name, domain: t.domain });
-    return !hasExcluded;
+    const replacedBySkill = tDomains.some((d) => excludedDomains.has(d));
+    const replacedByMCP = _mcpReplacesOpenClaw(t, mcpTools);
+    if (replacedBySkill || replacedByMCP) {
+      result.excluded.push({ source: 'openclaw', tool: t.name, domain: t.domain });
+    }
+    return !replacedBySkill && !replacedByMCP;
   });
 
   // 5. Build result
@@ -207,30 +222,6 @@ function _getMCPTools(mcpManager) {
   } catch {
     return [];
   }
-}
-
-function _indexToolsByDomain(tools) {
-  const map = new Map();
-  for (const t of tools) {
-    const domains = t.domain || [];
-    for (const d of domains) {
-      if (!map.has(d)) map.set(d, []);
-      map.get(d).push(t.name);
-    }
-  }
-  return map;
-}
-
-function _indexMCPByDomain(mcpTools) {
-  const map = new Map();
-  for (const t of mcpTools) {
-    const domains = t.domain || ['mcp'];
-    for (const d of domains) {
-      if (!map.has(d)) map.set(d, []);
-      map.get(d).push(`${t.server}/${t.name}`);
-    }
-  }
-  return map;
 }
 
 function _buildPromptCatalog(tools, domain, flags) {

@@ -33,12 +33,13 @@ async function renderPermsList() {
     return;
   }
   emptyEl.style.display = 'none';
+  const actionLabels = { allow: 'Permitir', ask: 'Preguntar', deny: 'Bloquear' };
   listEl.innerHTML = rules
     .map(
       (r) => `<div class="perm-row">
         <span class="perm-tool">${escapeHtml(r.tool)}</span>
         <span class="perm-path">${r.path ? escapeHtml(r.path) : '· todos los paths ·'}</span>
-        <span class="perm-action perm-action-${escapeHtml(r.action)}">${escapeHtml(r.action)}</span>
+        <span class="perm-action perm-action-${escapeHtml(r.action)}">${escapeHtml(actionLabels[r.action] || r.action)}</span>
         <button class="perm-del" data-tool="${escapeHtml(r.tool)}" data-path="${escapeHtml(
           r.path || ''
         )}" title="Eliminar regla">×</button>
@@ -53,6 +54,12 @@ function attachPermsEvents() {
 
   const closeBtn = document.getElementById('close-perms');
   if (closeBtn) closeBtn.addEventListener('click', closePermsModal);
+  const closeX = document.getElementById('perms-close-x');
+  if (closeX) closeX.addEventListener('click', closePermsModal);
+
+  permsModal.addEventListener('click', (e) => {
+    if (e.target === permsModal) closePermsModal();
+  });
 
   const addBtn = document.getElementById('perms-add-btn');
   if (addBtn) {

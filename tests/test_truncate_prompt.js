@@ -138,7 +138,7 @@ for (const budget of [p.length - 1, 200, 100, 60, 50]) {
 // (base ~10.5K + loop ~3.7K + catálogo ~8.6K) no cabe en el presupuesto de
 // chat (14K) y el truncado borraba SIEMPRE "Loop agente" y "Catálogo de
 // tools" → tool_calls_total: 0. El modo agent usa presupuesto propio
-// (AGENT_MAX_SYSTEM_CHARS = 30K): con ese presupuesto loop y catálogo
+// (AGENT_MAX_SYSTEM_CHARS = 40K): con ese presupuesto loop y catálogo
 // sobreviven sin recortar.
 {
   const base8 =
@@ -147,11 +147,13 @@ for (const budget of [p.length - 1, 200, 100, 60, 50]) {
   const p8 = base8 + '\n\n' + LOOP + '\n\n' + CATALOG;
   const out14 = truncateSystemPrompt(p8, { max: 14000, tailSections: TAIL });
   const out30 = truncateSystemPrompt(p8, { max: 30000, tailSections: TAIL });
+  const out40 = truncateSystemPrompt(p8, { max: 40000, tailSections: TAIL });
   assert(out14.includes(LOOP), 'chat budget: loop sobrevive al recorte de memoria (8)');
   assert(out14.includes(CATALOG), 'chat budget: catálogo sobrevive al recorte de memoria (8)');
   assert(out30.includes('# MODO AGENTE'), 'agent budget: loop sobrevive (8)');
   assert(out30.includes('# HERRAMIENTAS DISPONIBLES'), 'agent budget: catálogo sobrevive (8)');
   assert(out30 === p8, 'agent budget: sin recortes (8)');
+  assert(out40 === p8, 'agent budget 40K: sin recortes (8)');
 }
 
 console.log(`\nResultado: ${passed} passed  ${failed} failed`);
