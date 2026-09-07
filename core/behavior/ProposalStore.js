@@ -55,6 +55,7 @@ class ProposalStore {
       byType: {},
       decisions: [],
       byDay: {},
+      byDayCategory: {},
       byContext: {},
       contextPreferences: {},
       emissions: [],
@@ -69,6 +70,7 @@ class ProposalStore {
         const raw = JSON.parse(fs.readFileSync(this._filePath, 'utf-8'));
         if (raw && typeof raw === 'object') this._data = raw;
         if (!this._data.byDay) this._data.byDay = {};
+        if (!this._data.byDayCategory) this._data.byDayCategory = {};
         if (!this._data.byContext) this._data.byContext = {};
         if (!this._data.contextPreferences) this._data.contextPreferences = {};
         if (!Array.isArray(this._data.emissions)) this._data.emissions = [];
@@ -174,6 +176,24 @@ class ProposalStore {
 
   getDailyStats(dayKey = _localDayKey()) {
     return { dayKey, count: this.dailyCount(dayKey) };
+  }
+
+  categoryDailyCount(category, dayKey = _localDayKey()) {
+    return this._data.byDayCategory?.[dayKey]?.[category] || 0;
+  }
+
+  incrementCategoryDaily(category, dayKey = _localDayKey()) {
+    if (!category) return 0;
+    const day = (this._data.byDayCategory[dayKey] ||= {});
+    day[category] = (day[category] || 0) + 1;
+    const keys = Object.keys(this._data.byDayCategory).sort();
+    if (keys.length > MAX_DAILY_KEYS) {
+      for (const key of keys.slice(0, keys.length - MAX_DAILY_KEYS)) {
+        delete this._data.byDayCategory[key];
+      }
+    }
+    this._persist();
+    return day[category];
   }
 
   /** Todas las decisiones registradas (con ts) — para reportes de Fase E. */
@@ -361,6 +381,7 @@ class ProposalStore {
       byType: {},
       decisions: [],
       byDay: {},
+      byDayCategory: {},
       byContext: {},
       contextPreferences: {},
       emissions: [],

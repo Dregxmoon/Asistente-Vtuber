@@ -38,10 +38,12 @@ const BATTERY_LOW = 15;
 const BATTERY_CRITICAL = 8;
 const DEFAULT_POLL_MS = 60 * 1000;
 
-async function _defaultProbe() {
+let _previousCpuTimes = null;
+
+async function _defaultProbe(workspace = null) {
   let disk = 0;
   try {
-    const st = await fs.promises.statfs('/');
+    const st = await fs.promises.statfs(workspace || process.cwd());
     if (st.blocks > 0) disk = (1 - st.bfree / st.blocks) * 100;
   } catch (_) {}
 
@@ -63,7 +65,7 @@ async function _defaultProbe() {
 
   return {
     cpu: _cpuPercent(),
-    mem: _memPercent(),
+    mem: await _memPercent(),
     disk,
     battery,
   };
@@ -77,24 +79,45 @@ function _cpuPercent() {
     for (const t of Object.keys(c.times)) total += c.times[t];
     idle += c.times.idle;
   }
-  return total === 0 ? 0 : (1 - idle / total) * 100;
+  const current = { idle, total };
+  const previous = _previousCpuTimes;
+  _previousCpuTimes = current;
+  if (!previous) return 0;
+  const totalDelta = current.total - previous.total;
+  const idleDelta = current.idle - previous.idle;
+  return totalDelta <= 0 ? 0 : (1 - idleDelta / totalDelta) * 100;
 }
 
-function _memPercent() {
+async function _memPercent() {
+  if (process.platform === 'linux') {
+    try {
+      const info = await fs.promises.readFile('/proc/meminfo', 'utf8');
+      const total = Number(info.match(/^MemTotal:\s+(\d+)/m)?.[1] || 0);
+      const available = Number(info.match(/^MemAvailable:\s+(\d+)/m)?.[1] || 0);
+      if (total > 0 && available >= 0) return (1 - available / total) * 100;
+    } catch (_) {}
+  }
   const total = os.totalmem();
   return total === 0 ? 0 : (1 - os.freemem() / total) * 100;
 }
 
 class SystemWatcher extends BasePollingWatcher {
-  constructor({ pollMs = DEFAULT_POLL_MS, probe = _defaultProbe, bus = getEventBus() } = {}) {
+  constructor({
+    pollMs = DEFAULT_POLL_MS,
+    probe = _defaultProbe,
+    getWorkspace = () => null,
+    bus = getEventBus(),
+  } = {}) {
     super({ pollMs, bus });
     this._probe = probe;
+    this._getWorkspace = getWorkspace;
     this._warned = {}; // kind → { active, value }
     this._last = null;
   }
 
   async _scan() {
-    const s = await this._probe();
+    const s = await this._probe(this._getWorkspace?.() || null);
+    if (this._pollController?.signal.aborted) return;
     this._last = s;
     this._tick(s);
   }

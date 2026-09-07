@@ -485,6 +485,21 @@ async function testTitleWatcher() {
 
   w._check({ app: 'firefox', category: 'browser', title: 'Mi proyecto — Stack Overflow' });
   assert(rc.events.length === 3, 'título normal → no emite nada');
+  w._check({ app: 'firefox', category: 'browser', title: 'Error token=secreto en una búsqueda' });
+  assert(
+    rc.events.length === 3,
+    'browser con palabra error → se ignora por privacidad/falsos positivos'
+  );
+  w._check({ app: 'kitty', category: 'terminal', title: 'fatal token=secreto-123' });
+  assert(
+    rc.events[3]?.title.includes('[REDACTED]') && !rc.events[3]?.title.includes('secreto-123'),
+    'título de trabajo redacta secretos antes de emitir'
+  );
+  w._check({ app: 'kitty', category: 'terminal', title: 'Error Authorization: Bearer abc-123' });
+  assert(
+    rc.events[4]?.title.includes('[REDACTED]') && !rc.events[4]?.title.includes('abc-123'),
+    'título redacta credenciales Authorization completas'
+  );
 
   rc.off();
   w.stop();
@@ -518,13 +533,29 @@ async function testClipboardWatcher() {
     'URL copiada → clipboard:copied (url)'
   );
 
+  contents.push('https://example.com/callback?token=secreto&view=ok');
+  w._tick();
+  assert(
+    rc.events.length === 3 && !rc.events[2].snippet.includes('secreto'),
+    'URL sensible se emite con token redactado'
+  );
+
+  contents.push('Error de API: {"client_secret": "valor privado"}');
+  w._tick();
+  assert(
+    rc.events.length === 4 &&
+      rc.events[3].snippet.includes('[REDACTED]') &&
+      !rc.events[3].snippet.includes('valor privado'),
+    'stacktrace redacta secretos JSON con espacios'
+  );
+
   contents.push('la contraseña es hunter2 no la mires');
   w._tick();
-  assert(rc.events.length === 2, 'texto normal copiado → ignorado (privacidad)');
+  assert(rc.events.length === 4, 'texto normal copiado → ignorado (privacidad)');
 
   contents.push('hola');
   w._tick();
-  assert(rc.events.length === 2, 'texto corto normal → ignorado');
+  assert(rc.events.length === 4, 'texto corto normal → ignorado');
 
   rc.off();
   w.stop();
@@ -556,6 +587,10 @@ async function testUpcomingEvents() {
     '"en 2 horas" → relativo',
     JSON.stringify(p3)
   );
+  assert(
+    _parseEventTime('Pidió recordar: fecha imposible el 31 de febrero', now.getTime()) === null,
+    'fecha calendario inválida → no se normaliza silenciosamente'
+  );
   const p4 = _parseEventTime('Pidió recordar: examen el 10 de julio a las 9:30', now.getTime());
   assert(
     p4 && p4.kind === 'time_event',
@@ -575,6 +610,30 @@ async function testUpcomingEvents() {
   );
   await w.poll(now.getTime());
   assert(rc.events.length === 1, 'mismo momento → no se repite');
+  rc.off();
+
+  // 6f. Un relativo se ancla a la creación del nodo, no se mueve con cada poll.
+  const relativeCreatedAt = now.getTime() - 10 * 60 * 1000;
+  const relativeGraph = {
+    isReady: true,
+    queryNodes: () => [
+      {
+        id: 999,
+        label: 'recordar_relativo',
+        content: 'Pidió recordar: llamada en 30 minutos',
+        created_at: relativeCreatedAt,
+      },
+    ],
+  };
+  const relativeWatcher = new UpcomingEventsWatcher({ graph: relativeGraph, bus });
+  rc = collect('memory:upcoming-event');
+  await relativeWatcher.poll(now.getTime());
+  await relativeWatcher.poll(now.getTime() + 60 * 1000);
+  assert(rc.events.length === 1, 'recordatorio relativo conserva timestamp y no se re-emite');
+  assert(
+    rc.events[0]?.when === relativeCreatedAt + 30 * 60 * 1000,
+    'recordatorio relativo usa created_at como ancla'
+  );
   rc.off();
 
   // 6c. Evento lejano → no emite

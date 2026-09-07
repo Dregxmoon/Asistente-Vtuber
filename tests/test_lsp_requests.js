@@ -540,6 +540,104 @@ async function testAutoInstall() {
   }
 }
 
+function testUtf8Framing() {
+  console.log(C.bold('\n── Test 14: framing JSON-RPC UTF-8 fragmentado ─────────────────'));
+  const { _LSPInstance } = require('../core/lsp/LSPManager.js');
+  const inst = new _LSPInstance(TS_CONFIG, 'typescript');
+  const received = [];
+  inst._handleMessage = (message) => received.push(message);
+  const payloads = [
+    JSON.stringify({ jsonrpc: '2.0', method: 'x', params: { text: 'á漢字' } }),
+    JSON.stringify({ jsonrpc: '2.0', method: 'y', params: { ok: true } }),
+  ];
+  const frame = Buffer.concat(
+    payloads.map((body) =>
+      Buffer.from(`Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`, 'utf8')
+    )
+  );
+  inst._buffer = frame.subarray(0, 31);
+  inst._processBuffer();
+  inst._buffer = Buffer.concat([inst._buffer, frame.subarray(31)]);
+  inst._processBuffer();
+  assert(received.length === 2, 'consume dos mensajes aunque lleguen fragmentados');
+  assert(received[0]?.params?.text === 'á漢字', 'respeta Content-Length en bytes con Unicode');
+}
+
+async function testDocumentChangesRename() {
+  console.log(C.bold('\n── Test 15: rename acepta documentChanges ──────────────────────'));
+  const { inst, sent } = createInstance(TS_CONFIG);
+  const filePath = '/tmp/lsp-tests-ws/main.ts';
+  const promise = inst.rename(filePath, 0, 1, 'renamed');
+  await new Promise((resolve) => setImmediate(resolve));
+  const req = sent.find((message) => message.method === 'textDocument/rename');
+  inst._handleMessage({
+    jsonrpc: '2.0',
+    id: req.id,
+    result: {
+      documentChanges: [
+        {
+          textDocument: { uri: `file://${filePath}`, version: 7 },
+          edits: [
+            {
+              range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
+              newText: 'r',
+            },
+          ],
+        },
+      ],
+    },
+  });
+  const edits = await promise;
+  assert(edits.length === 1 && edits[0].version === 7, 'normaliza TextDocumentEdit versionado');
+}
+
+async function testAdvancedSemanticRequests() {
+  console.log(C.bold('\n── Test 16: requests semánticos avanzados ─────────────────────'));
+  const { inst, sent } = createInstance(TS_CONFIG);
+  const filePath = '/tmp/lsp-tests-ws/main.ts';
+
+  const implementation = inst.goToImplementation(filePath, 1, 2);
+  await new Promise((resolve) => setImmediate(resolve));
+  let req = sent.at(-1);
+  assert(req.method === 'textDocument/implementation', 'solicita implementation');
+  inst._handleMessage({
+    jsonrpc: '2.0',
+    id: req.id,
+    result: [{ uri: `file://${filePath}`, range: {} }],
+  });
+  assert((await implementation).length === 1, 'normaliza implementaciones');
+
+  const completion = inst.completion(filePath, 1, 2);
+  await new Promise((resolve) => setImmediate(resolve));
+  req = sent.at(-1);
+  inst._handleMessage({
+    jsonrpc: '2.0',
+    id: req.id,
+    result: { items: [{ label: 'value', detail: 'const' }] },
+  });
+  assert((await completion)[0]?.label === 'value', 'normaliza completions');
+
+  const signature = inst.signatureHelp(filePath, 1, 2);
+  await new Promise((resolve) => setImmediate(resolve));
+  req = sent.at(-1);
+  inst._handleMessage({ jsonrpc: '2.0', id: req.id, result: { signatures: [{ label: 'fn(a)' }] } });
+  assert((await signature).signatures[0]?.label === 'fn(a)', 'devuelve signatureHelp');
+
+  const hierarchy = inst.callHierarchy(filePath, 1, 2, 'outgoing');
+  await new Promise((resolve) => setImmediate(resolve));
+  req = sent.at(-1);
+  inst._handleMessage({
+    jsonrpc: '2.0',
+    id: req.id,
+    result: [{ name: 'fn', uri: `file://${filePath}` }],
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  req = sent.at(-1);
+  assert(req.method === 'callHierarchy/outgoingCalls', 'selecciona jerarquía outgoing');
+  inst._handleMessage({ jsonrpc: '2.0', id: req.id, result: [{ to: { name: 'callee' } }] });
+  assert((await hierarchy).length === 1, 'devuelve jerarquía de llamadas');
+}
+
 async function main() {
   console.log(C.bold(C.cyan('\n════════════════════════════════════════════════════════')));
   console.log(
@@ -560,6 +658,9 @@ async function main() {
   await testRecoveryStableReset();
   await testRecoveryStopCancels();
   await testAutoInstall();
+  testUtf8Framing();
+  await testDocumentChangesRename();
+  await testAdvancedSemanticRequests();
 
   console.log(C.bold('\n════════════════════════════════════════════════════════'));
   const total = passed + failed;

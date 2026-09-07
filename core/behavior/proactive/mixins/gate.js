@@ -46,6 +46,7 @@ const CONTEXTUAL_CONVERSATION_TYPES = new Set([
 
 /** ¿Cuántas señales de trabajo (lsp_error…) se enviaron HOY? */
 function _workUsedToday() {
+  if (this._store?.categoryDailyCount) return this._store.categoryDailyCount('work');
   const day = _localDayString(Date.now());
   if (this._workDay !== day) return 0;
   return this._workFired;
@@ -59,6 +60,7 @@ function _envelopeWorkFired() {
     this._workFired = 0;
   }
   this._workFired += 1;
+  this._store?.incrementCategoryDaily?.('work');
 }
 
 function _localDayString(ts) {
@@ -69,6 +71,50 @@ function _localDayString(ts) {
 }
 
 module.exports = {
+  _enqueuePendingTrigger(trigger, reason = 'temporarily_blocked') {
+    if (!trigger || this._autonomyMode === 'observe') return false;
+    const now = Date.now();
+    this._pendingTriggers = (this._pendingTriggers || []).filter(
+      (item) => now - item.queuedAt <= this._pendingTriggerTtlMs
+    );
+    const discriminator =
+      trigger.absPath ||
+      trigger.file ||
+      trigger.nodeId ||
+      String(trigger.context || '').slice(0, 96);
+    const key = `${trigger.type || ''}:${trigger.kind || ''}:${discriminator || ''}`;
+    const existing = this._pendingTriggers.find((item) => item.key === key);
+    const candidate = candidateFromTrigger(trigger);
+    const priority =
+      trigger._gate?.verdict === 'ESCALATE' || trigger.isCritical || candidate?.isCritical
+        ? 100
+        : Math.round((candidate?.score || candidate?.urgencia || 0.5) * 50);
+    if (existing) {
+      existing.trigger = { ...trigger };
+      existing.reason = reason;
+      existing.priority = Math.max(existing.priority, priority);
+      return false;
+    }
+    this._pendingTriggers.push({ key, trigger: { ...trigger }, reason, priority, queuedAt: now });
+    this._pendingTriggers.sort((a, b) => b.priority - a.priority || a.queuedAt - b.queuedAt);
+    const kept = this._pendingTriggers.slice(0, this._pendingTriggerMax);
+    const accepted = kept.some((item) => item.key === key);
+    this._pendingTriggers = kept;
+    return accepted;
+  },
+
+  async _drainPendingTriggers() {
+    if (!this._running || this._deciding || !this._pendingTriggers?.length) return;
+    const now = Date.now();
+    this._pendingTriggers = this._pendingTriggers.filter(
+      (item) => now - item.queuedAt <= this._pendingTriggerTtlMs
+    );
+    this._pendingTriggers.sort((a, b) => b.priority - a.priority || a.queuedAt - b.queuedAt);
+    const item = this._pendingTriggers.shift();
+    if (!item) return;
+    await this._tryTrigger({ ...item.trigger, _fromPending: true });
+  },
+
   // ── Fase F: gate de contexto (determinista, sin LLM) ──────────────────────
   // El LLM deja de decidir SI intervenir: este gate (normalizador → score →
   // contexto → decisión) pone el criterio barato y traceable. El LLM solo
@@ -238,10 +284,19 @@ module.exports = {
    *   - message (string)   → mensaje enviado.
    */
   async _tryTrigger(trigger) {
-    if (!this._running) return { blocked: true }; // aún no arrancado (workspace/MCP en init)
+    if (!this._running) {
+      this._enqueuePendingTrigger(trigger, 'not_running');
+      return { blocked: true };
+    }
     if (this._autonomyMode === 'observe') return { blocked: true }; // slider: solo observar
-    if (this._deciding) return { blocked: true }; // ya hay una decisión en curso
-    if (!LLMProvider.getActiveProvider()) return { blocked: true };
+    if (this._deciding) {
+      this._enqueuePendingTrigger(trigger, 'decision_in_progress');
+      return { blocked: true };
+    }
+    if (!LLMProvider.getActiveProvider()) {
+      this._enqueuePendingTrigger(trigger, 'provider_unavailable');
+      return { blocked: true };
+    }
 
     const now = Date.now();
 
@@ -274,7 +329,10 @@ module.exports = {
     // turnos del usuario en los últimos 30 min — aunque haya pausado un rato
     // a pensar.
     const chatRecent = !!this._lastUserMsg && now - this._lastUserMsg < RECENT_CHAT_MS;
-    if (chatRecent || this._isConvoActive(now)) return { blocked: true };
+    if (chatRecent || this._isConvoActive(now)) {
+      this._enqueuePendingTrigger(trigger, 'conversation_active');
+      return { blocked: true };
+    }
 
     // ESCALATE (señal crítica con R ≥ escalar): salta los guardas temporales
     // de no-molestia (gap global, cooldown del tipo y AFK). Un secreto a punto
@@ -287,7 +345,10 @@ module.exports = {
       const adjustedGap = Math.round(
         GLOBAL_MIN_GAP_MS * (1 - (this._currentProactiveScore - 0.3) * 0.5)
       );
-      if (now - this._lastProactive < adjustedGap) return { blocked: true };
+      if (now - this._lastProactive < adjustedGap) {
+        this._enqueuePendingTrigger(trigger, 'global_gap');
+        return { blocked: true };
+      }
 
       // Cooldown efectivo por tipo — crece si el usuario ha descartado este
       // tipo varias veces seguidas (Fase A: el rechazo enseña).
@@ -295,13 +356,19 @@ module.exports = {
         trigger.cooldownOverrideMs || TRIGGER_COOLDOWN_MS[trigger.type] || GLOBAL_MIN_GAP_MS;
       const cooldown = this._effectiveCooldownMs(trigger.type, baseCooldown);
       const lastAttempt = this._lastAttemptByType[trigger.type] || 0;
-      if (now - lastAttempt < cooldown) return { blocked: true };
+      if (now - lastAttempt < cooldown) {
+        this._enqueuePendingTrigger(trigger, 'type_cooldown');
+        return { blocked: true };
+      }
 
       // No interrumpir si lleva mucho AFK — excepto el trigger que ES,
       // precisamente, "acaba de volver de estar AFK".
       if (trigger.type !== 'return_from_break') {
         const idleSecs = this._osSensor?.getCurrentContext()?.idleSecs ?? 0;
-        if (idleSecs > MAX_IDLE_TO_INTERRUPT) return { blocked: true };
+        if (idleSecs > MAX_IDLE_TO_INTERRUPT) {
+          this._enqueuePendingTrigger(trigger, 'user_idle');
+          return { blocked: true };
+        }
       }
     }
 
@@ -311,12 +378,12 @@ module.exports = {
     // receptividad. Aquí ya no hay tope estático duro (DAILY_BUDGET) que lo
     // anule — el recuento real solo se hace sobre envíos efectivos.
 
-    this._lastAttemptByType[trigger.type] = now;
     this._deciding = true;
     logger.info('gate', `[proactive] trigger: ${trigger.type} — consultando LLM...`);
 
     try {
       const message = await this._generateMessage(trigger);
+      if (!this._lastGenerationError) this._lastAttemptByType[trigger.type] = now;
       if (!message) {
         logger.info('gate', '[proactive] LLM decidió no enviar mensaje');
         return null;
@@ -392,6 +459,9 @@ module.exports = {
       return message;
     } finally {
       this._deciding = false;
+      // Cede el turno antes de intentar la siguiente señal. Si todavía aplica
+      // un cooldown quedará reencolada y el heartbeat la reconsiderará.
+      setTimeout(() => this._drainPendingTriggers(), 0);
     }
   },
 

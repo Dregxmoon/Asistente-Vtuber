@@ -102,6 +102,9 @@ class ProactiveEngine {
     this._timer = null;
     this._running = false;
     this._deciding = false; // lock — solo una consulta al LLM a la vez
+    this._pendingTriggers = []; // señales temporalmente bloqueadas, priorizadas
+    this._pendingTriggerMax = 50;
+    this._pendingTriggerTtlMs = 60 * 60 * 1000;
 
     // Fase A: feedback persistido de propuestas + slider de autonomía.
     // El store es opcional — si no se pasa (tests), todo degrada a no-op.

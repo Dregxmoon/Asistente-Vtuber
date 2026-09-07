@@ -41,6 +41,10 @@ const LSP_TOOLS = new Set([
   'get_diagnostics',
   'go_to_definition',
   'find_references',
+  'go_to_implementation',
+  'completion',
+  'signature_help',
+  'call_hierarchy',
   'get_symbols',
   'workspace_symbols',
   'hover',
@@ -76,7 +80,7 @@ const GITHUB_TOOLS = new Set([
 ]);
 
 // Tool de subagentes (§11): se despacha en proceso lanzando un AgentLoop anidado.
-const SUBAGENT_TOOLS = new Set(['subagent', 'task']);
+const SUBAGENT_TOOLS = new Set(['subagent', 'task', 'subagent_batch']);
 
 // Alias legacy → tool canónica de OpenClaw para TOOL-CALLS NATIVOS (formato
 // JSON de function-calling). El parser estructurado ya normaliza estos nombres
@@ -713,6 +717,12 @@ class AgentLoop {
     const t0 = Date.now();
     let result;
     try {
+      if (opts.pluginManager?.runHook && opts.beforeAgentRunHandled !== true) {
+        await opts.pluginManager.runHook('beforeAgentRun', {
+          mode: this._mode,
+          taskIntent: opts.taskIntent || null,
+        });
+      }
       result = await this._runInternal(userMessage, systemPrompt, messages, opts);
       // Ledger por paso: una tool exitosa deja evidencia, pero solo completa
       // el paso si esa evidencia es compatible o el verificador la confirma.
@@ -731,6 +741,12 @@ class AgentLoop {
           } catch (_) {}
         }
       }
+      if (opts.pluginManager?.runHook) {
+        await opts.pluginManager.runHook('afterAgentRun', {
+          result,
+          mode: this._mode,
+        });
+      }
       return result;
     } finally {
       if (this._manageCheckpoint) {
@@ -744,6 +760,12 @@ class AgentLoop {
       // error o cancelación), sin tocar el contrato del valor de retorno
       // (se agrega solo el campo extra `metrics` al resultado).
       this._emitRunMetrics({ result, t0 });
+      if (opts.pluginManager?.runHook) {
+        await opts.pluginManager.runHook('agentStop', {
+          result: result || null,
+          elapsedMs: Date.now() - t0,
+        });
+      }
     }
   }
 
@@ -1062,8 +1084,30 @@ class AgentLoop {
     let reflectionRounds = 0;
     let failuresAtLastReflection = 0;
     let verifyRepairRounds = 0;
+    const runStartedAt = Date.now();
+    const maxElapsedMs = Math.max(0, Number(opts.maxElapsedMs) || 0);
+    const maxToolCalls = Math.max(0, Number(opts.maxToolCalls) || 0);
 
     for (let i = 0; i < this.maxIterations; i++) {
+      if (
+        (maxElapsedMs > 0 && Date.now() - runStartedAt >= maxElapsedMs) ||
+        (maxToolCalls > 0 && toolResults.length >= maxToolCalls)
+      ) {
+        return {
+          response:
+            lastResponseText ||
+            'La ejecución alcanzó el presupuesto configurado antes de completar la tarea.',
+          iterations: i,
+          toolResults,
+          error: 'budget_exhausted',
+          budget: {
+            elapsedMs: Date.now() - runStartedAt,
+            toolCalls: toolResults.length,
+            maxElapsedMs: maxElapsedMs || null,
+            maxToolCalls: maxToolCalls || null,
+          },
+        };
+      }
       // Cancelación por el usuario (AbortController): se revisa en cada
       // iteración para romper el bucle sin esperar al siguiente turno del LLM.
       if (signal && signal.aborted) {
@@ -1440,6 +1484,7 @@ class AgentLoop {
       const resultSummaries = [];
 
       for (const action of actions) {
+        if (maxToolCalls > 0 && toolResults.length >= maxToolCalls) break;
         const requiresApproval = AP.isHighImpact(action.tool, action.params);
         // Instrumentación: cada tool solicitada por el agente cuenta (aunque
         // luego se bloquee/deniegue/cancele — igual fue pedida).
@@ -1663,6 +1708,8 @@ class AgentLoop {
             result = await this._executeGitHubTool(action);
           } else if (LSP_TOOLS.has(action.tool)) {
             result = await this._executeLSPTool(action);
+          } else if (action.tool === 'subagent_batch') {
+            result = await this._executeSubagentBatch(action);
           } else if (SUBAGENT_TOOLS.has(action.tool)) {
             result = await this._executeSubagent(action);
           } else if (action.tool === 'mcp') {
@@ -1694,6 +1741,14 @@ class AgentLoop {
           }
         } catch (e) {
           result = { ok: false, error: e.message, result: null, tool: action.tool, elapsed: 0 };
+        }
+
+        if (opts.pluginManager?.runHook) {
+          await opts.pluginManager.runHook(result.ok ? 'afterTool' : 'afterToolFailure', {
+            tool: action.tool,
+            params: action.params,
+            result,
+          });
         }
 
         if (SUBAGENT_TOOLS.has(action.tool)) {
@@ -1804,15 +1859,13 @@ class AgentLoop {
           if (lspFeedback && lspFeedback.diagnostics && lspFeedback.diagnostics.length > 0) {
             result.lspDiagnostics = lspFeedback.diagnostics;
           }
-          // Verify por-paso: si el LSP no cubrió el archivo (no hay feedback),
-          // se valida la sintaxis del JS editado con node --check. Esto detecta
-          // en el acto lo que antes solo aparecía en el verify final.
-          if (!lspFeedback) {
-            syntaxError = await this._syntaxCheckForEdit(
-              action.params?.path || action.params?.filePath
-            );
-            if (syntaxError) result.syntaxError = syntaxError;
-          }
+          // El LSP y el parser son oráculos complementarios: checkJs puede no
+          // marcar ciertas construcciones inválidas para el runtime. Ejecutar
+          // siempre el chequeo sintáctico barato evita aceptar un falso verde.
+          syntaxError = await this._syntaxCheckForEdit(
+            action.params?.path || action.params?.filePath
+          );
+          if (syntaxError) result.syntaxError = syntaxError;
         }
 
         let resultSummary;
@@ -2258,6 +2311,18 @@ class AgentLoop {
           return okShape(await this._lsp.goToDefinition(filePath, params.line, params.character));
         case 'find_references':
           return okShape(await this._lsp.findReferences(filePath, params.line, params.character));
+        case 'go_to_implementation':
+          return okShape(
+            await this._lsp.goToImplementation(filePath, params.line, params.character)
+          );
+        case 'completion':
+          return okShape(await this._lsp.completion(filePath, params.line, params.character));
+        case 'signature_help':
+          return okShape(await this._lsp.signatureHelp(filePath, params.line, params.character));
+        case 'call_hierarchy':
+          return okShape(
+            await this._lsp.callHierarchy(filePath, params.line, params.character, params.direction)
+          );
         case 'hover':
           return okShape(await this._lsp.hover(filePath, params.line, params.character));
         case 'rename': {
@@ -2271,6 +2336,11 @@ class AgentLoop {
           // revisa). Con apply:true los escribe vía bridge — la aprobación de
           // alto impacto ya se pidió antes del dispatch (ActionParser).
           if (params.apply === true && Array.isArray(edits) && edits.length > 0) {
+            if (edits.some((edit) => edit.resourceOperation)) {
+              return failShape(
+                'El rename incluye operaciones de recursos (crear/renombrar/borrar). Se devolvieron para revisión pero no se autoaplican.'
+              );
+            }
             const applied = await this._applyWorkspaceEdits(edits);
             return okShape({ applied: true, files: applied, edits });
           }
@@ -2901,6 +2971,49 @@ class AgentLoop {
         elapsed: Math.round((Date.now() - t0) / 1000),
       };
     }
+  }
+
+  /** Ejecuta investigación paralela con perfiles que no pueden mutar. */
+  async _executeSubagentBatch(action) {
+    const t0 = Date.now();
+    const tasks = Array.isArray(action?.params?.tasks) ? action.params.tasks.slice(0, 4) : [];
+    if (tasks.length < 2) {
+      return {
+        ok: false,
+        result: null,
+        error: 'tasks requiere entre 2 y 4 subtareas',
+        tool: action.tool,
+        elapsed: 0,
+      };
+    }
+    for (const item of tasks) {
+      const profile = getSubagentRegistry().resolve(item.agent || '');
+      if (!profile || !profile.readOnly) {
+        return {
+          ok: false,
+          result: null,
+          error: `subagent_batch solo admite perfiles read_only: ${item.agent || 'sin perfil'}`,
+          tool: action.tool,
+          elapsed: Date.now() - t0,
+        };
+      }
+    }
+    const reports = await Promise.all(
+      tasks.map((item) =>
+        this._executeSubagent({ tool: 'subagent', params: item }).then((result) => ({
+          task: item.task,
+          agent: item.agent,
+          ...result,
+        }))
+      )
+    );
+    return {
+      ok: reports.every((report) => report.ok),
+      result: { reports },
+      error: reports.every((report) => report.ok) ? null : 'uno o más subagentes fallaron',
+      tool: action.tool,
+      elapsed: Date.now() - t0,
+    };
   }
 
   // Convierte una instrucción de edición en lenguaje natural a un diff exacto

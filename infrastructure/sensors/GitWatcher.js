@@ -76,6 +76,7 @@ class GitWatcher extends BasePollingWatcher {
     if (!fs.existsSync(path.join(ws, '.git'))) return;
 
     const repo = await this._git(['rev-parse', '--is-inside-work-tree']);
+    if (this._pollController?.signal.aborted) return;
     if (repo.code !== 0 || repo.stdout.trim() !== 'true') return;
 
     const branch = (await this._git(['rev-parse', '--abbrev-ref', 'HEAD'])).stdout.trim();
@@ -105,7 +106,14 @@ class GitWatcher extends BasePollingWatcher {
 
     // Conflictos de merge sin resolver
     const conflicted = (await this._git(['ls-files', '-u'])).stdout;
-    const conflictCount = conflicted.trim() ? conflicted.trim().split('\n').length : 0;
+    const conflictFiles = new Set(
+      conflicted
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => line.split('\t').pop())
+    );
+    const conflictCount = conflictFiles.size;
     this._setFlag('merge_conflict', conflictCount > 0, () => {
       this._bus.emit('git:redflag', {
         kind: 'merge_conflict',
@@ -117,6 +125,7 @@ class GitWatcher extends BasePollingWatcher {
 
     // Demasiados cambios sin commitear
     const porcelain = (await this._git(['status', '--porcelain'])).stdout;
+    if (this._pollController?.signal.aborted) return;
     const dirty = porcelain.trim() ? porcelain.trim().split('\n').length : 0;
     this._setFlag('uncommitted', dirty >= UNCOMMITTED_THRESHOLD, () => {
       this._bus.emit('git:redflag', {
@@ -139,6 +148,8 @@ class GitWatcher extends BasePollingWatcher {
           message: `Hay ${count} commit(s) locales sin subir a la rama remota.`,
         });
       });
+    } else {
+      this._setFlag('unpushed', false);
     }
   }
 

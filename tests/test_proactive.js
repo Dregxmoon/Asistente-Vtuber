@@ -242,9 +242,37 @@ async function testDecidingLock() {
   const res = await engine._tryTrigger({ type: 'long_silence', context: 'x' });
   assert(res && res.blocked, 'mientras _deciding=true → { blocked }');
   assert(!engine._lastAttemptByType['long_silence'], 'bloqueado por lock → NO consume cooldown');
+  assert(engine._pendingTriggers.length === 1, 'señal bloqueada por lock queda en cola priorizada');
   engine._deciding = false;
-  const res2 = await engine._tryTrigger({ type: 'long_silence', context: 'x' });
+  await engine._drainPendingTriggers();
+  const res2 = engine._lastProactiveMessage;
   assert(typeof res2 === 'string', 'tras liberar el lock → dispara');
+
+  engine._pendingTriggerMax = 2;
+  engine._pendingTriggers = [];
+  engine._enqueuePendingTrigger({ type: 'low_a', context: 'a' });
+  engine._enqueuePendingTrigger({ type: 'low_b', context: 'b' });
+  engine._enqueuePendingTrigger({ type: 'critical', context: 'c', isCritical: true });
+  assert(
+    engine._pendingTriggers.length === 2 &&
+      engine._pendingTriggers.some((item) => item.trigger.type === 'critical'),
+    'cola llena conserva la señal nueva de mayor prioridad'
+  );
+  engine.stop();
+  restore();
+}
+
+async function testGenerationFailureDoesNotConsumeCooldown() {
+  console.log(C.bold('\nTest 4b: fallo del proveedor no consume cooldown'));
+  const restore = stubLLM({
+    complete: async () => {
+      throw new Error('provider caído');
+    },
+  });
+  const engine = makeEngine();
+  const result = await engine._tryTrigger({ type: 'long_silence', context: 'x' });
+  assert(result === null, 'fallo de generación degrada a silencio');
+  assert(!engine._lastAttemptByType.long_silence, 'fallo de generación no consume cooldown');
   engine.stop();
   restore();
 }
@@ -2043,6 +2071,7 @@ async function testCuriosityOutcomeLoop() {
   await testTypeCooldown();
   await testGlobalGap();
   await testDecidingLock();
+  await testGenerationFailureDoesNotConsumeCooldown();
   await testIdleGate();
   await testFocusBlockEnd();
   await testNoMidFlowNag();

@@ -28,6 +28,7 @@ class BasePollingWatcher {
     this._running = false;
     this._polling = false;
     this._lastError = null;
+    this._pollController = null;
   }
 
   start() {
@@ -43,18 +44,23 @@ class BasePollingWatcher {
       this._timer = null;
     }
     this._running = false;
+    this._pollController?.abort();
   }
 
   async poll(...args) {
     if (this._polling) return;
     this._polling = true;
+    const controller = new AbortController();
+    this._pollController = controller;
     try {
       await this._scan(...args);
+      this._lastError = null;
     } catch (e) {
       this._lastError = e.message;
       if (process.env.DEBUG)
         logger.warn('BasePollingWatcher', `[${this.constructor.name.toLowerCase()}]`, e.message);
     } finally {
+      if (this._pollController === controller) this._pollController = null;
       this._polling = false;
     }
   }

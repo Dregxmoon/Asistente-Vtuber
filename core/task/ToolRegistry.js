@@ -296,6 +296,23 @@ const TOOL_SCHEMAS = [
     examples: [{ cmd: 'investigar X y resumir', desc: 'Subagente de investigación' }],
     highImpact: false,
   },
+  {
+    id: 'openclaw.subagent_batch',
+    name: 'subagent_batch',
+    domain: ['core'],
+    source: 'openclaw',
+    description:
+      'Ejecuta en paralelo de 2 a 4 subagentes con perfiles de solo lectura para investigar subtareas independientes.',
+    params: [
+      {
+        name: 'tasks',
+        type: 'array',
+        description: 'Lista de subtareas {task, agent, context?, max_iterations?}',
+        required: true,
+      },
+    ],
+    highImpact: false,
+  },
   // ── LSP tools (Fase 7) ─────────────────────────────────────────────────────
   {
     id: 'lsp.get_diagnostics',
@@ -340,6 +357,27 @@ const TOOL_SCHEMAS = [
     ],
     highImpact: false,
   },
+  ...['go_to_implementation', 'completion', 'signature_help', 'call_hierarchy'].map((name) => ({
+    id: `lsp.${name}`,
+    name,
+    domain: ['code', 'lsp'],
+    source: 'lsp',
+    description: {
+      go_to_implementation: 'Localiza implementaciones concretas de un símbolo',
+      completion: 'Obtiene completaciones válidas para una posición',
+      signature_help: 'Obtiene firmas y parámetros de una llamada',
+      call_hierarchy: 'Obtiene la jerarquía de llamadas entrantes o salientes',
+    }[name],
+    params: [
+      { name: 'filePath', type: 'string', required: true },
+      { name: 'line', type: 'number', required: true },
+      { name: 'character', type: 'number', required: true },
+      ...(name === 'call_hierarchy'
+        ? [{ name: 'direction', type: 'string', required: false }]
+        : []),
+    ],
+    highImpact: false,
+  })),
   {
     id: 'lsp.get_symbols',
     name: 'get_symbols',
@@ -881,7 +919,7 @@ class ToolRegistry {
       } catch (e) {}
     }
     return TOOL_SCHEMAS.filter((s) => (s.source || 'openclaw') === 'openclaw')
-      .filter((s) => this._subagentsEnabled || s.name !== 'subagent')
+      .filter((s) => this._subagentsEnabled || !['subagent', 'subagent_batch'].includes(s.name))
       .map((s) => ({
         ...s,
         available,

@@ -67,6 +67,7 @@ function _parseEventTime(content, now) {
     const ampm = (m[3] || '').toLowerCase();
     if (ampm === 'pm' && hour < 12) hour += 12;
     if (ampm === 'am' && hour === 12) hour = 0;
+    if (minute > 59 || hour > 23 || (ampm && parseInt(m[1], 10) > 12)) return null;
     time = { hour, minute, ampm };
   }
 
@@ -80,6 +81,7 @@ function _parseEventTime(content, now) {
     const d = parseInt(m[1], 10);
     const todayStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate());
     let dt = new Date(nowDate.getFullYear(), month, d);
+    if (dt.getMonth() !== month || dt.getDate() !== d) return null;
     // Solo se rota al año siguiente si el día YA PASÓ (comparando días, no
     // timestamps: "el 15 de junio" el mismo 15 de junio debe quedarse en el
     // presente aunque ya hayan pasado las 00:00).
@@ -153,10 +155,18 @@ class UpcomingEventsWatcher extends BasePollingWatcher {
     }
 
     for (const node of nodes) {
+      if (this._pollController?.signal.aborted) return;
       const label = String(node.label || '');
       if (!label.startsWith('recordar_')) continue;
 
-      const parsed = _parseEventTime(node.content, now);
+      // Las expresiones relativas se anclan al momento en que se creó el
+      // recordatorio. Recalcular "en 30 minutos" desde cada poll lo desplazaba
+      // indefinidamente y cambiaba su clave de deduplicación.
+      const relative = /\ben\s+\d{1,3}\s+(?:min(?:uto)?s?|hora(?:s)?)\b/i.test(
+        String(node.content || '')
+      );
+      const anchor = relative ? Number(node.created_at || node.createdAt || now) : now;
+      const parsed = _parseEventTime(node.content, anchor);
       if (!parsed) continue;
 
       if (parsed.kind === 'time_event') {

@@ -53,7 +53,7 @@ function testLSPToolSchemas() {
   const registry = getToolRegistry();
 
   const lspTools = registry._getLSPTools();
-  assertEqual(lspTools.length, 8, '8 tools LSP registradas');
+  assertEqual(lspTools.length, 12, '12 tools LSP registradas');
 
   const names = lspTools.map((t) => t.name).sort();
   const expected = [
@@ -62,10 +62,14 @@ function testLSPToolSchemas() {
     'get_diagnostics',
     'get_symbols',
     'go_to_definition',
+    'go_to_implementation',
     'hover',
+    'call_hierarchy',
+    'completion',
     'rename',
+    'signature_help',
     'workspace_symbols',
-  ];
+  ].sort();
   for (let i = 0; i < expected.length; i++) {
     assertEqual(names[i], expected[i], `tool LSP: ${expected[i]}`);
   }
@@ -93,6 +97,10 @@ function testLSPNativeSchemas() {
     'hover',
     'rename',
     'code_actions',
+    'go_to_implementation',
+    'completion',
+    'signature_help',
+    'call_hierarchy',
   ];
   for (const name of lspNames) {
     const schema = schemas.find((s) => s.name === name);
@@ -109,6 +117,7 @@ async function testLSPInToolResolver() {
   const { resolveToolset } = require('../core/task/ToolResolver.js');
   const { getToolRegistry } = require('../core/task/ToolRegistry.js');
   const registry = getToolRegistry();
+  registry.setLSPManager({ isRunning: true });
 
   const result = await resolveToolset({
     toolRegistry: registry,
@@ -138,9 +147,14 @@ async function testLSPInToolResolver() {
       'hover',
       'rename',
       'code_actions',
+      'go_to_implementation',
+      'completion',
+      'signature_help',
+      'call_hierarchy',
     ].includes(s.name)
   );
-  assertEqual(lspSchemas.length, 8, '8 LSP tools en nativeToolSchemas');
+  assertEqual(lspSchemas.length, 12, '12 LSP tools en nativeToolSchemas');
+  registry.setLSPManager(null);
 }
 
 // ── Test 5: JSON-RPC message encoding/decoding ────────────────────────────
@@ -266,8 +280,7 @@ async function testDiagnosticPullTimeout() {
   console.log(C.bold('\n── Timeout del pull de diagnósticos ─────────────────'));
 
   const { _LSPInstance } = require('../core/lsp/LSPManager.js');
-  // Sin proceso real: _send es no-op, así que ninguna request recibe respuesta
-  // y el único camino de resolución es el timeout per-request.
+  // Sin proceso real el request debe fallar inmediatamente.
   const inst = new _LSPInstance({ languageId: 'python' }, 'python');
 
   const t0 = Date.now();
@@ -278,8 +291,11 @@ async function testDiagnosticPullTimeout() {
     err = e;
   }
   const elapsed = Date.now() - t0;
-  assert(!!err && err.message.includes('timed out'), 'request sin respuesta rechaza con timeout');
-  assert(elapsed < 5000, `respeta el timeout corto per-request (~300ms, tomó ${elapsed}ms)`);
+  assert(
+    !!err && err.message.includes('no disponible'),
+    'request sin proceso falla explícitamente'
+  );
+  assert(elapsed < 100, `falla rápido sin esperar timeout (tomó ${elapsed}ms)`);
   assertEqual(inst._pending.size, 0, 'el pending se limpia tras el timeout');
 }
 

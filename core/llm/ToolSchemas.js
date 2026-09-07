@@ -223,6 +223,32 @@ const TOOL_SCHEMAS = [
       required: ['task'],
     },
   },
+  {
+    name: 'subagent_batch',
+    description:
+      'Ejecuta en paralelo entre 2 y 4 subagentes de solo lectura para investigar partes independientes y devuelve todos sus reportes.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        tasks: {
+          type: 'array',
+          minItems: 2,
+          maxItems: 4,
+          items: {
+            type: 'object',
+            properties: {
+              task: { type: 'string' },
+              agent: { type: 'string', description: 'Perfil read_only' },
+              context: { type: 'string' },
+              max_iterations: { type: 'number', default: 8 },
+            },
+            required: ['task', 'agent'],
+          },
+        },
+      },
+      required: ['tasks'],
+    },
+  },
   // ── LSP tools (Fase 7) ─────────────────────────────────────────────
   {
     name: 'get_diagnostics',
@@ -263,6 +289,27 @@ const TOOL_SCHEMAS = [
       required: ['filePath', 'line', 'character'],
     },
   },
+  ...['go_to_implementation', 'completion', 'signature_help', 'call_hierarchy'].map((name) => ({
+    name,
+    description: {
+      go_to_implementation: 'Localiza implementaciones concretas de una interfaz o símbolo vía LSP',
+      completion: 'Obtiene completaciones válidas en una posición vía LSP',
+      signature_help: 'Obtiene firmas y parámetros de la llamada actual vía LSP',
+      call_hierarchy: 'Obtiene llamadas entrantes o salientes de un símbolo vía LSP',
+    }[name],
+    inputSchema: {
+      type: 'object',
+      properties: {
+        filePath: { type: 'string', description: 'Ruta del archivo' },
+        line: { type: 'number', description: 'Línea (0-indexed)' },
+        character: { type: 'number', description: 'Columna (0-indexed)' },
+        ...(name === 'call_hierarchy'
+          ? { direction: { type: 'string', enum: ['incoming', 'outgoing'] } }
+          : {}),
+      },
+      required: ['filePath', 'line', 'character'],
+    },
+  })),
   {
     name: 'get_symbols',
     description:

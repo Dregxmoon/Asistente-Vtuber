@@ -383,7 +383,10 @@ function init(app) {
     state.gitWatcher = startSensor('git', () => new GitWatcher({ workspace: projectCWD }));
   }
   if (sensorsCfg.system !== false) {
-    state.systemWatcher = startSensor('system', () => new SystemWatcher());
+    state.systemWatcher = startSensor(
+      'system',
+      () => new SystemWatcher({ getWorkspace: () => state.activeWorkspace })
+    );
   }
   if (sensorsCfg.title !== false) {
     state.titleWatcher = startSensor('title', () => new TitleWatcher());
@@ -485,6 +488,20 @@ function init(app) {
 
   // Workspace inicial async (MCP filesystem)
   if (_initialWorkspace) {
+    let backgroundStarted = false;
+    const startBackgroundEngines = () => {
+      if (backgroundStarted) return;
+      backgroundStarted = true;
+      state.proactive.start();
+      state.goalGovernor.start();
+      state.proactive
+        .pendingRecap()
+        .catch((e) => logger.warn('init', '[core] error en recap de pendientes:', e.message));
+      if (readSensorsConfig().lsp !== false && state.lspErrorWatcher) {
+        state.lspErrorWatcher.start();
+        logger.info('init', '[core] LSPErrorWatcher activo');
+      }
+    };
     state.mcpReadyPromise
       .then(() => setActiveWorkspace(_initialWorkspace))
       .then((r) => {
@@ -494,18 +511,17 @@ function init(app) {
             `[core] workspace inicial (${_envWorkspace ? 'ASISTENTE_WORKSPACE' : 'default (directorio de la app)'}):`,
             r.path
           );
-          state.proactive.start();
-          state.goalGovernor.start();
-          // Fase C: ofrecer retomar lo pendiente (recordatorios) al arrancar.
-          state.proactive
-            .pendingRecap()
-            .catch((e) => logger.warn('init', '[core] error en recap de pendientes:', e.message));
-          // Fase D: watcher de errores LSP (con su propio scope).
-          if (readSensorsConfig().lsp !== false && state.lspErrorWatcher) {
-            state.lspErrorWatcher.start();
-            logger.info('init', '[core] LSPErrorWatcher activo');
-          }
-        } else logger.warn('init', '[core] workspace inicial inválido:', r.error);
+          startBackgroundEngines();
+        } else {
+          logger.warn('init', '[core] workspace inicial inválido:', r.error);
+          startBackgroundEngines();
+        }
+      })
+      .catch((e) => {
+        logger.error('init', '[core] fallo preparando workspace/MCP:', e.message);
+        // OS, recordatorios y telemetría proactiva pueden operar degradados sin
+        // MCP. El watcher LSP hará no-op hasta que exista un workspace válido.
+        startBackgroundEngines();
       });
   }
 

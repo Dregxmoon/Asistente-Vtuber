@@ -59,7 +59,10 @@ class _LSPInstance {
     this._process = null;
     this._requestId = 1;
     this._pending = new Map();
-    this._buffer = '';
+    // JSON-RPC expresa Content-Length en bytes, no en caracteres. Mantener el
+    // acumulador como Buffer evita desincronizar mensajes que contienen UTF-8
+    // multibyte (acentos, CJK, emoji, etc.).
+    this._buffer = Buffer.alloc(0);
     this._capabilities = null;
     this._diagnostics = new Map();
     this._workspacePath = null;
@@ -185,6 +188,14 @@ class _LSPInstance {
       return Promise.resolve(fallbackLib);
     }
 
+    if (process.env.KAORU_LSP_ALLOW_DOWNLOADS !== '1') {
+      logger.warn(
+        'LSPManager',
+        `[lsp:${this._languageKey}] falta TypeScript 5 de respaldo; no se descargará sin KAORU_LSP_ALLOW_DOWNLOADS=1`
+      );
+      return Promise.resolve(null);
+    }
+
     logger.info(
       'LSPManager',
       `[lsp:${this._languageKey}] workspace con TypeScript sin tsserver — instalando typescript@5 en caché...`
@@ -222,7 +233,11 @@ class _LSPInstance {
       let started = false;
       let proc;
       try {
-        proc = _spawnLspServer(config.command, config.args, {
+        const spawnArgs =
+          config.npx && process.env.KAORU_LSP_ALLOW_DOWNLOADS !== '1'
+            ? (config.args || []).map((arg) => (arg === '-y' ? '--no-install' : arg))
+            : config.args;
+        proc = _spawnLspServer(config.command, spawnArgs, {
           cwd: workspacePath,
           stdio: ['pipe', 'pipe', 'pipe'],
           env: { ...process.env, ...(this._env || {}) },
@@ -274,7 +289,8 @@ class _LSPInstance {
       });
 
       proc.stdout.on('data', (data) => {
-        this._buffer += data.toString();
+        const chunk = Buffer.isBuffer(data) ? data : Buffer.from(data);
+        this._buffer = Buffer.concat([this._buffer, chunk]);
         this._processBuffer();
       });
 
@@ -462,7 +478,7 @@ class _LSPInstance {
     // `npx` re-ejecuta el server en un hijo — matar npx no basta. Recorremos
     // /proc y matamos también a los descendientes.
     try {
-      _killTree(this._process.pid);
+      await _killTree(this._process.pid);
     } catch (e) {
       logger.warn(
         'LSPManager',
@@ -665,6 +681,64 @@ class _LSPInstance {
     }));
   }
 
+  async goToImplementation(filePath, line, character) {
+    const absPath = path.resolve(filePath);
+    const uri = _toFileUri(absPath);
+    await this.openDocument(filePath);
+    const result = await this._request('textDocument/implementation', {
+      textDocument: { uri },
+      position: { line, character },
+    });
+    if (!result) return [];
+    return (Array.isArray(result) ? result : [result]).map((loc) => ({
+      uri: loc.uri || loc.targetUri,
+      filePath: loc.uri || loc.targetUri ? _fromFileUri(loc.uri || loc.targetUri) : null,
+      range: loc.range || loc.targetSelectionRange || loc.targetRange,
+    }));
+  }
+
+  async completion(filePath, line, character) {
+    const uri = _toFileUri(path.resolve(filePath));
+    await this.openDocument(filePath);
+    const result = await this._request('textDocument/completion', {
+      textDocument: { uri },
+      position: { line, character },
+    });
+    const items = Array.isArray(result) ? result : result?.items || [];
+    return items.slice(0, 100).map((item) => ({
+      label: item.label,
+      kind: item.kind || null,
+      detail: item.detail || '',
+      insertText: item.insertText || item.textEdit?.newText || item.label,
+      textEdit: item.textEdit || null,
+    }));
+  }
+
+  async signatureHelp(filePath, line, character) {
+    const uri = _toFileUri(path.resolve(filePath));
+    await this.openDocument(filePath);
+    return (
+      (await this._request('textDocument/signatureHelp', {
+        textDocument: { uri },
+        position: { line, character },
+      })) || { signatures: [] }
+    );
+  }
+
+  async callHierarchy(filePath, line, character, direction = 'incoming') {
+    const uri = _toFileUri(path.resolve(filePath));
+    await this.openDocument(filePath);
+    const prepared = await this._request('textDocument/prepareCallHierarchy', {
+      textDocument: { uri },
+      position: { line, character },
+    });
+    const item = Array.isArray(prepared) ? prepared[0] : null;
+    if (!item) return [];
+    const method =
+      direction === 'outgoing' ? 'callHierarchy/outgoingCalls' : 'callHierarchy/incomingCalls';
+    return (await this._request(method, { item })) || [];
+  }
+
   async getDocumentSymbols(filePath) {
     const absPath = path.resolve(filePath);
     const uri = _toFileUri(absPath);
@@ -743,14 +817,21 @@ class _LSPInstance {
       position: { line, character },
       newName,
     });
-    if (!result?.changes) return [];
     const edits = [];
-    for (const [fileUri, textEdits] of Object.entries(result.changes)) {
-      edits.push({
-        filePath: _fromFileUri(fileUri),
-        uri: fileUri,
-        edits: textEdits,
-      });
+    for (const [fileUri, textEdits] of Object.entries(result?.changes || {})) {
+      edits.push({ filePath: _fromFileUri(fileUri), uri: fileUri, edits: textEdits });
+    }
+    for (const change of result?.documentChanges || []) {
+      if (change?.textDocument?.uri && Array.isArray(change.edits)) {
+        edits.push({
+          filePath: _fromFileUri(change.textDocument.uri),
+          uri: change.textDocument.uri,
+          version: change.textDocument.version ?? null,
+          edits: change.edits,
+        });
+      } else if (change?.kind) {
+        edits.push({ resourceOperation: change.kind, ...change });
+      }
     }
     return edits;
   }
@@ -809,7 +890,11 @@ class _LSPInstance {
         reject(new Error(`LSP request "${method}" timed out after ${effectiveTimeout}ms`));
       }, effectiveTimeout);
       this._pending.set(id, { resolve, reject, method, timer });
-      this._send({ jsonrpc: '2.0', id, method, params });
+      if (this._send({ jsonrpc: '2.0', id, method, params }) === false) {
+        clearTimeout(timer);
+        this._pending.delete(id);
+        reject(new Error(`LSP no disponible para request "${method}"`));
+      }
     });
   }
 
@@ -818,38 +903,54 @@ class _LSPInstance {
   }
 
   _send(message) {
-    if (!this._process || !this._process.stdin.writable) return;
+    if (!this._process) return false;
+    // Durante un spawn fallido `error` puede llegar unas microtareas después
+    // de que stdin deje de estar writable. Conservar el pending permite que el
+    // handler de error active auto-install/recovery y rechace con la causa real.
+    if (!this._process.stdin.writable) return null;
     const body = JSON.stringify(message);
     const header = `Content-Length: ${Buffer.byteLength(body, 'utf-8')}\r\n\r\n`;
     this._process.stdin.write(header + body);
+    return true;
   }
 
   _processBuffer() {
-    const idx = this._buffer.indexOf('\r\n\r\n');
-    if (idx === -1) return;
-
-    const headerPart = this._buffer.slice(0, idx);
-    const match = headerPart.match(/Content-Length:\s*(\d+)/i);
-    if (!match) {
-      this._buffer = '';
-      return;
-    }
-
-    const contentLength = parseInt(match[1], 10);
-    const bodyStart = idx + 4;
-    if (this._buffer.length < bodyStart + contentLength) return;
-
-    const body = this._buffer.slice(bodyStart, bodyStart + contentLength);
-    this._buffer = this._buffer.slice(bodyStart + contentLength);
-
-    try {
-      const msg = JSON.parse(body);
-      this._handleMessage(msg);
-    } catch (_) {}
-
-    // Process remaining buffer
-    if (this._buffer.includes('\r\n\r\n')) {
-      this._processBuffer();
+    const delimiter = Buffer.from('\r\n\r\n');
+    while (this._buffer.length > 0) {
+      const idx = this._buffer.indexOf(delimiter);
+      if (idx === -1) return;
+      // Un servidor roto no puede hacer crecer el main process sin límite.
+      if (idx > 16 * 1024) {
+        this._buffer = Buffer.alloc(0);
+        return;
+      }
+      const headerPart = this._buffer.subarray(0, idx).toString('ascii');
+      const match = headerPart.match(/Content-Length:\s*(\d+)/i);
+      if (!match) {
+        this._buffer = this._buffer.subarray(idx + delimiter.length);
+        continue;
+      }
+      const contentLength = Number.parseInt(match[1], 10);
+      if (
+        !Number.isSafeInteger(contentLength) ||
+        contentLength < 0 ||
+        contentLength > 16 * 1024 * 1024
+      ) {
+        this._buffer = Buffer.alloc(0);
+        return;
+      }
+      const bodyStart = idx + delimiter.length;
+      if (this._buffer.length < bodyStart + contentLength) return;
+      const body = this._buffer.subarray(bodyStart, bodyStart + contentLength).toString('utf8');
+      this._buffer = this._buffer.subarray(bodyStart + contentLength);
+      try {
+        this._handleMessage(JSON.parse(body));
+      } catch (e) {
+        logger.warn(
+          'LSPManager',
+          `[lsp:${this._languageKey}] respuesta JSON inválida: ${e.message}`
+        );
+      }
     }
   }
 
@@ -1216,6 +1317,26 @@ class LSPManager {
     return inst.findReferences(filePath, line, character);
   }
 
+  async goToImplementation(filePath, line, character) {
+    const inst = this._languageForFile(filePath);
+    return inst ? inst.goToImplementation(filePath, line, character) : [];
+  }
+
+  async completion(filePath, line, character) {
+    const inst = this._languageForFile(filePath);
+    return inst ? inst.completion(filePath, line, character) : [];
+  }
+
+  async signatureHelp(filePath, line, character) {
+    const inst = this._languageForFile(filePath);
+    return inst ? inst.signatureHelp(filePath, line, character) : { signatures: [] };
+  }
+
+  async callHierarchy(filePath, line, character, direction = 'incoming') {
+    const inst = this._languageForFile(filePath);
+    return inst ? inst.callHierarchy(filePath, line, character, direction) : [];
+  }
+
   async getDocumentSymbols(filePath) {
     const inst = this._languageForFile(filePath);
     if (!inst) return [];
@@ -1260,8 +1381,17 @@ class LSPManager {
    */
   static detectLanguagesForWorkspace(ws) {
     const root = path.resolve(ws);
+    let rootEntries = null;
     const has = (f) => {
       try {
+        if (/[?*]/.test(f)) {
+          rootEntries ||= fs.readdirSync(root);
+          const escaped = f
+            .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+            .replace(/\*/g, '.*')
+            .replace(/\?/g, '.');
+          return rootEntries.some((entry) => new RegExp(`^${escaped}$`, 'i').test(entry));
+        }
         return fs.existsSync(path.join(root, f));
       } catch {
         return false;
@@ -1274,8 +1404,11 @@ class LSPManager {
       languages.push(LSPManager._jsIsTypescript(root) ? 'typescript' : 'javascript');
     }
 
-    // Resto por manifiesto (orden de la tabla)
-    for (const key of ['python', 'go', 'rust', 'ruby', 'php', 'java']) {
+    const remaining = Object.keys(loadServersTable()).filter(
+      (key) => key !== 'typescript' && key !== 'javascript'
+    );
+    // Resto por manifiesto (orden de la tabla declarativa).
+    for (const key of remaining) {
       const cfg = loadServersTable()[key];
       if (cfg && (cfg.manifests || []).some(has)) languages.push(key);
     }
@@ -1285,7 +1418,7 @@ class LSPManager {
     // suficientes archivos de un lenguaje SIN server detectado, arrancarlo
     // igual — el LSP vale más que el manifiesto. Bounded: máx 2 niveles de
     // profundidad, carpetas ruido ignoradas.
-    for (const key of ['python', 'go', 'rust', 'ruby', 'php', 'java']) {
+    for (const key of remaining) {
       if (languages.includes(key)) continue;
       const cfg = loadServersTable()[key];
       const patterns = (cfg?.filePatterns || []).map((p) => String(p).toLowerCase());
@@ -1404,23 +1537,26 @@ function _spawnLspServer(command, args, options) {
 // Mata el árbol de procesos del server LSP. En Linux se recorre /proc (npx
 // lanza el server real en un hijo). En Windows `spawn` con shell:true deja el
 // server como hijo de cmd.exe → hay que matarlo por árbol con taskkill /T.
-function _killTree(rootPid) {
+async function _killTree(rootPid) {
   if (process.platform === 'win32') {
-    try {
-      require('child_process').execFileSync('taskkill', ['/pid', String(rootPid), '/T', '/F'], {
+    await new Promise((resolve) => {
+      const child = spawn('taskkill', ['/pid', String(rootPid), '/T', '/F'], {
         stdio: 'ignore',
+        windowsHide: true,
       });
-    } catch {}
+      child.once('error', () => resolve());
+      child.once('exit', () => resolve());
+    });
     return;
   }
   if (process.platform !== 'linux') return;
   const children = new Map();
   try {
-    for (const entry of require('fs').readdirSync('/proc')) {
+    for (const entry of await fs.promises.readdir('/proc')) {
       if (!/^\d+$/.test(entry)) continue;
       let ppid = -1;
       try {
-        const stat = require('fs').readFileSync(`/proc/${entry}/stat`, 'utf-8');
+        const stat = await fs.promises.readFile(`/proc/${entry}/stat`, 'utf-8');
         const close = stat.lastIndexOf(')');
         ppid = parseInt(
           stat

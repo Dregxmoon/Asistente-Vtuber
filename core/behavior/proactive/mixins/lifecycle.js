@@ -22,7 +22,10 @@ module.exports = {
     // el gate apartó mientras el chat estaba abierto. Antes solo se drenaban
     // en el heartbeat o al volver de una pausa, así que en sesiones largas con
     // la ventana abierta las señales de sensor expiraban por TTL sin entregarse.
-    if (!open && typeof this._replayQueued === 'function') this._replayQueued();
+    if (!open && typeof this._replayQueued === 'function') {
+      this._replayQueued();
+      this._drainPendingTriggers?.();
+    }
   },
 
   setAutonomyMode(mode) {
@@ -78,6 +81,7 @@ module.exports = {
 
   start() {
     if (this._running) return;
+    this._setupListeners();
     this._running = true;
     logger.info(
       'lifecycle',
@@ -85,6 +89,7 @@ module.exports = {
     );
     setTimeout(() => this._evaluateTimeBased(), 2 * 60 * 1000);
     this._timer = setInterval(() => this._evaluateTimeBased(), EVAL_INTERVAL_MS);
+    setTimeout(() => this._drainPendingTriggers?.(), 0);
   },
 
   stop() {
@@ -106,6 +111,7 @@ module.exports = {
     this._bus.off('initiative:decision', this._boundOnDecision);
     this._bus.off('workspace:changed', this._boundOnWorkspaceChanged);
     this._bus.off('goal:ready', this._boundOnGoalReady);
+    this._listenersAttached = false;
     this._running = false;
     logger.info('lifecycle', '[proactive] detenido');
   },
@@ -113,6 +119,7 @@ module.exports = {
   // ── Listeners de eventos del OS (análisis en vivo, sin esperar timer) ──────
 
   _setupListeners() {
+    if (this._listenersAttached) return;
     this._boundOnTurnAdded = ({ role, content }) => {
       if (role === 'user') this.onUserMessage(content);
     };
@@ -159,5 +166,6 @@ module.exports = {
     this._bus.on('initiative:decision', this._boundOnDecision);
     this._bus.on('workspace:changed', this._boundOnWorkspaceChanged);
     this._bus.on('goal:ready', this._boundOnGoalReady);
+    this._listenersAttached = true;
   },
 };

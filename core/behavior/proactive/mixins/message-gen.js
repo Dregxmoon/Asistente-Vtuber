@@ -142,6 +142,7 @@ function _pickTasteFirst(nodes, max) {
 
 module.exports = {
   async _generateMessage(trigger) {
+    this._lastGenerationError = false;
     const osCtx = this._osSensor?.getCurrentContext() ?? null;
     const memory = await this._buildMemoryContext(trigger);
     const focus =
@@ -373,6 +374,7 @@ No expliques por qué escribes. No anuncies que eres proactiva. NO muestres tu r
 
       return trimmed;
     } catch (e) {
+      this._lastGenerationError = true;
       logger.warn('message-gen', '[proactive] error generando mensaje:', e.message);
       return null;
     }

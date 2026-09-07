@@ -56,13 +56,13 @@ const IGNORED_DIRS = dirSet([
   'venv',
 ]);
 
-function _defaultListFiles(ws, max = DEFAULT_MAX_INDEXED) {
+async function _defaultListFiles(ws, max = DEFAULT_MAX_INDEXED) {
   const results = [];
-  const walk = (dir, depth) => {
+  const walk = async (dir, depth) => {
     if (results.length >= max) return;
     let entries;
     try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
     } catch {
       return;
     }
@@ -71,13 +71,13 @@ function _defaultListFiles(ws, max = DEFAULT_MAX_INDEXED) {
       const full = path.join(dir, e.name);
       if (e.isDirectory()) {
         if (IGNORED_DIRS.has(e.name) || depth >= 8) continue;
-        walk(full, depth + 1);
+        await walk(full, depth + 1);
       } else if (e.isFile()) {
         results.push(full);
       }
     }
   };
-  walk(ws, 0);
+  await walk(ws, 0);
   return results;
 }
 
@@ -88,6 +88,7 @@ function _normalizeError(d) {
     line: d.range?.start?.line ?? 0,
     character: d.range?.start?.character ?? 0,
     severity: d.severity ?? 1,
+    source: d.source || null,
   };
 }
 
@@ -134,6 +135,7 @@ class LSPErrorWatcher extends BasePollingWatcher {
     this._emitted = 0;
     // P4: debounce del scan reactivo + handler de os:app-changed.
     this._lastForcedScan = 0;
+    this._scanCursor = 0;
     this._appChangedHandler = null;
   }
 
@@ -169,6 +171,7 @@ class LSPErrorWatcher extends BasePollingWatcher {
     this._focusedFile = null;
     this._signals.clear();
     this._lastErrors.clear();
+    this._scanCursor = 0;
   }
 
   // ── Escaneo ──────────────────────────────────────────────────────────────
@@ -191,7 +194,7 @@ class LSPErrorWatcher extends BasePollingWatcher {
       }
     }
 
-    const candidates = this._buildCandidates(ws, focused);
+    const candidates = await this._buildCandidates(ws, focused);
     for (const abs of candidates) {
       let diagnostics;
       try {
@@ -205,6 +208,7 @@ class LSPErrorWatcher extends BasePollingWatcher {
           );
         continue;
       }
+      if (this._pollController?.signal.aborted) return;
       const errors = (Array.isArray(diagnostics) ? diagnostics : [])
         .filter((d) => (d.severity ?? SEVERITY_ERROR) === this._severityThreshold)
         .map(_normalizeError)
@@ -249,15 +253,15 @@ class LSPErrorWatcher extends BasePollingWatcher {
     }
   }
 
-  _detectFocusedFile(ws) {
+  async _detectFocusedFile(ws) {
     const title = this._getCurrentTitle() || '';
     const base = this._basenameFromTitle(title);
-    if (!base) return Promise.resolve(null);
+    if (!base) return null;
 
-    const files = this._filesFor(ws);
+    const files = await this._filesFor(ws);
     const matches = files.filter((f) => path.basename(f) === base);
     // Solo confiar en el foco si el nombre del archivo es inequívoco.
-    return Promise.resolve(matches.length === 1 ? matches[0] : null);
+    return matches.length === 1 ? matches[0] : null;
   }
 
   _basenameFromTitle(title) {
@@ -319,7 +323,7 @@ class LSPErrorWatcher extends BasePollingWatcher {
     return map;
   }
 
-  _filesFor(ws) {
+  async _filesFor(ws) {
     if (
       this._filesIndexAt &&
       Date.now() - this._filesIndexAt < INDEX_TTL_MS &&
@@ -327,14 +331,14 @@ class LSPErrorWatcher extends BasePollingWatcher {
     ) {
       return this._filesIndex;
     }
-    const all = this._listFiles(ws) || [];
+    const all = (await this._listFiles(ws)) || [];
     this._filesIndex = all.filter((f) => this._isSupported(path.basename(f)));
     this._filesIndexAt = Date.now();
     return this._filesIndex;
   }
 
-  _buildCandidates(ws, focused) {
-    const files = this._filesFor(ws);
+  async _buildCandidates(ws, focused) {
+    const files = await this._filesFor(ws);
     const withOld = this._signals.size
       ? Array.from(this._signals.keys()).filter((f) => f.startsWith(ws))
       : [];
@@ -351,9 +355,15 @@ class LSPErrorWatcher extends BasePollingWatcher {
     push(focused);
     // 2) Archivos con errores ya vistos (re-visitar para detectar el fix).
     for (const f of withOld) push(f);
-    // 3) Los primeros archivos del índice (señal de arranque / errores nuevos
-    //    en otros archivos que el usuario no tiene enfocados).
-    for (const f of files) push(f);
+    // 3) Ventana rotativa del índice. Antes siempre se recorría desde cero y
+    // los archivos posteriores al sexto podían no diagnosticarse jamás.
+    if (files.length > 0) {
+      for (let offset = 0; offset < files.length; offset++) {
+        push(files[(this._scanCursor + offset) % files.length]);
+        if (ordered.length >= this._maxScanPerPoll) break;
+      }
+      this._scanCursor = (this._scanCursor + Math.max(1, this._maxScanPerPoll)) % files.length;
+    }
     return ordered;
   }
 
@@ -423,8 +433,8 @@ class LSPErrorWatcher extends BasePollingWatcher {
         out.push({
           filePath: f,
           language: this._languageFor(f),
-          line: err.range?.start?.line ?? -1,
-          character: err.range?.start?.character ?? -1,
+          line: err.line ?? -1,
+          character: err.character ?? -1,
           message: String(err.message || '').slice(0, 160),
           source: err.source || null,
         });

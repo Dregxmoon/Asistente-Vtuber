@@ -33,10 +33,13 @@ const ERROR_TITLE_PATTERNS = [
   /\bfatal\b/i,
   /\bkilled\b/i,
   /\bsevere\b/i,
-  /\b✗\b/,
+  /✗/,
   /\[fail\]/i,
   /process\s+did\s+not\s+exit/i,
 ];
+const TITLE_SECRET_RE =
+  /["']?((?:[a-z0-9]+[_-])*(?:api[_-]?key|access[_-]?token|token|secret|password|passwd))["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;&]+)/gi;
+const TITLE_AUTH_RE = /\bauthorization\s*[:=]\s*(?:(?:bearer|basic)\s+)?[^\s,;&]+/gi;
 
 class TitleWatcher {
   constructor({ bus = getEventBus() } = {}) {
@@ -62,20 +65,28 @@ class TitleWatcher {
 
   _check({ app, category, title } = {}) {
     if (!title) return;
+    // Los títulos de browser/media pueden contener URLs, búsquedas o datos
+    // personales y producen demasiados falsos positivos. Esta señal solo es
+    // fiable en superficies donde un error representa trabajo ejecutable.
+    if (!['code', 'terminal'].includes(String(category || '').toLowerCase())) return;
     const match = ERROR_TITLE_PATTERNS.find((p) => p.test(title));
     if (!match) {
       this._lastKey = null;
       return;
     }
 
-    const key = `${app || ''}|${title}`;
+    const safeTitle = String(title)
+      .replace(TITLE_AUTH_RE, 'authorization=[REDACTED]')
+      .replace(TITLE_SECRET_RE, '$1=[REDACTED]')
+      .slice(0, 200);
+    const key = `${app || ''}|${safeTitle}`;
     if (key === this._lastKey) return; // mismo error en el mismo título → dedup
     this._lastKey = key;
     this._count++;
     this._bus.emit('os:error-title', {
       app: app || null,
       category: category || null,
-      title,
+      title: safeTitle,
       match: String(match),
     });
   }

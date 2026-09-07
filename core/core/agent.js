@@ -288,6 +288,10 @@ async function runAgent(userMessage, opts = {}) {
         : null,
     skillDb: state.graph && !state.graph.usingFallback && state.graph._db ? state.graph._db : null,
     pluginManager: state.pluginManager || null,
+    // La fachada ya ejecutó beforeAgentRun y aplicó sus transformaciones/bloqueo.
+    // AgentLoop conserva el hook para usos directos (tests, SDK interno), pero
+    // no debe invocarlo dos veces en la ruta normal de Core.runAgent.
+    beforeAgentRunHandled: true,
     permissionManager: state.permissionManager || null,
     contextWindowTokens:
       Number(opts.contextWindowTokens) || LLMProvider.getContextStatus?.(mode)?.maxContext || 0,

@@ -34,6 +34,7 @@ module.exports = {
     // ni idle→active en sesiones largas, la cola caducaba por TTL sin
     // reintento y el SLO no aprendía de las ignoradas.
     this._replayQueued();
+    await this._drainPendingTriggers?.();
     this._markIgnoredStale();
 
     const specialDate = this._checkSpecialDate(now);

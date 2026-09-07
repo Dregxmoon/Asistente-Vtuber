@@ -407,6 +407,7 @@ module.exports = {
 
   /** Devuelve cuántas preguntas de curiosidad ya se enviaron HOY. */
   _curiosityUsedToday() {
+    if (this._store?.categoryDailyCount) return this._store.categoryDailyCount('curiosity');
     const day = _localDayString(Date.now());
     if (this._curiosityDay !== day) return 0;
     return this._curiosityFired;
@@ -420,6 +421,7 @@ module.exports = {
       this._curiosityFired = 0;
     }
     this._curiosityFired += 1;
+    this._store?.incrementCategoryDaily?.('curiosity');
   },
 
   // ── Outcome → cierre del lazo de revalidación (Fase 3/5) ─────────────────────
