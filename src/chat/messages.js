@@ -182,50 +182,32 @@ function updateHeaderModel() {
   el.title = `${p?.name || active} · ${p?.free ? 'gratis' : 'pago'}`;
 }
 
-// ── Footer línea 2: contexto estimado + sesión activa (dato real) ────────────
-// ctx = estimación de tokens del historial de la sesión (≈ chars/4). sesión =
-// id real de SessionManager (IPC session-stats), cacheado tras el primer
-// fetch. Se refresca con cada mensaje para que el número acompañe la charla.
-let _sessionId = null;
-
 async function refreshFooterSession() {
   const el = document.getElementById('footer-session');
   if (!el) return;
-  const chars = sessionHistory.reduce((acc, m) => acc + String(m.content || '').length, 0);
-  const tokens = Math.round(chars / 4);
-
-  // Contexto máximo del modelo activo para mostrar el porcentaje usado.
-  let maxCtx = 0;
   try {
-    const active = LLMProvider.getActiveProvider();
-    const p = LLMProvider.getAvailableProviders().find((x) => x.id === active);
-    const modelId = p?.activeModel?.smart || p?.activeModel?.fast;
-    maxCtx = p?.modelMeta?.[modelId]?.context || 0;
-  } catch (_) {}
-
-  if (_sessionId === null) {
-    try {
-      const stats = await ipcRenderer.invoke('session-stats');
-      _sessionId = stats && stats.session ? String(stats.session) : '';
-    } catch {
-      _sessionId = '';
+    const status = await ipcRenderer.invoke('chat-context-status', {
+      mode: getAgentMode() === 'agent' ? 'smart' : 'fast',
+    });
+    const formatTokens = (value) => {
+      if (value >= 1000000) return `${(value / 1000000).toFixed(1).replace(/\.0$/, '')}M`;
+      if (value >= 1000) return `${(value / 1000).toFixed(1).replace(/\.0$/, '')}k`;
+      return String(value);
+    };
+    if (status?.promptTokens != null && status.maxContext > 0) {
+      const pct = Math.min(100, Math.round((status.promptTokens / status.maxContext) * 100));
+      el.textContent = `Contexto de la última solicitud: ${formatTokens(status.promptTokens)} / ${formatTokens(status.maxContext)} tokens (${pct}%)`;
+      el.title = `Uso informado por ${status.provider} para ${status.model}`;
+    } else if (status?.maxContext > 0) {
+      el.textContent = `Contexto máximo del modelo: ${formatTokens(status.maxContext)} tokens`;
+      el.title = 'El proveedor todavía no informó el uso de una solicitud en esta ejecución.';
+    } else {
+      el.textContent = 'Contexto del modelo: sin datos del proveedor';
+      el.title = '';
     }
+  } catch {
+    el.textContent = 'Contexto del modelo: no disponible';
   }
-  const ses = _sessionId ? _sessionId.slice(0, 24) : '—';
-
-  let ctxLabel;
-  if (maxCtx > 0) {
-    const pct = Math.min(100, Math.round((tokens / maxCtx) * 100));
-    const used = tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : String(tokens);
-    const cap =
-      maxCtx >= 1000000
-        ? `${(maxCtx / 1000000).toFixed(1).replace(/\.0$/, '')}M`
-        : `${Math.round(maxCtx / 1000)}k`;
-    ctxLabel = `ctx ${pct}% (${used}/${cap})`;
-  } else {
-    ctxLabel = `ctx ${tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : tokens}`;
-  }
-  el.textContent = `${ctxLabel} · sesión ${ses}`;
 }
 
 // FIX QW-1 (UI): muestra/oculta el banner de memoria no persistente.
@@ -317,8 +299,17 @@ function _expandedPanel() {
   const m = _picker.view.find((x) => _modelKey(x) === _modelKey(_picker.expanded));
   if (!m) return '';
   const isFav = (_picker.data.favorites || []).includes(_modelKey(m));
+  const effortControl =
+    Array.isArray(m.effortOptions) && m.effortOptions.length > 0
+      ? `<label class="picker-effort">Esfuerzo de razonamiento
+          <select class="picker-effort-select">
+            ${m.effortOptions.map((value) => `<option value="${value}"${value === (m.reasoningEffort || 'medium') ? ' selected' : ''}>${value === 'low' ? 'bajo' : value === 'high' ? 'alto' : 'medio'}</option>`).join('')}
+          </select>
+        </label>`
+      : '';
   if (p.hasKey) {
     return `<div class="picker-expanded">
+      ${effortControl}
       <div class="picker-exp-actions">
         <button class="picker-btn" data-act="use" data-mode="fast">Usar en Charla</button>
         <button class="picker-btn" data-act="use" data-mode="smart">Usar en Agente</button>
@@ -328,6 +319,7 @@ function _expandedPanel() {
   }
   const env = (p.env && p.env[0]) || 'API key';
   return `<div class="picker-expanded">
+    ${effortControl}
     ${p.doc ? `<a class="picker-doc" href="${escapeHtml(p.doc)}" target="_blank" rel="noreferrer">Docs del provider ↗</a>` : ''}
     ${
       p.connectable === false
@@ -358,6 +350,7 @@ function _renderPickerList() {
       const chips = [];
       if (m.tools) chips.push('tools');
       if (m.vision) chips.push('visión');
+      if (m.reasoning) chips.push('razonamiento');
       const ctx = _fmtCtx(m.context);
       if (ctx) chips.push(ctx);
       const cost = _fmtCost(m.costIn, m.costOut);
@@ -407,13 +400,26 @@ function _applyFilter() {
     _picker.view = q
       ? _picker.data.models.filter((m) => {
           const p = _providerMap().get(m.providerId) || {};
+          const aliases = m.providerId === 'openai' ? 'chatgpt gpt' : '';
           return (
             m.label.toLowerCase().includes(q) ||
             m.modelId.toLowerCase().includes(q) ||
-            (p.name || '').toLowerCase().includes(q)
+            (p.name || '').toLowerCase().includes(q) ||
+            aliases.includes(q)
           );
         })
       : _picker.data.models;
+    if (q) {
+      const seenModels = new Set();
+      _picker.view = _picker.view.filter((m) => {
+        const canonical = String(m.label || m.modelId)
+          .trim()
+          .toLowerCase();
+        if (seenModels.has(canonical)) return false;
+        seenModels.add(canonical);
+        return true;
+      });
+    }
   } else {
     _picker.view = q
       ? _picker.data.providers.filter((p) => p.name.toLowerCase().includes(q))
@@ -465,8 +471,16 @@ function _toggleExpandProvider(p) {
 async function _useModel(m, mode) {
   const p = _providerMap().get(m.providerId) || {};
   const role = (_picker.data.roles && _picker.data.roles[mode]) || mode;
+  const effortSelect = pickerList.querySelector('.picker-effort-select');
+  const reasoningEffort = effortSelect ? effortSelect.value : m.reasoningEffort;
   if (p.hasKey) {
-    await ipcRenderer.invoke('set-llm-model', { provider: m.providerId, mode, model: m.modelId });
+    await ipcRenderer.invoke('set-llm-model', {
+      provider: m.providerId,
+      mode,
+      model: m.modelId,
+      reasoningEffort,
+    });
+    if (reasoningEffort) m.reasoningEffort = reasoningEffort;
     if (_picker.data.active.provider !== m.providerId) {
       ipcRenderer.send('set-provider', { primary: m.providerId });
     }
@@ -496,6 +510,15 @@ async function _useModel(m, mode) {
     pickerStatus.textContent = 'Error: ' + (res.error || 'no se pudo conectar');
     pickerStatus.style.color = '#ef4444';
     return;
+  }
+  if (reasoningEffort) {
+    await ipcRenderer.invoke('set-llm-model', {
+      provider: m.providerId,
+      mode,
+      model: m.modelId,
+      reasoningEffort,
+    });
+    m.reasoningEffort = reasoningEffort;
   }
   await loadLLMConfig();
   pickerStatus.textContent = `✓ ${m.label} conectado y activo en ${role}`;

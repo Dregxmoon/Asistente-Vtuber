@@ -32,13 +32,22 @@ const AUTO_DETECT_ORDER = ['typecheck', 'lint', 'test', 'build'];
  * Resuelve el plan de verificación para un run.
  * @param {string|null|undefined} configPath Ruta a config.json (opcional).
  * @param {string} projectCwd Raíz del proyecto (para leer package.json).
- * @returns {{ enabled: boolean, command?: string }}
+ * @returns {{ enabled: boolean, command?: string, commands?: string[] }}
  */
 function resolveVerifyPlan(configPath, projectCwd) {
   try {
     if (configPath && fs.existsSync(configPath)) {
       const cfg = readJsonFile(configPath, null);
-      const command = cfg && cfg.agent && cfg.agent.verify ? cfg.agent.verify.command : null;
+      const verify = cfg && cfg.agent ? cfg.agent.verify : null;
+      const command = verify ? verify.command : null;
+      const commands = Array.isArray(verify?.commands)
+        ? verify.commands
+            .filter((/** @type {unknown} */ item) => typeof item === 'string' && item.trim())
+            .map((/** @type {string} */ item) => item.trim())
+        : [];
+      if (commands.length) {
+        return { enabled: true, command: commands[0], commands };
+      }
       if (typeof command === 'string' && command.trim()) {
         return { enabled: true, command: command.trim() };
       }
@@ -52,11 +61,10 @@ function resolveVerifyPlan(configPath, projectCwd) {
     if (fs.existsSync(pkgPath)) {
       const pkg = readJsonFile(pkgPath, null);
       const scripts = (pkg && pkg.scripts) || {};
-      for (const script of AUTO_DETECT_ORDER) {
-        if (typeof scripts[script] === 'string' && scripts[script].trim()) {
-          return { enabled: true, command: `npm run ${script}` };
-        }
-      }
+      const commands = AUTO_DETECT_ORDER.filter(
+        (script) => typeof scripts[script] === 'string' && scripts[script].trim()
+      ).map((script) => `npm run ${script}`);
+      if (commands.length) return { enabled: true, command: commands[0], commands };
     }
   } catch (e) {
     // package.json ilegible → skip sin bloquear.

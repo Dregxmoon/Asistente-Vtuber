@@ -392,6 +392,10 @@ async function testOnPlanEmission() {
     const progress = planEvents.filter((p) => p.kind === 'progress');
     assert(progress.length >= 1, 'se emitieron eventos de progreso durante el run');
     assert(
+      progress.at(-1)?.done === result.plan?.done && progress.at(-1)?.total === result.plan?.total,
+      'el último evento refleja el ledger final del plan'
+    );
+    assert(
       result.plan &&
         result.plan.done === 0 &&
         result.plan.stepStates?.some((step) => step.status === 'awaiting_verification'),

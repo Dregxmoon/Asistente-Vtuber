@@ -450,23 +450,10 @@ function _detailHtml(progress) {
   const r = progress.result;
   if (r == null) return '';
 
-  // Write: frame con el código completo generado + archivo/ruta arriba. El
-  // contenido completo llega en params.content (se pintó al escribir).
+  // Cualquier mutación que incluya el estado anterior y posterior muestra
+  // primero el cambio real, incluidas las escrituras que reemplazan archivos.
   if (
-    /^(write)$/i.test(progress.tool) &&
-    progress.params &&
-    typeof progress.params.content === 'string'
-  ) {
-    return `<div class="activity-block-detail">${_codeFrameHtml(
-      progress.params.path || progress.params.file_path || '',
-      progress.params.content
-    )}</div>`;
-  }
-
-  // Edit/apply_patch con meta (oldContent/newContent + líneas): split visual
-  // viejo/actualizado con las líneas cambiadas resaltadas.
-  if (
-    /^(edit|apply_patch)$/i.test(progress.tool) &&
+    /^(write|edit|apply_patch)$/i.test(progress.tool) &&
     progress.meta &&
     typeof progress.meta.oldContent === 'string' &&
     typeof progress.meta.newContent === 'string'
@@ -479,6 +466,22 @@ function _detailHtml(progress) {
       progress.meta.newContent,
       progress.meta.addedLines,
       progress.meta.removedLines
+    )}</div>`;
+  }
+
+  // Archivo nuevo: todo su contenido aparece como líneas agregadas.
+  if (
+    /^(write)$/i.test(progress.tool) &&
+    progress.params &&
+    typeof progress.params.content === 'string'
+  ) {
+    const content = progress.params.content;
+    return `<div class="activity-block-detail">${_editSplitHtml(
+      progress.params.path || progress.params.file_path || '',
+      '',
+      content,
+      content.split('\n').map((_, index) => index + 1),
+      []
     )}</div>`;
   }
 

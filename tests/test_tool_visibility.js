@@ -37,9 +37,10 @@ function testAgentModeAlwaysResolvesTools() {
 
   // La línea que retorna en modo agent debe tener nativeToolSchemas desde
   // resolvedTools, no null hardcoded
-  const agentReturnMatch = src.match(
-    /mode.*agent[\s\S]{0,500}return \{[\s\S]{0,200}nativeToolSchemas/
+  const agentSection = src.match(
+    /if \(mode === 'agent'\) \{[\s\S]*?(?=\n {2}\/\/ ── Skill knowledge injection)/
   );
+  const agentReturnMatch = agentSection?.[0].match(/return \{[\s\S]{0,500}nativeToolSchemas/);
   if (agentReturnMatch) {
     const hasResolvedTools = agentReturnMatch[0].includes('resolvedTools?.nativeToolSchemas');
     const hasNull = agentReturnMatch[0].includes('nativeToolSchemas: null');

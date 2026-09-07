@@ -777,6 +777,7 @@ class StructuredActionParser {
     return {
       tool,
       params,
+      stepOrdinal: Number(fields.PASO || fields.STEP || 0) || undefined,
       description,
       action, // guardamos la intención original también
       source: 'structured',

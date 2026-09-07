@@ -402,6 +402,10 @@ function register(_ctx) {
     providers: LLMProvider.getAvailableProviders(),
   }));
 
+  ipcMain.handle('chat-context-status', (_e, { mode } = {}) =>
+    LLMProvider.getContextStatus(mode === 'fast' ? 'fast' : 'smart')
+  );
+
   ipcMain.handle('chat-llm-configure', (_e, cfg) => {
     try {
       LLMProvider.configure(cfg);

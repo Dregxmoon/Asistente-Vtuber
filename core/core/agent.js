@@ -220,7 +220,7 @@ async function runAgent(userMessage, opts = {}) {
     graph: mode === 'smart' ? state.graph : null,
     sessionId,
     workspace: projectCwd,
-    goal: goalTextMatch?.[1] || userMessage,
+    goal: goalTextMatch?.[1] || effectiveMessage,
     source: opts.executiveRun ? 'governor' : 'interactive',
     governanceClaimed: Boolean(opts.governanceClaimed),
   });
@@ -275,7 +275,11 @@ async function runAgent(userMessage, opts = {}) {
 
   const loopOpts = {
     ...opts,
-    toolResolver: { resolveToolset },
+    tools: context.nativeToolSchemas || null,
+    nativeMcpMap: context.nativeMcpMap || {},
+    toolCatalog: context.toolCatalog || null,
+    matchedSkills: context.resolvedSkills || null,
+    toolResolver: context.nativeToolSchemas ? null : { resolveToolset },
     skillManager: state.skillManager || null,
     mcpManager: state.mcp || null,
     capabilityStatsProvider:
@@ -285,6 +289,8 @@ async function runAgent(userMessage, opts = {}) {
     skillDb: state.graph && !state.graph.usingFallback && state.graph._db ? state.graph._db : null,
     pluginManager: state.pluginManager || null,
     permissionManager: state.permissionManager || null,
+    contextWindowTokens:
+      Number(opts.contextWindowTokens) || LLMProvider.getContextStatus?.(mode)?.maxContext || 0,
   };
 
   // Snapshot mínimo del progreso observable. No guarda params/resultados de
@@ -391,6 +397,9 @@ async function runAgent(userMessage, opts = {}) {
   // subagentes no la reciben (el loop solo verifica con opts.verify presente).
   if (opts.verify === undefined && mode === 'smart') {
     loopOpts.verify = resolveVerifyPlan(state.configPath, projectCwd);
+  }
+  if (opts.verifyRepair === undefined && mode === 'smart') {
+    loopOpts.verifyRepair = true;
   }
 
   // evalMode: benchmark headless — toda tool de alto impacto se auto-aprueba,

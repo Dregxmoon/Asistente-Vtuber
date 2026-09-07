@@ -26,6 +26,7 @@ function text(value, max = 1000) {
  *   completeIntention?:(id:number)=>boolean,
  *   getGoalPlan?:(id:number)=>Array<any>,
  *   createGoalPlan?:(id:number,steps:Array<any>)=>Array<any>,
+ *   replaceGoalPlan?:(id:number,steps:Array<any>)=>Array<any>,
  *   recordGoalRunProgress?:(id:number,plan:object)=>object,
  *   getGoalResumePoint?:(id:number)=>any,
  *   completeGoalPlan?:(id:number,verification:object)=>boolean,
@@ -62,7 +63,13 @@ function beginGoal({
   const normalizedGoal = text(goal);
   if (!graph || graph.usingFallback || !sessionId || !workspace || !normalizedGoal) return null;
   const active = graph.listActiveIntentions?.({ limit: 50, workspace }) || [];
-  const prior = active.find((item) => text(item?.goal) === normalizedGoal);
+  const continuation =
+    /^(?:contin[uú]a|continuar|sigue|prosigue|retoma|reanuda|intenta de nuevo|prueba otra vez|corrige lo que falta)\b/i.test(
+      normalizedGoal
+    );
+  const prior =
+    active.find((item) => text(item?.goal) === normalizedGoal) ||
+    (continuation && active.length === 1 ? active[0] : null);
   let id = Number(prior?.id) || 0;
   if (!id) {
     id = Number(
@@ -89,14 +96,15 @@ function beginGoal({
     source,
     claimed,
   });
+  const committedGoal = prior ? text(prior.goal) : normalizedGoal;
   graph.updateProjectCompanion?.({
     workspace,
-    objective: normalizedGoal,
+    objective: committedGoal,
     phase: 'building',
     blocker: null,
     eventType: prior ? 'goal_resumed' : 'goal_started',
   });
-  return { id, goal: normalizedGoal, resumed: Boolean(prior), claimed, source };
+  return { id, goal: committedGoal, resumed: Boolean(prior), claimed, source };
 }
 
 /** @param {GoalGraph} graph @param {number} id @param {any} plan */

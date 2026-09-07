@@ -693,6 +693,32 @@ body {
   border-bottom: 1px solid var(--border);
   padding: 10px 12px;
 }
+.picker-effort,
+.mbr-effort {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 7px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.picker-effort-select,
+.mbr-effort-select {
+  min-height: 28px;
+  padding: 4px 7px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  outline: none;
+}
+.picker-effort-select:focus,
+.mbr-effort-select:focus {
+  border-color: var(--border-accent);
+}
 .picker-exp-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1734,13 +1760,6 @@ body {
   color: #fff;
   box-shadow: 0 2px 8px rgba(91, 110, 245, 0.3);
 }
-.mcp-cat-tab.active .mcp-cat-icon {
-  opacity: 1;
-}
-.mcp-cat-icon {
-  font-size: 12px;
-  opacity: 0.7;
-}
 .mcp-cat-name {
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -1793,18 +1812,6 @@ body {
   align-items: flex-start;
   gap: 12px;
   margin-bottom: 10px;
-}
-.mcp-card-icon {
-  font-size: 28px;
-  flex-shrink: 0;
-  width: 48px;
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-panel);
-  border-radius: 10px;
-  border: 1px solid var(--border);
 }
 .mcp-card-meta {
   flex: 1;
@@ -3077,17 +3084,6 @@ body {
   height: 100%;
   display: block;
 }
-#view-indicator {
-  position: absolute;
-  bottom: 4px;
-  right: 6px;
-  z-index: 10;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  color: var(--text-secondary);
-  opacity: 0.3;
-  pointer-events: none;
-}
 /* Botones de selección de modelo (renderizados por /cambio-modelo) */
 .model-select-btn {
   display: inline-block;
@@ -3694,9 +3690,8 @@ body {
 }
 
 /* ── HUD del plan explícito (plan-then-act) — panel colapsable ────────────── */
-/* Se muestra minimizado por defecto (estilo "pensamiento"); clic en el
-   encabezado despliega los pasos. Mantiene el estado abierto/cerrado que
-   eligió el usuario mientras el run sigue. */
+/* Empieza abierto para mostrar el trabajo elegido y mantiene después el
+   estado abierto/cerrado que eligió el usuario. */
 .plan-block {
   font-family: var(--font-mono);
   font-size: 11.5px;
@@ -3776,8 +3771,8 @@ body {
 }
 
 /* ── Bloque de diff de archivos (write/edit/apply_patch) ──────────────────── */
-/* Colapsable por defecto (mismo patrón visual que plan-block): el encabezado
-   muestra el archivo + resumen +N/−M y el clic despliega el patch coloreado.
+/* Abierto por defecto (mismo patrón visual que plan-block): el encabezado
+   muestra el archivo + resumen +N/−M y el clic pliega el patch coloreado.
    Se usa en el card de aprobación (antes de aprobar) y como registro
    navegable post-edición en el feed. */
 .diff-block {
@@ -4758,6 +4753,15 @@ body {
 .modal-x {
   width: 28px;
   height: 28px;
+  min-width: 28px;
+  padding: 0;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  line-height: 1;
+  position: static;
   transition:
     color var(--transition-ui),
     background var(--transition-ui);
@@ -4792,7 +4796,14 @@ body {
   outline: none;
   background: var(--bg-panel);
   color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 10px;
   transition: border-color var(--transition-ui);
+}
+.perms-form input::placeholder {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  opacity: 0.75;
 }
 .perm-row {
   min-height: 38px;
@@ -4912,11 +4923,55 @@ body {
   height: 1px;
   background: var(--text-secondary);
 }
-.mcp-card-icon,
 .mcp-card-tools,
 .mcp-manual-section {
   background: var(--bg-panel);
   border-color: var(--border);
+}
+.mcp-card-header,
+.mcp-card-meta,
+.mcp-card-badges,
+.mcp-card-footer {
+  min-width: 0;
+}
+.mcp-card-badges {
+  overflow: hidden;
+}
+.mcp-popular-badge,
+.mcp-auth-badge,
+.mcp-installed-badge,
+.mcp-health-badge {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#task-dock {
+  flex: 0 0 auto;
+  max-height: min(230px, 30vh);
+  overflow: auto;
+  padding: 8px 14px 0;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+  animation: activity-block-in 160ms ease-out;
+}
+#task-dock[hidden] {
+  display: none;
+}
+#task-dock .plan-block {
+  margin: 0;
+  background: var(--bg-input);
+  border-left-color: var(--text-primary);
+}
+#task-dock .plan-block.complete {
+  border-left-color: var(--term-success);
+}
+#task-dock .plan-block.complete .plan-block-header {
+  color: var(--term-success);
+}
+#task-dock .plan-block.paused:not(.complete) .plan-block-header {
+  color: var(--term-warn);
 }
 .mcp-install-btn:hover:not(:disabled),
 .btn-save:hover,
@@ -5076,13 +5131,13 @@ summary:focus-visible {
 
 @media (max-width: 760px) {
   #app {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) clamp(150px, 30vw, 220px);
   }
   #model-panel {
-    display: none;
+    display: flex;
   }
   #chat-panel {
-    border-right: 0;
+    border-right: 1px solid var(--border);
   }
   .agent-mode-badge,
   .header-model {

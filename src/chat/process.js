@@ -1,5 +1,5 @@
 // @ts-nocheck
-/* global _renderResultChips, _takeResultMeta */
+/* global _renderResultChips, _takeResultMeta, preservePlanBlock, pausePlanBlock */
 // Compresión de historial
 // Comprime mensajes de assistant repetitivos (fallos, "lo siento"s) para no
 // saturar el contexto del LLM con ruido auto-generado.
@@ -206,7 +206,7 @@ async function processMessage(text, files = []) {
   showThinking();
   triggerMotion();
   resetActivities();
-  resetPlanBlock();
+  preservePlanBlock();
   resetDiffBlocks();
 
   // Botón de cancelación: visible durante la generación. Aborta el agent-run
@@ -238,14 +238,18 @@ async function processMessage(text, files = []) {
 
   let response;
   let error = null;
+  let agentBubble = null;
 
   if (openclawAvailable && getAgentMode() === 'agent') {
     // NUEVO FLUJO: AgentLoop (Fase 2)
     // processMessage llama a runAgent() vía IPC agent-run. AgentLoop ejecuta
     // el loop LLM→tool→result→LLM→...→texto_final. La respuesta final se
     // genera DESPUÉS de que el LLM vio todos los resultados reales.
+    let offStream = null;
+    let mdTimer = 0;
     try {
       const { bubble } = addMessage('assistant', '');
+      agentBubble = bubble;
       // La clase markdown se añade desde el inicio para que el streaming en
       // vivo (renderMarkdown incremental) use los mismos estilos que la
       // respuesta final.
@@ -266,7 +270,6 @@ async function processMessage(text, files = []) {
       // (patrón opencode). Al final se renderiza markdown sobre el bubble.
       let streamBuf = '';
       let firstToken = false;
-      let mdTimer = 0;
       const streamedSpan = document.createElement('span');
       streamedSpan.className = 'stream-text';
       bubble.appendChild(streamedSpan);
@@ -297,7 +300,7 @@ async function processMessage(text, files = []) {
         streamedSpan.appendChild(cursor);
         _scrollMessagesToBottom();
       };
-      const offStream = ipcRenderer.on('agent-token', (_e, token) => {
+      offStream = ipcRenderer.on('agent-token', (_e, token) => {
         if (!firstToken) {
           firstToken = true;
           removeThinking();
@@ -315,6 +318,7 @@ async function processMessage(text, files = []) {
       });
 
       offStream();
+      offStream = null;
       if (mdTimer) {
         clearTimeout(mdTimer);
         mdTimer = 0;
@@ -326,6 +330,7 @@ async function processMessage(text, files = []) {
       // parcial como un error — solo mostrar lo que ya se generó.
       if (result.cancelled) {
         removeThinking();
+        pausePlanBlock();
         const partialRaw = result.response || streamBuf.trim();
         const partial = partialRaw ? _parseGestureMarkers(partialRaw).clean : '';
         if (partial) {
@@ -351,8 +356,10 @@ async function processMessage(text, files = []) {
       if (result.error && !finalText) {
         error = result.error;
         response = `Ocurrió un error: ${result.error}`;
+        pausePlanBlock();
       } else {
         response = finalText || '(sin respuesta)';
+        if (result.error || result.truncated) pausePlanBlock();
       }
 
       // Escribir respuesta directamente en el bubble existente
@@ -373,6 +380,7 @@ async function processMessage(text, files = []) {
         bubble.querySelectorAll('.mermaid').forEach((el) => _renderMermaid(el));
         _scrollMessagesToBottom();
         setAgentState('done', 'Listo');
+        refreshFooterSession();
         speak(response);
         return;
       }
@@ -382,12 +390,24 @@ async function processMessage(text, files = []) {
       error = e.message;
       response = null;
       setAgentState('error', 'Error');
-      // Limpiar bubble vacío creado en la línea 1119
-      if (bubble) {
-        const parent = bubble.parentElement?.parentElement;
-        if (parent?.parentNode) parent.parentNode.removeChild(parent);
+      removeThinking();
+      pausePlanBlock();
+      // Conserva el historial visual de herramientas y usa la misma burbuja
+      // para explicar el fallo; una segunda llamada simple perdería el vínculo
+      // con el proceso que ya se ejecutó.
+      if (agentBubble) {
+        response = `La ejecución se detuvo antes de generar la respuesta final.\n\nDetalle: ${e.message}`;
+        agentBubble.classList.add('markdown');
+        agentBubble.innerHTML = renderMarkdown(response);
+        pushToSession('assistant', response);
+        ipcRenderer.send('memory-add-turn', { role: 'assistant', content: response });
+        _scrollMessagesToBottom();
+        refreshFooterSession();
+        return;
       }
     } finally {
+      if (offStream) offStream();
+      if (mdTimer) clearTimeout(mdTimer);
       _activeAgentStream = null;
     }
   }

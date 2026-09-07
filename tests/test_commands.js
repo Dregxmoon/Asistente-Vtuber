@@ -80,6 +80,9 @@ function testRegisteredCommands() {
   assert(names.includes('retry'), 'retry registrado');
   assert(names.includes('stats'), 'stats registrado');
   assert(names.includes('export'), 'export registrado');
+  for (const removed of ['init', 'review', 'plan', 'fix', 'undo', 'code']) {
+    assert(!names.includes(removed), `/${removed} retirado del índice`);
+  }
 }
 
 // ── Test 3: /help ───────────────────────────────────────────────────────────
@@ -336,7 +339,7 @@ function testAgentInvalid() {
 }
 
 // ── Test 12: /init ───────────────────────────────────────────────────────────
-function testInit() {
+function _testInit() {
   console.log(C.bold('\n── Test 12: /init ───────────────────────────────────────────'));
 
   const ctx = {
@@ -353,7 +356,7 @@ function testInit() {
 }
 
 // ── Test 13: /review ─────────────────────────────────────────────────────────
-function testReview() {
+function _testReview() {
   console.log(C.bold('\n── Test 13: /review ─────────────────────────────────────────'));
 
   const ctx = {
@@ -385,7 +388,7 @@ function testReview() {
 }
 
 // ── Test 14: /plan ───────────────────────────────────────────────────────────
-function testPlan() {
+function _testPlan() {
   console.log(C.bold('\n── Test 14: /plan ───────────────────────────────────────────'));
 
   return execute('/plan', {})
@@ -403,7 +406,7 @@ function testPlan() {
 }
 
 // ── Test 15: /undo ───────────────────────────────────────────────────────────
-function testUndo() {
+function _testUndo() {
   console.log(C.bold('\n── Test 15: /undo ───────────────────────────────────────────'));
 
   // Sin ipcRenderer — handler returns string, execute wraps as { result }
@@ -414,7 +417,7 @@ function testUndo() {
 }
 
 // ── Test 16: /fix ────────────────────────────────────────────────────────────
-function testFix() {
+function _testFix() {
   console.log(C.bold('\n── Test 16: /fix ────────────────────────────────────────────'));
 
   // Sin ipcRenderer — handler returns string, execute wraps as { result }
@@ -425,7 +428,7 @@ function testFix() {
 }
 
 // ── Test 17: /code ───────────────────────────────────────────────────────────
-function testCode() {
+function _testCode() {
   console.log(C.bold('\n── Test 17: /code ───────────────────────────────────────────'));
 
   const ctx = {
@@ -531,12 +534,8 @@ function testNewRegisteredCommands() {
 
   const names = getNames();
   assert(names.includes('agent'), '/agent registrado');
-  assert(names.includes('init'), '/init registrado');
-  assert(names.includes('review'), '/review registrado');
-  assert(names.includes('plan'), '/plan registrado');
-  assert(names.includes('undo'), '/undo registrado');
-  assert(names.includes('fix'), '/fix registrado');
-  assert(names.includes('code'), '/code registrado');
+  assert(names.includes('retry'), '/retry registrado');
+  assert(names.includes('revertir-tarea'), '/revertir-tarea registrado');
   assert(names.includes('cambio-modelo'), '/cambio-modelo registrado');
   assert(names.includes('modelo-vistas'), '/modelo-vistas registrado');
 }
@@ -647,12 +646,6 @@ async function main() {
   await testExport();
   await testAgentCommand();
   await testAgentInvalid();
-  await testInit();
-  await testReview();
-  await testPlan();
-  await testUndo();
-  await testFix();
-  await testCode();
   await testCambioModelo();
   await testModeloVistas();
   testNewRegisteredCommands();

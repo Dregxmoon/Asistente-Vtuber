@@ -228,6 +228,10 @@ function testPickerModels() {
   assert(auto && auto.context === 32000, 'context del modelo remoto');
   assert(auto && auto.tools === true, 'tools del modelo remoto');
   assert(auto && auto.remote === true, 'marcado como remoto');
+  assert(
+    auto && JSON.stringify(auto.effortOptions) === JSON.stringify(['low', 'medium', 'high']),
+    'modelo compatible expone niveles de esfuerzo reales'
+  );
 
   const sonnet = data.models.find(
     (m) => m.providerId === 'anthropic' && m.modelId === 'claude-sonnet-4'
@@ -343,6 +347,31 @@ function testFavorites() {
   assert(LLMProvider.setFavoriteModel('x/y', false) === true, 'remoción limpia');
 }
 
+function testReasoningEffortPayloads() {
+  console.log(C.bold('\n── Test 6: esfuerzo de razonamiento por API ────────────────────'));
+  const openaiBody = { temperature: 0.85 };
+  LLMProvider._applyReasoningEffort(openaiBody, 'openai', 'o3', {
+    reasoningEffort: 'high',
+  });
+  assert(openaiBody.reasoning_effort === 'high', 'OpenAI recibe reasoning_effort');
+  assert(
+    !Object.prototype.hasOwnProperty.call(openaiBody, 'temperature'),
+    'OpenAI reasoning omite temperature'
+  );
+
+  const openrouterBody = {};
+  LLMProvider._applyReasoningEffort(openrouterBody, 'openrouter', 'openai/o3', {
+    reasoningEffort: 'low',
+  });
+  assert(openrouterBody.reasoning?.effort === 'low', 'OpenRouter recibe reasoning.effort');
+
+  const unsupportedBody = {};
+  LLMProvider._applyReasoningEffort(unsupportedBody, 'gemini', 'gemini-2.5-pro', {
+    reasoningEffort: 'high',
+  });
+  assert(Object.keys(unsupportedBody).length === 0, 'no se inventan campos en APIs no adaptadas');
+}
+
 // ── Runner ───────────────────────────────────────────────────────────────────
 
 (async () => {
@@ -351,6 +380,7 @@ function testFavorites() {
   testPickerModels();
   testConnectProvider();
   testFavorites();
+  testReasoningEffortPayloads();
 
   console.log(
     C.bold(`\nResultado: ${C.green(`${passed} ✓`)}${failed ? ` / ${C.red(`${failed} ✗`)}` : ''}`)

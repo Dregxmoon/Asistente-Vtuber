@@ -35,15 +35,9 @@ const CATEGORIES = {
   uso: 'IA / LLM',
   model: 'IA / LLM',
   agent: 'IA / LLM',
-  code: 'IA / LLM',
   skill: 'IA / LLM',
   skills: 'IA / LLM',
   github: 'Cuentas',
-  init: 'Desarrollo',
-  review: 'Desarrollo',
-  plan: 'Desarrollo',
-  fix: 'Desarrollo',
-  undo: 'Desarrollo',
   retry: 'Desarrollo',
   'revertir-tarea': 'Desarrollo',
   'cambio-modelo': 'Modelo',
@@ -120,6 +114,11 @@ require('./model')(register);
 require('./skills')(register);
 require('./github')(register);
 require('./proactive')(register);
+
+// Comandos retirados: eran alias redundantes, devolvían instrucciones sin
+// ejecutar la acción, asumían ESLint para cualquier proyecto o mutaban Git
+// desde un atajo. Se eliminan también del índice/autocompletado.
+for (const name of ['init', 'review', 'plan', 'fix', 'undo', 'code']) commands.delete(name);
 
 register({
   name: 'help',

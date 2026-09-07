@@ -50,8 +50,22 @@ const TOOL_SCHEMAS = [
     name: 'read',
     domain: ['filesystem', 'code', 'data'],
     source: 'openclaw',
-    description: 'Lee el contenido de uno o varios archivos',
-    params: [{ name: 'path', type: 'string', description: 'Ruta del archivo', required: true }],
+    description: 'Lee archivos por rangos de líneas; devuelve next_line para continuar',
+    params: [
+      { name: 'path', type: 'string', description: 'Ruta del archivo', required: true },
+      {
+        name: 'start_line',
+        type: 'number',
+        description: 'Línea inicial (base 1)',
+        required: false,
+      },
+      {
+        name: 'max_lines',
+        type: 'number',
+        description: 'Cantidad de líneas (máx. 400)',
+        required: false,
+      },
+    ],
     examples: [
       { cmd: 'README.md', desc: 'Leer README' },
       { cmd: 'src/index.js', desc: 'Leer archivo fuente' },

@@ -1451,6 +1451,9 @@ class StateGraph {
   createGoalPlan(intentionId, steps) {
     return this._goalPlans.createPlan(intentionId, steps);
   }
+  replaceGoalPlan(intentionId, steps) {
+    return this._goalPlans.replacePlan(intentionId, steps);
+  }
   getGoalPlan(intentionId) {
     return this._goalPlans.listSteps(intentionId);
   }

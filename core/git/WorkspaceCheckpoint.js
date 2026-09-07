@@ -186,6 +186,12 @@ class WorkspaceCheckpoint {
     this.files = this._collectRelPaths();
   }
 
+  /** Captura la línea base para mutaciones cuyo alcance no puede conocerse
+   * antes de ejecutarlas (exec, MCP, plugins o Git). */
+  async onBeforeUnknownMutation() {
+    await this._captureBaseline();
+  }
+
   /**
    * Extrae los paths de archivos que una mutación va a tocar.
    * @param {string} tool

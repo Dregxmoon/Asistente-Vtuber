@@ -58,6 +58,7 @@ const JS_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
 /**
  * @typedef {object} VerifyPlan
  * @property {string} [command]
+ * @property {string[]} [commands]
  */
 
 /**
@@ -67,13 +68,15 @@ const JS_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
 /**
  * Ejecuta el plan de verificación.
  * @param {VerifyPlan|null|undefined} plan Plan de `resolveVerifyPlan`.
- * @param {{ bridge: ExecBridge, isSmart: boolean, toolResults?: Array<ToolResult>, editTools: Set<string>, signal?: AbortSignal|null }} ctx
+ * @param {{ bridge: ExecBridge, isSmart: boolean, toolResults?: Array<ToolResult>, editTools: Set<string>, mutationPredicate?:(result:ToolResult)=>boolean, signal?: AbortSignal|null }} ctx
  * @returns {Promise<object>} { status: 'passed'|'failed'|'skipped', reason?, command?, attempts?, ... }
  */
 async function runVerifyPlan(plan, ctx) {
   const { bridge, isSmart, toolResults, editTools, signal } = ctx;
   if (!isSmart) return { status: 'skipped', reason: 'not_smart' };
-  if (!toolResults || !toolResults.some((r) => r.tool && r.ok && editTools.has(r.tool))) {
+  const isMutation =
+    ctx.mutationPredicate || ((r) => Boolean(r.tool && r.ok && editTools.has(r.tool)));
+  if (!toolResults || !toolResults.some((r) => isMutation(r))) {
     return { status: 'skipped', reason: 'no_mutations' };
   }
 
@@ -87,46 +90,76 @@ async function runVerifyPlan(plan, ctx) {
     command = fallback;
   }
 
+  const commands =
+    Array.isArray(plan?.commands) && plan.commands.length ? plan.commands : [command];
   const t0 = Date.now();
-  let attempts = 0;
-  /** @type {ExecResult|null} */
-  let res = null;
-  for (;;) {
-    attempts++;
-    if (signal && signal.aborted)
-      return { status: 'skipped', reason: 'aborted', command, attempts };
-    try {
-      res = /** @type {ExecResult} */ (
-        await bridge.execute('exec', { command, timeout: VERIFY_EXEC_TIMEOUT })
-      );
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      res = { ok: false, result: null, error: msg, tool: 'exec', elapsed: 0 };
+  let totalAttempts = 0;
+  const checks = [];
+  for (const currentCommand of commands) {
+    let attempts = 0;
+    /** @type {ExecResult|null} */
+    let res = null;
+    for (;;) {
+      attempts++;
+      totalAttempts++;
+      if (signal && signal.aborted)
+        return {
+          status: 'skipped',
+          reason: 'aborted',
+          command: currentCommand,
+          attempts: totalAttempts,
+        };
+      try {
+        res = /** @type {ExecResult} */ (
+          await bridge.execute('exec', { command: currentCommand, timeout: VERIFY_EXEC_TIMEOUT })
+        );
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        res = { ok: false, result: null, error: msg, tool: 'exec', elapsed: 0 };
+      }
+      if (verifyPassed(res)) break;
+      if (
+        verifyTransient(res) &&
+        attempts < VERIFY_RETRY_MAX_ATTEMPTS &&
+        !(signal && signal.aborted)
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, VERIFY_RETRY_DELAY_MS));
+        continue;
+      }
+      break;
     }
-    if (verifyPassed(res)) break;
-    const transient = verifyTransient(res);
-    if (transient && attempts < VERIFY_RETRY_MAX_ATTEMPTS && !(signal && signal.aborted)) {
-      await new Promise((r) => setTimeout(r, VERIFY_RETRY_DELAY_MS));
+    if (verifyPassed(res)) {
+      checks.push({ command: currentCommand, status: 'passed', attempts });
       continue;
     }
-    break;
+    const body = res && res.result && typeof res.result === 'object' ? res.result : {};
+    const stderr =
+      (typeof body.stderr === 'string' ? body.stderr : '') || body.error || res?.error || '';
+    checks.push({ command: currentCommand, status: 'failed', attempts });
+    return {
+      status: 'failed',
+      command: currentCommand,
+      commands,
+      checks,
+      attempts: totalAttempts,
+      exitCode: typeof body.exitCode === 'number' ? body.exitCode : null,
+      signal: body.signal || null,
+      stderr:
+        stderr.length <= VERIFY_STDERR_TRUNCATE
+          ? stderr
+          : `[inicio]\n${stderr.slice(0, VERIFY_STDERR_TRUNCATE / 2)}\n[final]\n${stderr.slice(-VERIFY_STDERR_TRUNCATE / 2)}`,
+      elapsedMs: Date.now() - t0,
+    };
   }
-
-  const elapsedMs = Date.now() - t0;
-  if (verifyPassed(res)) {
-    return { status: 'passed', command, attempts, exitCode: 0, signal: null, elapsedMs };
-  }
-  const body = res && res.result && typeof res.result === 'object' ? res.result : {};
-  const stderr =
-    (typeof body.stderr === 'string' ? body.stderr : '') || body.error || res.error || '';
   return {
-    status: 'failed',
-    command,
-    attempts,
-    exitCode: typeof body.exitCode === 'number' ? body.exitCode : null,
-    signal: body.signal || null,
-    stderr: stderr.slice(0, VERIFY_STDERR_TRUNCATE),
-    elapsedMs,
+    status: 'passed',
+    command: commands.join(' && '),
+    commands,
+    checks,
+    attempts: totalAttempts,
+    exitCode: 0,
+    signal: null,
+    elapsedMs: Date.now() - t0,
   };
 }
 

@@ -77,7 +77,10 @@ function createWriteBridge() {
         if (!p) {
           return { ok: false, error: 'path requerido', result: null, tool, elapsed: 0 };
         }
-        fs.writeFileSync(p, params.content || `contenido de ${path.basename(p)}`, 'utf-8');
+        const fallback = /\.js$/i.test(p)
+          ? 'module.exports = {};'
+          : `contenido de ${path.basename(p)}`;
+        fs.writeFileSync(p, params.content || fallback, 'utf-8');
         return { ok: true, result: `Escrito ${p}`, error: null, tool, elapsed: 0 };
       }
       if (tool === 'read') {
@@ -85,15 +88,25 @@ function createWriteBridge() {
           ? { ok: true, result: fs.readFileSync(p, 'utf-8'), error: null, tool, elapsed: 0 }
           : { ok: false, error: `not found ${p}`, result: null, tool, elapsed: 0 };
       }
+      if (tool === 'exec') {
+        return {
+          ok: true,
+          result: { stdout: '', stderr: '', exitCode: 0, signal: null },
+          error: null,
+          tool,
+          elapsed: 0,
+        };
+      }
       return { ok: false, error: `tool ${tool} no soportada`, result: null, tool, elapsed: 0 };
     },
   };
 }
 
 function actionBlock(action, filePath) {
+  const content = /\.js$/i.test(filePath) ? '\nCONTENIDO: module.exports = {};' : '';
   return `Voy a ${action}.
 \`\`\`action
-ACCIÓN: ${action} | ARCHIVO: ${filePath}
+ACCIÓN: ${action} | ARCHIVO: ${filePath}${content}
 \`\`\``;
 }
 

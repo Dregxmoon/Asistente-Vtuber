@@ -51,31 +51,31 @@ const REGISTRY_API = 'https://registry.modelcontextprotocol.io/v0/servers';
 const REGISTRY_TIMEOUT_MS = 8 * 1000;
 
 const CATEGORIES = [
-  { id: 'code', name: 'Código', icon: '💻', description: 'Desarrollo, análisis, repositorios' },
-  { id: 'data', name: 'Datos', icon: '📊', description: 'Bases de datos, APIs, análisis' },
-  { id: 'web', name: 'Web', icon: '🌐', description: 'Navegación, scraping, APIs web' },
-  { id: 'files', name: 'Archivos', icon: '📁', description: 'Sistema de archivos, almacenamiento' },
+  { id: 'code', name: 'Código', icon: '', description: 'Desarrollo, análisis, repositorios' },
+  { id: 'data', name: 'Datos', icon: '', description: 'Bases de datos, APIs, análisis' },
+  { id: 'web', name: 'Web', icon: '', description: 'Navegación, scraping, APIs web' },
+  { id: 'files', name: 'Archivos', icon: '', description: 'Sistema de archivos, almacenamiento' },
   {
     id: 'comm',
     name: 'Comunicación',
-    icon: '💬',
+    icon: '',
     description: 'Slack, Discord, email, mensajería',
   },
   {
     id: 'cloud',
     name: 'Cloud/DevOps',
-    icon: '☁️',
+    icon: '',
     description: 'AWS, GCP, Azure, Kubernetes, CI/CD',
   },
-  { id: 'ai', name: 'IA/ML', icon: '🤖', description: 'Modelos, embeddings, entrenamiento' },
+  { id: 'ai', name: 'IA/ML', icon: '', description: 'Modelos, embeddings, entrenamiento' },
   {
     id: 'productivity',
     name: 'Productividad',
-    icon: '⚡',
+    icon: '',
     description: 'Notion, Obsidian, calendarios, tareas',
   },
-  { id: 'security', name: 'Seguridad', icon: '🔒', description: 'Escaneo, secretos, compliance' },
-  { id: 'other', name: 'Otros', icon: '🔧', description: 'Utilidades varias' },
+  { id: 'security', name: 'Seguridad', icon: '', description: 'Escaneo, secretos, compliance' },
+  { id: 'other', name: 'Otros', icon: '', description: 'Utilidades varias' },
 ];
 
 function _detectCategory(name, description, packages = []) {

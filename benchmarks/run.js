@@ -136,6 +136,13 @@ function runVerifyTest(task, workspace) {
 }
 
 async function main() {
+  if (!process.env.LLM_KEY_GROQ) {
+    console.error(
+      'Benchmark omitido: configura LLM_KEY_GROQ. No se añadió ningún resultado fallido.'
+    );
+    process.exitCode = 2;
+    return;
+  }
   const tasks = listTasks();
   if (tasks.length === 0) {
     console.error('No hay tareas de benchmark');

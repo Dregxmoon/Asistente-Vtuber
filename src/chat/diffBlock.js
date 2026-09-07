@@ -7,7 +7,7 @@
  *
  * Dos usos, mismo renderizado:
  *   1. Card de aprobación: `renderDiffBlockHtml(diff)` devuelve el HTML de un
- *      bloque colapsable (colapsado por defecto) con resumen +N/−M en el
+ *      bloque colapsable (abierto por defecto) con resumen +N/−M en el
  *      título. La UI lo incrusta ANTES de que el usuario apruebe.
  *   2. Registro navegable post-edición: `renderDiffBlock(diff)` inserta el
  *      mismo bloque en el feed (antes del ancla de actividad), como registro
@@ -96,7 +96,7 @@ function renderDiffBlockHtml(diff) {
     (diff.added > 0 && diff.removed > 0 ? '/' : '') +
     (diff.removed > 0 ? `−${diff.removed}` : '');
   return (
-    '<div class="diff-block">' +
+    '<div class="diff-block open">' +
     `<div class="diff-block-header" role="button" tabindex="0">` +
     `<span class="diff-block-chevron">▸</span>` +
     `<span class="diff-block-file">${_escapeHtml(name)}</span>` +
@@ -109,8 +109,8 @@ function renderDiffBlockHtml(diff) {
 
 /**
  * Inserta un bloque de diff como registro navegable en el feed (antes del
- * ancla, mismo patrón que planBlock/activityBlock). El bloque viene colapsado
- * por defecto.
+ * ancla, mismo patrón que planBlock/activityBlock). El bloque viene abierto
+ * para que las líneas cambiadas sean visibles.
  * @param {FileDiff} diff
  */
 function renderDiffBlock(diff) {

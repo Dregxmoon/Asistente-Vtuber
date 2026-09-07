@@ -785,7 +785,7 @@ async function testLLMFailureKeepsCompletedTools() {
     assert(result.toolResults[0].tool === 'write', 'tool ejecutada: write');
     assert(result.toolResults[0].ok, 'write tuvo éxito', result.toolResults[0].error || '');
     assert(
-      result.response.includes('La tarea quedó terminada'),
+      result.response.includes('Acciones completadas antes de la interrupción'),
       'response incluye el resumen de lo ya logrado',
       result.response
     );
@@ -795,8 +795,8 @@ async function testLLMFailureKeepsCompletedTools() {
       result.response
     );
     assert(
-      result.response.includes('me quedé sin cuota'),
-      'response aclara que fue la cuota, no un corte a medias',
+      result.response.includes('se detuvo porque el proveedor'),
+      'response informa la interrupción sin afirmar que toda la tarea terminó',
       result.response
     );
     assert(
@@ -805,8 +805,8 @@ async function testLLMFailureKeepsCompletedTools() {
       result.response
     );
     assert(
-      result.response.indexOf('✓ write') < result.response.indexOf('me quedé sin cuota'),
-      'el éxito aparece antes que el aviso de cuota',
+      result.response.indexOf('✓ write') < result.response.indexOf('se detuvo porque el proveedor'),
+      'las acciones verificadas aparecen antes del error final',
       result.response
     );
     assert(

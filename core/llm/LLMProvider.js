@@ -29,6 +29,31 @@ function getUsageTracker() {
   return _usageTracker;
 }
 
+function getContextStatus(mode = 'smart') {
+  const provider = getActiveProvider();
+  const model = provider ? getActiveModel(mode) : null;
+  const meta = provider && model ? getModelMeta(provider, model) : null;
+  const recent = _usageTracker
+    .recent(100)
+    .reverse()
+    .find(
+      (event) =>
+        event &&
+        !event.error &&
+        event.provider === provider &&
+        event.model === model &&
+        Number(event.promptTokens) > 0
+    );
+  return {
+    provider,
+    model,
+    maxContext: Number(meta?.context) || 0,
+    promptTokens: recent ? Number(recent.promptTokens) || 0 : null,
+    measuredAt: recent ? recent.ts : null,
+    source: recent ? 'provider' : null,
+  };
+}
+
 /**
  * Extrae tokens de un body de respuesta y registra el evento de uso.
  * Devuelve los tokens extraídos (puede ser 0 si el provider no los reporta,
@@ -263,6 +288,26 @@ function _applyThinkingControl(body, providerId, model, opts) {
     body.chat_template_kwargs = { thinking: false };
   } else if (/qwen3|deepseek/i.test(model)) {
     body.chat_template_kwargs = { enable_thinking: false };
+  }
+}
+
+const REASONING_EFFORTS = new Set(['low', 'medium', 'high']);
+
+function _configuredReasoningEffort(providerId, model, opts) {
+  const explicit = opts?.reasoningEffort;
+  const configured = _config.providers?.[providerId]?.reasoningEffort?.[model];
+  const effort = explicit || configured;
+  return REASONING_EFFORTS.has(effort) ? effort : null;
+}
+
+function _applyReasoningEffort(body, providerId, model, opts) {
+  const effort = _configuredReasoningEffort(providerId, model, opts);
+  if (!effort) return;
+  if (providerId === 'openai') {
+    body.reasoning_effort = effort;
+    delete body.temperature;
+  } else if (providerId === 'openrouter') {
+    body.reasoning = { effort };
   }
 }
 
@@ -974,6 +1019,7 @@ function postStream(url, headers, body, onToken, timeoutMs = 20_000, signal = nu
       }
       let buffer = '';
       let content = '';
+      let usage = null;
       const toolCalls = []; // acumulados por índice (deltas incrementales)
       // Filtro de CoT en vivo: los bloques <thinking> pueden llegar partidos
       // entre chunks SSE; se retienen los últimos bytes por si un marker se
@@ -1037,6 +1083,7 @@ function postStream(url, headers, body, onToken, timeoutMs = 20_000, signal = nu
           } catch {
             continue;
           }
+          if (json.usage) usage = json.usage;
           const delta = json.choices?.[0]?.delta;
           if (delta) parseDelta(delta);
         }
@@ -1061,6 +1108,7 @@ function postStream(url, headers, body, onToken, timeoutMs = 20_000, signal = nu
           body: {
             content: _stripCot(content),
             tool_calls: toolCallsOut.length > 0 ? toolCallsOut : null,
+            usage,
           },
         });
       });
@@ -1109,7 +1157,10 @@ async function callOpenAI(providerId, messages, systemPrompt, mode = 'fast', opt
 
   const headers = key ? { Authorization: `Bearer ${key}` } : {};
   const body = { model, messages: msgs, max_tokens: maxTokens, temperature: _temp(opts) };
-  if (opts.onToken) body.stream = true;
+  if (opts.onToken) {
+    body.stream = true;
+    if (providerId === 'openai') body.stream_options = { include_usage: true };
+  }
   // Modelos de razonamiento (Qwen3/DeepSeek) vuelcan su chain-of-thought en el
   // content y ese CoT se filtra al usuario por el chat. Se desactiva el modo
   // "thinking" por defecto; quien realmente quiera razonamiento lo pide con
@@ -1117,6 +1168,7 @@ async function callOpenAI(providerId, messages, systemPrompt, mode = 'fast', opt
   // rechaza con HTTP 400), así que solo se envía a los que lo soportan; el
   // resto se cubre con _stripCot sobre el content de la respuesta.
   _applyThinkingControl(body, providerId, model, opts);
+  _applyReasoningEffort(body, providerId, model, opts);
 
   const res = opts.onToken
     ? await postStream(
@@ -1183,8 +1235,16 @@ async function callGeminiProvider(providerId, messages, systemPrompt, mode = 'fa
   // Gemini stream (alt=sse) devuelve el body como string SSE en data — si
   // llegó como JSON normal, extraemos directo; si es SSE, parseamos fragmentos.
   if (opts.onToken && typeof res.body === 'string') {
-    _recordUsage(providerId, def, model, safeMode, {}, opts, startedAt);
     const full = _parseGeminiSSE(res.body, opts.onToken);
+    _recordUsage(
+      providerId,
+      def,
+      model,
+      safeMode,
+      { usageMetadata: full.usageMetadata },
+      opts,
+      startedAt
+    );
     return full.text.trim();
   }
   _recordUsage(providerId, def, model, safeMode, res.body, opts, startedAt);
@@ -1193,6 +1253,7 @@ async function callGeminiProvider(providerId, messages, systemPrompt, mode = 'fa
 
 function _parseGeminiSSE(raw, onToken) {
   let out = '';
+  let usageMetadata = null;
   /** @type {Array<{ tool: string, params: object }>} */
   const toolCalls = [];
   for (const line of raw.split('\n')) {
@@ -1206,6 +1267,7 @@ function _parseGeminiSSE(raw, onToken) {
     } catch {
       continue;
     }
+    if (json.usageMetadata) usageMetadata = json.usageMetadata;
     const parts = json.candidates?.[0]?.content?.parts;
     if (!Array.isArray(parts)) continue;
     for (const part of parts) {
@@ -1226,11 +1288,11 @@ function _parseGeminiSSE(raw, onToken) {
       }
     }
   }
-  return { text: out, toolCalls };
+  return { text: out, toolCalls, usageMetadata };
 }
 
 // ── Generic Anthropic caller ──────────────────────────────────────────────────
-async function callAnthropic(providerId, messages, systemPrompt, mode = 'fast') {
+async function callAnthropic(providerId, messages, systemPrompt, mode = 'fast', opts = {}) {
   const def = _registry.get(providerId);
   if (!def) throw new Error(`Provider desconocido: ${providerId}`);
   const key = _getApiKey(providerId);
@@ -1241,6 +1303,7 @@ async function callAnthropic(providerId, messages, systemPrompt, mode = 'fast') 
   const maxTokens = MAX_OUTPUT[safeMode];
   const timeoutMs = TIMEOUT_MS[safeMode] ?? TIMEOUT_MS.fast;
   const history = _trimHistoryForMode(messages, safeMode);
+  const startedAt = Date.now();
 
   const msgs = history.map((m) => ({
     role: m.role === 'assistant' ? 'assistant' : 'user',
@@ -1255,10 +1318,18 @@ async function callAnthropic(providerId, messages, systemPrompt, mode = 'fast') 
   const res = await post(
     `${def.baseURL}/messages`,
     { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-    { model, messages: msgs, system: systemPrompt, max_tokens: maxTokens, temperature: 0.85 },
-    timeoutMs
+    {
+      model,
+      messages: msgs,
+      system: systemPrompt,
+      max_tokens: maxTokens,
+      temperature: _temp(opts),
+    },
+    timeoutMs,
+    opts.signal
   );
   if (res.status !== 200) throw new Error(`${def.name} ${res.status}: ${JSON.stringify(res.body)}`);
+  _recordUsage(providerId, def, model, safeMode, res.body, opts, startedAt);
   const content = res.body.content;
   if (!content) return '';
   return content
@@ -1523,7 +1594,10 @@ async function callOpenAIWithTools(providerId, messages, systemPrompt, mode, too
     tools: _buildOpenAITools(tools),
     tool_choice: 'auto',
   };
-  if (opts.onToken) body.stream = true;
+  if (opts.onToken) {
+    body.stream = true;
+    if (providerId === 'openai') body.stream_options = { include_usage: true };
+  }
   // Modelos de razonamiento (Qwen3/DeepSeek) vuelcan su chain-of-thought en el
   // content y ese CoT se filtra al usuario por el chat (también en el modo
   // tool-calling). Se desactiva el modo "thinking" por defecto; quien quiera
@@ -1531,6 +1605,7 @@ async function callOpenAIWithTools(providerId, messages, systemPrompt, mode, too
   // los providers (Groq lo rechaza con HTTP 400) → solo a los que lo soportan;
   // el resto se cubre con _stripCot sobre el content.
   _applyThinkingControl(body, providerId, model, opts);
+  _applyReasoningEffort(body, providerId, model, opts);
 
   logger.info(
     'LLMProvider',
@@ -1564,7 +1639,7 @@ async function callOpenAIWithTools(providerId, messages, systemPrompt, mode, too
         }
       })
       .filter(Boolean);
-    _recordUsage(providerId, def, model, safeMode, {}, opts, startedAt);
+    _recordUsage(providerId, def, model, safeMode, res.body, opts, startedAt);
     return { content: _stripCot(body.content), toolCalls: toolCalls.length > 0 ? toolCalls : null };
   }
   _recordUsage(providerId, def, model, safeMode, res.body, opts, startedAt);
@@ -1615,8 +1690,16 @@ async function callGeminiWithTools(providerId, messages, systemPrompt, mode, too
   if (res.status !== 200) throw new Error(`${def.name} ${res.status}: ${JSON.stringify(res.body)}`);
 
   if (opts.onToken && typeof res.body === 'string') {
-    _recordUsage(providerId, def, model, safeMode, {}, opts, startedAt);
     const sse = _parseGeminiSSE(res.body, opts.onToken);
+    _recordUsage(
+      providerId,
+      def,
+      model,
+      safeMode,
+      { usageMetadata: sse.usageMetadata },
+      opts,
+      startedAt
+    );
     return {
       content: sse.text.trim() || null,
       toolCalls: sse.toolCalls.length > 0 ? sse.toolCalls : null,
@@ -1744,7 +1827,7 @@ function _isProviderDegraded(providerId) {
  * Así el primary degradado deja de martillarse y el fallback sano responde.
  */
 function _rotationOrder() {
-  const order = [_config.primary, ...(_config.fallback || [])];
+  const order = [...new Set([_config.primary, ...(_config.fallback || [])].filter(Boolean))];
   const healthy = [];
   const degraded = [];
   for (const p of order) {
@@ -2137,7 +2220,9 @@ function _providerPickerStates() {
 }
 
 function _pushPickerModel(models, seen, providerId, modelId, meta, remote) {
-  const key = `${providerId}\u0000${modelId}`;
+  const normalizedId = String(modelId).trim().toLowerCase();
+  const normalizedProvider = String(providerId).trim().toLowerCase();
+  const key = `${normalizedProvider}\u0000${normalizedId}`;
   if (seen.has(key)) return;
   seen.add(key);
   const m = meta || {};
@@ -2150,6 +2235,11 @@ function _pushPickerModel(models, seen, providerId, modelId, meta, remote) {
     tools: !!m.tools,
     vision: !!m.vision,
     reasoning: !!m.reasoning,
+    effortOptions:
+      m.reasoning && (normalizedProvider === 'openai' || normalizedProvider === 'openrouter')
+        ? ['low', 'medium', 'high']
+        : [],
+    reasoningEffort: _config.providers?.[providerId]?.reasoningEffort?.[modelId] || null,
     free: !!m.free,
     costIn: m.cost && typeof m.cost.in === 'number' ? m.cost.in : 0,
     costOut: m.cost && typeof m.cost.out === 'number' ? m.cost.out : 0,
@@ -2394,6 +2484,7 @@ module.exports = {
   configure,
   complete,
   _applyThinkingControl,
+  _applyReasoningEffort,
   completeTask,
   completeForMode,
   completeWithTools,
@@ -2441,6 +2532,7 @@ module.exports = {
   _debug_get: get,
   setUsageTracker,
   getUsageTracker,
+  getContextStatus,
   _debug_recordUsage: _recordUsage,
   _debug_resolveModel: _resolveModel,
   _debug_rotationOrder: _rotationOrder,

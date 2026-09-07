@@ -149,8 +149,7 @@ class StepExecutionLedger {
         (ordinal) => this.steps.find((item) => item.ordinal === ordinal)?.status === 'completed'
       );
       step.status =
-        dependenciesComplete &&
-        (DIRECT_EVIDENCE_TOOLS.has(tool) || _directlySatisfied(step, kind))
+        dependenciesComplete && (DIRECT_EVIDENCE_TOOLS.has(tool) || _directlySatisfied(step, kind))
           ? 'completed'
           : 'awaiting_verification';
     } else if (step.status === 'pending') {

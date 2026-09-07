@@ -142,6 +142,25 @@ class GoalPlanStore {
     }
   }
 
+  /** Sustituye un plan después de una replanificación explícita.
+   * @param {number} intentionId @param {Array<string|object>} [steps]
+   */
+  replacePlan(intentionId, steps = []) {
+    if (!intentionId || !Array.isArray(steps) || !steps.length) return [];
+    if (this._graph.usingFallback) {
+      this._fallbackPlans.delete(intentionId);
+      return this.createPlan(intentionId, steps);
+    }
+    try {
+      this._db.prepare('DELETE FROM goal_steps WHERE intention_id=?').run(intentionId);
+      this.recordEvent(intentionId, null, 'plan_replaced', { steps: steps.length });
+      return this.createPlan(intentionId, steps);
+    } catch (e) {
+      logger.warn('GoalPlanStore', `[goal-plan] no se pudo reemplazar plan: ${_errMsg(e)}`);
+      return [];
+    }
+  }
+
   /** @param {number} intentionId @returns {GoalStep[]} */
   listSteps(intentionId) {
     if (this._graph.usingFallback)

@@ -92,16 +92,24 @@ function register(ctx) {
 
   // Fase Q: /model id <modelo> [fast|smart] persiste el modelo elegido por
   // proveedor+modo en config.json (llm.providers[id].model[modo]) sin tocar keys.
-  ipcMain.handle('set-llm-model', (e, { provider, mode, model }) => {
+  ipcMain.handle('set-llm-model', (e, { provider, mode, model, reasoningEffort }) => {
     if (!provider || !model || !['fast', 'smart'].includes(mode)) return false;
+    if (reasoningEffort != null && !['low', 'medium', 'high'].includes(reasoningEffort)) {
+      return false;
+    }
     const currentCfg = loadConfig();
     const providers = { ...(currentCfg.llm?.providers || {}) };
     providers[provider] = {
       ...(providers[provider] || {}),
       model: { ...(providers[provider]?.model || {}), [mode]: model },
+      reasoningEffort: {
+        ...(providers[provider]?.reasoningEffort || {}),
+        ...(reasoningEffort ? { [model]: reasoningEffort } : {}),
+      },
     };
     saveConfig({
       llm: {
+        ...(currentCfg.llm || {}),
         primary: currentCfg.llm?.primary || 'groq',
         fallback: currentCfg.llm?.fallback || ['gemini'],
         providers,

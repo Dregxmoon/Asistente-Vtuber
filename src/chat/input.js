@@ -370,7 +370,17 @@ function _mbrCtx(n) {
 }
 
 function _mbrKey(m) {
-  return `${m.providerId}/${m.modelId}`;
+  return `${String(m.providerId).toLowerCase()}/${String(m.modelId).toLowerCase()}`;
+}
+
+function _mbrEffortControl(m) {
+  if (!Array.isArray(m.effortOptions) || m.effortOptions.length === 0) return '';
+  const selected = m.reasoningEffort || 'medium';
+  return `<label class="mbr-effort">Esfuerzo de razonamiento
+    <select class="mbr-effort-select">
+      ${m.effortOptions.map((value) => `<option value="${value}"${value === selected ? ' selected' : ''}>${value === 'low' ? 'bajo' : value === 'high' ? 'alto' : 'medio'}</option>`).join('')}
+    </select>
+  </label>`;
 }
 
 function _mbrRowHtml(m, i, byId, favs) {
@@ -378,27 +388,33 @@ function _mbrRowHtml(m, i, byId, favs) {
   const connected = !!p.hasKey;
   const chips = [];
   if (m.tools) chips.push('tools');
+  if (m.reasoning) chips.push('razonamiento');
   const ctx = _mbrCtx(m.context);
   if (ctx) chips.push(ctx);
   const expanded =
     _browserExpanded &&
     _browserExpanded.providerId === m.providerId &&
     _browserExpanded.modelId === m.modelId;
-  const exp =
-    expanded && !connected
-      ? `<div class="model-browser-expanded">
+  const exp = expanded
+    ? `<div class="model-browser-expanded">
+        ${_mbrEffortControl(m)}
         ${p.doc ? `<a class="mbr-doc" href="${escapeHtml(p.doc)}" target="_blank" rel="noreferrer">Docs del provider ↗</a>` : ''}
         ${
-          p.connectable === false
-            ? '<div style="font-size:10px;color:#f59e0b;font-family:var(--font-mono)">No conectable automáticamente.</div>'
-            : `<input class="mbr-key" type="password" placeholder="${escapeHtml(p.name)} API key" autocomplete="off" />
+          connected
+            ? `<div class="mbr-actions">
+               <button class="mbr-btn" data-act="use" data-mode="fast">Usar en Charla</button>
+               <button class="mbr-btn" data-act="use" data-mode="smart">Usar en Agente</button>
+             </div>`
+            : p.connectable === false
+              ? '<div style="font-size:10px;color:#f59e0b;font-family:var(--font-mono)">No conectable automáticamente.</div>'
+              : `<input class="mbr-key" type="password" placeholder="${escapeHtml(p.name)} API key" autocomplete="off" />
              <div class="mbr-actions">
                <button class="mbr-btn" data-act="connect" data-mode="fast">Conectar y usar en Charla</button>
                <button class="mbr-btn" data-act="connect" data-mode="smart">Conectar y usar en Agente</button>
              </div>`
         }
       </div>`
-      : '';
+    : '';
   return `<div class="model-browser-row${i === _browserSel ? ' active' : ''}" data-i="${i}">
     <div class="mbr-name">${favs.has(_mbrKey(m)) ? '<span class="fav">★</span>' : ''}${escapeHtml(m.label)}</div>
     <div class="mbr-provider"><span class="dot${connected ? ' on' : ''}"></span>${escapeHtml(p.name || m.providerId)}</div>
@@ -437,17 +453,32 @@ function _mbrRender() {
   let rows = base.filter((m) => {
     if (!q) return true;
     const p = byId.get(m.providerId) || {};
+    const aliases = m.providerId === 'openai' ? 'chatgpt gpt' : '';
     return (
       m.label.toLowerCase().includes(q) ||
       m.modelId.toLowerCase().includes(q) ||
-      (p.name || '').toLowerCase().includes(q)
+      (p.name || '').toLowerCase().includes(q) ||
+      aliases.includes(q)
     );
   });
   rows.sort(
     (a, b) =>
       (favs.has(_mbrKey(a)) ? 0 : 1) - (favs.has(_mbrKey(b)) ? 0 : 1) ||
+      (byId.get(a.providerId)?.hasKey ? 0 : 1) - (byId.get(b.providerId)?.hasKey ? 0 : 1) ||
+      (byId.get(a.providerId)?.builtin ? 0 : 1) - (byId.get(b.providerId)?.builtin ? 0 : 1) ||
       a.providerId.localeCompare(b.providerId)
   );
+  if (q) {
+    const seenModels = new Set();
+    rows = rows.filter((m) => {
+      const canonical = String(m.label || m.modelId)
+        .trim()
+        .toLowerCase();
+      if (seenModels.has(canonical)) return false;
+      seenModels.add(canonical);
+      return true;
+    });
+  }
   // Agrupar por provider preservando el orden (favoritos primero).
   const groups = [];
   const groupIdx = new Map();
@@ -542,11 +573,15 @@ function _mbrToggleExpand(row) {
 
 async function _mbrApplyConnected(row, mode) {
   const role = (_pickerData.roles && _pickerData.roles[mode]) || mode;
+  const effortSelect = modelBrowserList.querySelector('.mbr-effort-select');
+  const reasoningEffort = effortSelect ? effortSelect.value : row.reasoningEffort;
   await ipcRenderer.invoke('set-llm-model', {
     provider: row.providerId,
     mode,
     model: row.modelId,
+    reasoningEffort,
   });
+  if (reasoningEffort) row.reasoningEffort = reasoningEffort;
   if (_pickerData.active.provider !== row.providerId) {
     ipcRenderer.send('set-provider', { primary: row.providerId });
   }
@@ -579,6 +614,16 @@ async function _mbrConnectAndUse(row, mode) {
     modelBrowserStatus.textContent = 'Error: ' + (res.error || 'no se pudo conectar');
     modelBrowserStatus.style.color = '#ef4444';
     return;
+  }
+  const effortSelect = modelBrowserList.querySelector('.mbr-effort-select');
+  if (effortSelect) {
+    await ipcRenderer.invoke('set-llm-model', {
+      provider: row.providerId,
+      mode,
+      model: row.modelId,
+      reasoningEffort: effortSelect.value,
+    });
+    row.reasoningEffort = effortSelect.value;
   }
   await loadLLMConfig();
   _mbrHide();
@@ -719,7 +764,9 @@ modelBrowserList.addEventListener('mousedown', async (e) => {
   _browserSel = i;
   const row = _browserRows[i];
   const p = _providerById().get(row.providerId) || {};
-  if (p.hasKey) await _mbrApplyConnected(row, 'fast');
+  if (p.hasKey && Array.isArray(row.effortOptions) && row.effortOptions.length > 0) {
+    _mbrToggleExpand(row);
+  } else if (p.hasKey) await _mbrApplyConnected(row, 'fast');
   else _mbrToggleExpand(row);
 });
 

@@ -347,6 +347,17 @@ async function testHttpPathValidation() {
       });
       const readBody = JSON.parse(readHappy.body);
       assert(readBody.result === 'hello auth test', 'read devuelve contenido correcto');
+
+      fs.writeFileSync(testFile, 'uno\ndos\ntres\ncuatro', 'utf-8');
+      const rangedRead = await httpRequest(port, 'POST', '/v1/tool', headers, {
+        tool: 'read',
+        input: { path: testFile, start_line: 2, max_lines: 2 },
+      });
+      const rangedBody = JSON.parse(rangedRead.body);
+      assert(
+        rangedBody.result?.content === '2: dos\n3: tres' && rangedBody.result?.next_line === 4,
+        'read por rango devuelve líneas numeradas y cursor next_line'
+      );
     }
   } finally {
     try {

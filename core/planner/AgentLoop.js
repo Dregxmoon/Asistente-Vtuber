@@ -27,6 +27,12 @@ const {
 } = require('./subagent-report.js');
 const { getSubagentRegistry, _toolAllowed } = require('./SubagentRegistry.js');
 const { buildStepProgress } = require('./StepExecutionLedger.js');
+const {
+  MutationJournal,
+  isMutatingAction,
+  isSuccessfulMutationResult,
+  extractMutationPaths,
+} = require('./MutationJournal.js');
 
 const VALID_MODES = new Set(['smart', 'fast', 'task', 'conversational']);
 
@@ -113,11 +119,17 @@ const NATIVE_MCP_TOOL_CALL_RE = /^MCP_TOOL:\s*([^.\s]+)\.([^.\s]+)$/;
 
 function _nativeToolCallToAction(tc, nativeMcpMap = {}) {
   const raw = String(tc.tool || '');
+  const rawParams = tc.params && typeof tc.params === 'object' ? { ...tc.params } : {};
+  const stepOrdinal = Number(rawParams.step_ordinal || rawParams.stepOrdinal || 0) || undefined;
+  delete rawParams.step_ordinal;
+  delete rawParams.stepOrdinal;
   const dynamicMcp = nativeMcpMap[raw];
   if (dynamicMcp) {
     return {
       tool: 'mcp',
-      params: { server: dynamicMcp.server, tool: dynamicMcp.tool, args: tc.params || {} },
+      params: { server: dynamicMcp.server, tool: dynamicMcp.tool, args: rawParams },
+      stepOrdinal,
+      callId: tc.id || tc.callId || null,
       description: `${dynamicMcp.server}.${dynamicMcp.tool}: ${JSON.stringify(tc.params).slice(0, 100)}`,
       source: 'native_tool_call',
     };
@@ -126,14 +138,18 @@ function _nativeToolCallToAction(tc, nativeMcpMap = {}) {
   if (mcpMatch) {
     return {
       tool: 'mcp',
-      params: { server: mcpMatch[1], tool: mcpMatch[2], args: tc.params || {} },
+      params: { server: mcpMatch[1], tool: mcpMatch[2], args: rawParams },
+      stepOrdinal,
+      callId: tc.id || tc.callId || null,
       description: `${raw}: ${JSON.stringify(tc.params).slice(0, 100)}`,
       source: 'native_tool_call',
     };
   }
   return {
     tool: _canonicalToolName(raw),
-    params: tc.params,
+    params: rawParams,
+    stepOrdinal,
+    callId: tc.id || tc.callId || null,
     description: `${raw}: ${JSON.stringify(tc.params).slice(0, 100)}`,
     source: 'native_tool_call',
   };
@@ -200,16 +216,7 @@ function _expectsMutation(userMessage) {
 
 /** Reconoce mutaciones exitosas aunque hayan pasado por MCP o exec. */
 function _isSuccessfulMutation(result) {
-  if (!result?.ok) return false;
-  const action = result._action || {};
-  const tool = action.tool || result.tool || '';
-  if (MUTATOR_TOOLS.has(tool) || tool === 'code_execution') return true;
-  if (tool === 'mcp') return !AP.isMCPToolReadOnly(action.params?.tool || '');
-  if (tool !== 'exec') return false;
-  const command = String(action.params?.command || '');
-  return /(?:^|\s)(?:rm|mv|cp|mkdir|touch|truncate|install)\b|(?:^|\s)sed\s+-i\b|(?:^|\s)(?:npm|pnpm|yarn)\s+(?:i|install|add|remove)\b|(?:>|>>)/i.test(
-    command
-  );
+  return isSuccessfulMutationResult(result);
 }
 
 function _toolCallKey(tool, params) {
@@ -359,7 +366,9 @@ const MAX_ITERATIONS = 25;
 // Iteraciones adaptativas: tope ABSOLUTO tras las extensiones (el presupuesto
 // inicial se extiende de a bloques mientras el run muestra progreso sostenido).
 const MAX_ITERATIONS_ABS = 40;
-const RESULT_TRUNCATE_LIMIT = 800;
+const RESULT_TRUNCATE_LIMIT = 4000;
+const READ_RESULT_TRUNCATE_LIMIT = 8000;
+const VERIFY_REPAIR_MAX_ROUNDS = 2;
 
 // Self-critique (opcional, opts.selfCritique): al terminar el loop con una
 // respuesta de texto, un paso extra le pide al LLM comparar el resultado
@@ -419,6 +428,28 @@ const AGENT_MAX_SYSTEM_CHARS = 40_000;
 // el historial crudo a cada turno): el objetivo + lista de acciones ejecutadas.
 const COMPACT_MIN_TURNS = 14; // tuplas de historial que disparan compactación
 const COMPACT_KEEP_TAIL = 8; // turnos recientes que se conservan íntegros
+
+/** Añade el paso del plan a cada schema sin modificar el catálogo compartido. */
+function _withPlanStepSchemas(tools, plan) {
+  if (!Array.isArray(tools) || !plan?.steps?.length) return tools;
+  return tools.map((tool) => {
+    const inputSchema = tool?.inputSchema || tool?.parameters;
+    if (!inputSchema || inputSchema.type !== 'object') return tool;
+    const patched = {
+      ...inputSchema,
+      properties: {
+        ...(inputSchema.properties || {}),
+        step_ordinal: {
+          type: 'integer',
+          minimum: 1,
+          maximum: plan.steps.length,
+          description: 'Número del paso del plan que esta llamada ejecuta o verifica.',
+        },
+      },
+    };
+    return tool.inputSchema ? { ...tool, inputSchema: patched } : { ...tool, parameters: patched };
+  });
+}
 
 /**
  * Fase 3, ítem 1: sección de intenciones activas pendientes para el prompt.
@@ -614,6 +645,7 @@ class AgentLoop {
     this._mcp = opts.mcpManager || null;
     this._compactionPersisted = false;
     this._checkpoint = opts.checkpoint || null;
+    this._manageCheckpoint = opts.manageCheckpoint !== false;
     this._telemetry = opts.telemetry || null;
     // Caché por-run de tools de solo lectura (read + exec read-only). Se
     // limpia al arrancar cada run y se invalida ante mutaciones (write/edit,
@@ -690,13 +722,23 @@ class AgentLoop {
           Array.isArray(result.toolResults) ? result.toolResults : [],
           result.verify || null
         );
+        // Publica el ledger final después de aplicar la verificación. El último
+        // evento emitido dentro del bucle puede preceder a esa verificación y
+        // dejar el HUD visualmente incompleto aunque la tarea ya haya acabado.
+        if (typeof opts.onPlan === 'function') {
+          try {
+            opts.onPlan({ kind: 'progress', ...result.plan, goalId: this._currentGoalId });
+          } catch (_) {}
+        }
       }
       return result;
     } finally {
-      try {
-        await checkpoint.finalize();
-      } catch (e) {
-        logger.warn('AgentLoop', `[checkpoint] finalize falló: ${e.message}`);
+      if (this._manageCheckpoint) {
+        try {
+          await checkpoint.finalize();
+        } catch (e) {
+          logger.warn('AgentLoop', `[checkpoint] finalize falló: ${e.message}`);
+        }
       }
       // Instrumentación por-run: emite métricas de ejecución SIEMPRE (éxito,
       // error o cancelación), sin tocar el contrato del valor de retorno
@@ -748,15 +790,26 @@ class AgentLoop {
     // runs anidados (subagentes) hereden la misma política.
     this._verifyPlan = opts.verify || null;
     this._reflectionOpt = opts.reflection || null;
+    this._currentToolResolver = opts.toolResolver || null;
+    this._currentPermissionManager = opts.permissionManager || null;
+    this._currentPluginManager = opts.pluginManager || null;
+    this._currentSkillManager = opts.skillManager || null;
+    this._currentSkillDb = opts.skillDb || null;
+    const contextTokens = Number(opts.contextWindowTokens || 0);
+    this._historyCharBudget =
+      contextTokens > 0 ? Math.max(12_000, Math.floor(contextTokens * 4 * 0.45)) : 48_000;
+    this._currentGoalId = Number(opts.currentGoalId) || null;
+    this._currentOnPlan = typeof opts.onPlan === 'function' ? opts.onPlan : null;
     const llmOpts = onToken ? { onToken } : {};
     if (signal) llmOpts.signal = signal;
     if (opts.temperature != null) llmOpts.temperature = opts.temperature;
+    else if (this._mode === 'smart') llmOpts.temperature = 0.2;
 
     // ── Tool resolution (Fase 5): Skill > MCP > OpenClaw ────────────
     let tools = opts.tools || null;
     let toolCatalog = this._toolRegistry.serializeToPrompt(domain);
-    let resolvedSkills = null;
-    let nativeMcpMap = {};
+    let resolvedSkills = opts.matchedSkills || null;
+    let nativeMcpMap = opts.nativeMcpMap || {};
     /** @type {string[]} */
     const injectedSkills = [];
     // Los subagentes con perfil restringido inyectan un catálogo YA filtrado
@@ -764,7 +817,7 @@ class AgentLoop {
     if (opts.toolCatalog) toolCatalog = opts.toolCatalog;
     const toolResolver = opts.toolResolver || null;
 
-    if (toolResolver) {
+    if (toolResolver && !tools) {
       try {
         const resolved = await toolResolver.resolveToolset({
           userMessage,
@@ -869,8 +922,12 @@ class AgentLoop {
     // agent ya no se trunca en buildContext). Se eliminan bloques COMPLETOS
     // priorizando memoria, episodios y feedback antes que las herramientas,
     // sin borrar bloques posteriores al seleccionado.
+    const systemBudget =
+      contextTokens > 0
+        ? Math.max(16_000, Math.min(120_000, Math.floor(contextTokens * 4 * 0.35)))
+        : AGENT_MAX_SYSTEM_CHARS;
     agentPrompt = truncateSystemPrompt(agentPrompt, {
-      max: AGENT_MAX_SYSTEM_CHARS,
+      max: systemBudget,
       tailSections: TAIL_SECTIONS,
     });
 
@@ -902,6 +959,16 @@ class AgentLoop {
     // respuesta final: nunca puede sonar a "todo listo" si una acción quedó
     // denegada por timeout sin que el usuario lo supiera activamente.
     this._approvalExpiredTool = null;
+    let repositorySnapshot = '';
+    if (!this._plan && this._shouldPlan(userMessage, taskIntent, opts)) {
+      repositorySnapshot = await this._buildRepositorySnapshot(userMessage);
+      this._repositorySnapshot = repositorySnapshot;
+      if (typeof opts.onPlan === 'function') {
+        try {
+          opts.onPlan({ kind: 'reconnaissance', summary: repositorySnapshot });
+        } catch (_) {}
+      }
+    }
     if (this._plan) {
       agentPrompt += '\n\n' + this._plan.text;
       logger.info(
@@ -917,6 +984,7 @@ class AgentLoop {
           llm,
           llmOpts,
           signal,
+          repositorySnapshot,
         });
         if (plan && plan.steps && plan.steps.length) {
           this._plan = plan;
@@ -940,6 +1008,7 @@ class AgentLoop {
             try {
               opts.onPlan({
                 kind: 'created',
+                goalId: this._currentGoalId,
                 steps: plan.steps,
                 criteria: plan.criteria,
                 done: 0,
@@ -957,6 +1026,9 @@ class AgentLoop {
         logger.warn('AgentLoop', `[agent-loop] planificación falló: ${e.message}`);
       }
     }
+    tools = _withPlanStepSchemas(tools, this._plan);
+    this._currentTools = tools;
+    this._currentNativeMcpMap = nativeMcpMap;
 
     const iterationHistory = [...(messages || [])];
     let lastToolResult = null;
@@ -981,13 +1053,15 @@ class AgentLoop {
     // Verificación de artefactos (web + sintaxis universal): rondas de
     // corrección cuando archivos mutados fallan validación al cierre.
     let webVerifyRounds = 0;
+    const mutationJournal = new MutationJournal({ cwd: AP.PROJECT_CWD });
     /** @type {Set<string>} rutas absolutas de TODOS los archivos mutados con éxito */
-    const mutatedFiles = new Set();
+    const mutatedFiles = mutationJournal.files;
     // Reflexión intermedia (opts.reflection): fallas de herramientas
     // acumuladas en este run y rondas de reflexión agotadas.
     let toolFailures = 0;
     let reflectionRounds = 0;
     let failuresAtLastReflection = 0;
+    let verifyRepairRounds = 0;
 
     for (let i = 0; i < this.maxIterations; i++) {
       // Cancelación por el usuario (AbortController): se revisa en cada
@@ -1046,7 +1120,7 @@ class AgentLoop {
             return {
               response: this._withExpiredApprovalNotice(
                 this._completedSummary(toolResults) +
-                  `¡No te preocupes, eso es todo! Solo me quedé sin cuota y no pude escribir el resumen final (error en tool-calling y fallback textual: ${e2.message})`
+                  `La ejecución se detuvo porque el proveedor no pudo generar la respuesta final. Detalle: ${e2.message}`
               ),
               iterations: i + 1,
               toolResults,
@@ -1065,7 +1139,7 @@ class AgentLoop {
           return {
             response: this._withExpiredApprovalNotice(
               this._completedSummary(toolResults) +
-                `¡No te preocupes, eso es todo! Solo me quedé sin cuota y no pude escribir el resumen final (error en LLM: ${e.message})`
+                `La ejecución se detuvo porque el proveedor no pudo generar la respuesta final. Detalle: ${e.message}`
             ),
             iterations: i + 1,
             toolResults,
@@ -1251,6 +1325,29 @@ class AgentLoop {
         // run termina IGUAL — el resultado queda en `verify` y la respuesta
         // lo dice explícitamente (nunca un cierre silencioso).
         const verify = await this._runVerify(opts.verify, toolResults);
+        if (
+          verify?.status === 'failed' &&
+          opts.verifyRepair === true &&
+          !opts.reportMode &&
+          verifyRepairRounds < VERIFY_REPAIR_MAX_ROUNDS &&
+          i + 1 < this.maxIterations &&
+          !(signal && signal.aborted)
+        ) {
+          verifyRepairRounds++;
+          iterationHistory.push({
+            role: 'user',
+            content:
+              `[VERIFICACIÓN DEL PROYECTO FALLÓ — reparación ${verifyRepairRounds}/${VERIFY_REPAIR_MAX_ROUNDS}]\n` +
+              `Comando: ${verify.command || 'desconocido'}\n` +
+              `Salida relevante:\n${verify.stderr || '(sin stderr)'}\n\n` +
+              'Inspecciona la causa, corrige los archivos necesarios y vuelve a ejecutar la verificación. No cierres la tarea mientras siga fallando.',
+          });
+          logger.warn(
+            'AgentLoop',
+            `[agent-loop] verify falló — reparación ${verifyRepairRounds}/${VERIFY_REPAIR_MAX_ROUNDS}`
+          );
+          continue;
+        }
         // En reportMode (subagente) el aviso NO se mete en el texto del reporte:
         // contaminaría el audit de resumen (el comando incluye nombres de
         // archivo). El estado viaja en `result.verify` y el padre decide.
@@ -1279,6 +1376,7 @@ class AgentLoop {
           unverifiedEdits: falseClaim || undefined,
           skillsUsed: injectedSkills.slice(0, 5),
           artifactRounds: webVerifyRounds,
+          mutationJournal: mutationJournal.toJSON(),
           error: null,
         };
       }
@@ -1373,9 +1471,12 @@ class AgentLoop {
         if (permissionManager && typeof permissionManager.check === 'function') {
           const targetPath =
             action.params?.path || action.params?.filePath || action.params?.cwd || '';
+          const permissionPath = targetPath
+            ? path.resolve(AP.PROJECT_CWD || process.cwd(), targetPath)
+            : '';
           const perm = permissionManager.check({
             tool: action.tool,
-            path: targetPath,
+            path: permissionPath,
             defaultAction: requiresApproval ? 'ask' : 'allow',
           });
           permissionAction = perm.action;
@@ -1523,12 +1624,19 @@ class AgentLoop {
         // Se captura la línea base ANTES de la primera mutación real (write/edit/
         // apply_patch). Nunca bloquea la ejecución: si falla, solo se loguea y el
         // run continúa igual.
-        if (MUTATOR_TOOLS.has(action.tool)) {
+        if (isMutatingAction(action)) {
           try {
-            await this._activeCheckpoint.onBeforeMutation({
-              tool: action.tool,
-              params: action.params,
-            });
+            const mutationPaths = extractMutationPaths(action, AP.PROJECT_CWD);
+            if (mutationPaths.length > 0) {
+              for (const mutationPath of mutationPaths) {
+                await this._activeCheckpoint.onBeforeMutation({
+                  tool: 'write',
+                  params: { path: mutationPath },
+                });
+              }
+            } else if (typeof this._activeCheckpoint.onBeforeUnknownMutation === 'function') {
+              await this._activeCheckpoint.onBeforeUnknownMutation();
+            }
           } catch (e) {
             logger.warn('AgentLoop', `[checkpoint] no se pudo capturar línea base: ${e.message}`);
           }
@@ -1588,12 +1696,19 @@ class AgentLoop {
           result = { ok: false, error: e.message, result: null, tool: action.tool, elapsed: 0 };
         }
 
+        if (SUBAGENT_TOOLS.has(action.tool)) {
+          const nestedJournal = result?.result?.mutationJournal;
+          mutationJournal.merge(nestedJournal, action.tool);
+          for (const file of nestedJournal?.files || []) mutatedFiles.add(path.resolve(file));
+        }
+
         // ── Invalidación del caché de solo-lectura ─────────────────────────
         // Una mutación real (write/edit/apply_patch, git, cualquier exec no
         // cacheable con éxito) puede cambiar el filesystem o el repo: el
         // resultado cacheado (read del archivo, git status/log) quedaría
         // viejo. Solo se invalida ante éxito; un fallo no cambia el estado.
         if (result && result.ok) {
+          mutationJournal.record(result, action);
           // Verificación de artefactos: rastrear TODOS los archivos mutados.
           // Caso exec: los LLMs suelen crear archivos con redirecciones
           // (`echo '{...}' > config.json`) — se detectan por patrón.
@@ -1613,7 +1728,7 @@ class AgentLoop {
               } catch {}
             }
           }
-          if (MUTATOR_TOOLS.has(action.tool)) {
+          if (isMutatingAction(action)) {
             this._execCache.clear();
             const p = action.params?.path || action.params?.filePath || '';
             // Verificación de artefactos: rastrear TODOS los archivos mutados
@@ -1732,7 +1847,9 @@ class AgentLoop {
           'AgentLoop',
           `[agent-loop] iteración ${i + 1}: ${action.tool} → ${result.ok ? 'OK' : 'FALLÓ'}`
         );
-        resultSummaries.push(resultSummary);
+        resultSummaries.push(
+          `${action.callId ? `[tool_call_id=${action.callId}] ` : ''}${resultSummary}`
+        );
       }
 
       if (resultSummaries.length > 0) {
@@ -1764,7 +1881,49 @@ class AgentLoop {
         if (reflection && reflection.verdict === 'CAMBIAR_PLAN' && !(signal && signal.aborted)) {
           reflectionRounds++;
           failuresAtLastReflection = toolFailures;
-          iterationHistory.push({ role: 'user', content: reflection.message });
+          const replacement = await this._buildPlan({
+            userMessage,
+            taskIntent,
+            toolCatalog,
+            llm,
+            llmOpts,
+            signal,
+            repositorySnapshot: this._repositorySnapshot || repositorySnapshot,
+            correctionContext:
+              `${reflection.reason || reflection.message}\n` +
+              this._formatActionsSummary(toolResults.slice(-8)),
+          });
+          if (replacement?.steps?.length) {
+            this._plan = replacement;
+            tools = _withPlanStepSchemas(tools, replacement);
+            iterationHistory.push({
+              role: 'user',
+              content: `${reflection.message}\n\n${replacement.text}`,
+            });
+            if (this._currentGoalId && this._graph?.replaceGoalPlan) {
+              this._graph.replaceGoalPlan(
+                this._currentGoalId,
+                replacement.steps.map((description, index) => ({
+                  description,
+                  successCriteria: replacement.criteria[index] ? [replacement.criteria[index]] : [],
+                }))
+              );
+            }
+            if (this._currentOnPlan) {
+              try {
+                this._currentOnPlan({
+                  kind: 'replaced',
+                  goalId: this._currentGoalId,
+                  steps: replacement.steps,
+                  criteria: replacement.criteria,
+                  done: 0,
+                  total: replacement.steps.length,
+                });
+              } catch (_) {}
+            }
+          } else {
+            iterationHistory.push({ role: 'user', content: reflection.message });
+          }
           logger.info(
             'AgentLoop',
             `[agent-loop] reflexión ronda ${reflectionRounds}/${REFLECTION_MAX_ROUNDS}: CAMBIAR_PLAN`
@@ -1776,8 +1935,8 @@ class AgentLoop {
         ) {
           reflectionRounds++;
           failuresAtLastReflection = toolFailures;
-          iterationHistory.push({ role: 'user', content: reflection.message });
           logger.info('AgentLoop', `[agent-loop] reflexión ABANDONAR: ${reflection.reason}`);
+          iterationHistory.push({ role: 'user', content: reflection.message });
         } else {
           // Veredicto CONTINUAR (o fallo de la llamada): no gastar rondas,
           // solo marcar para no re-disparar con las mismas fallas.
@@ -1793,6 +1952,7 @@ class AgentLoop {
           const progress = buildStepProgress(this._plan, toolResults, null);
           opts.onPlan({
             kind: 'progress',
+            goalId: this._currentGoalId,
             steps: this._plan.steps,
             criteria: this._plan.criteria,
             done: progress.done,
@@ -1827,6 +1987,7 @@ class AgentLoop {
       response: this._withExpiredApprovalNotice(lastResponseText || finalResponse),
       iterations: this.maxIterations,
       toolResults,
+      mutationJournal: mutationJournal.toJSON(),
       truncated: true,
       error: 'max_iterations_reached',
     };
@@ -1861,6 +2022,7 @@ class AgentLoop {
       isSmart: this._mode === 'smart',
       toolResults,
       editTools: EDIT_TOOLS,
+      mutationPredicate: isSuccessfulMutationResult,
       signal: this._signal,
     });
   }
@@ -1901,7 +2063,9 @@ class AgentLoop {
     const params = action.params || {};
     const filePath = params.path || params.filePath || '';
     const encoding = params.encoding || 'utf-8';
-    const key = `${encoding}::${filePath}`;
+    const startLine = Number(params.start_line || params.startLine || 0);
+    const maxLines = Number(params.max_lines || params.maxLines || 0);
+    const key = `${encoding}:${startLine}:${maxLines}::${filePath}`;
     const cached = this._readCache.get(key);
     if (cached !== undefined) {
       return { ...cached, cached: true, elapsed: 0 };
@@ -2618,6 +2782,10 @@ class AgentLoop {
         lsp: this._lsp,
         git: this._git,
         github: this._github,
+        graph: this._graph,
+        mcpManager: this._mcp,
+        checkpoint: this._activeCheckpoint,
+        manageCheckpoint: false,
         mode: nestedMode,
         maxIterations: maxIters,
       });
@@ -2649,6 +2817,17 @@ class AgentLoop {
         // sin auto-crítica (inconsistencia de política corregida).
         verify: this._verifyPlan || null,
         reflection: this._reflectionOpt || null,
+        toolResolver: this._currentToolResolver,
+        permissionManager: this._currentPermissionManager,
+        pluginManager: this._currentPluginManager,
+        skillManager: this._currentSkillManager,
+        skillDb: this._currentSkillDb,
+        tools: this._llm
+          ? null
+          : profileTools.restricted && Array.isArray(this._currentTools)
+            ? this._currentTools.filter((tool) => profileTools.names.has(tool.name))
+            : this._currentTools,
+        nativeMcpMap: this._currentNativeMcpMap || {},
         // El resumen final del subagente es un reporte, no una orden: no debe
         // pasar por el parser de prosa (evita que "modifiqué X" re-dispare una
         // edición no pedida). Las ediciones del subagente se expresan con
@@ -2679,6 +2858,7 @@ class AgentLoop {
         // El sellado post-acción del subagente (verify heredado del padre): el
         // padre lo lee aunque el reporte en texto no lo mencione.
         verify: out.verify || null,
+        mutationJournal: out.mutationJournal || null,
       };
       // Fiabilidad del resumen: si el subagente editó/creó archivos (según sus
       // toolResults REALES, no su texto), se compara lo que tocó contra lo que
@@ -2699,9 +2879,16 @@ class AgentLoop {
         resultPayload.response =
           String(resultPayload.response || '') + '\n\n' + buildVerifyFailureNotice(out.verify);
       }
+      const nestedOk =
+        !out.error && !out.truncated && !out.cancelled && out.verify?.status !== 'failed';
       return {
-        ok: true,
+        ok: nestedOk,
         result: resultPayload,
+        error: nestedOk
+          ? null
+          : out.error ||
+            (out.truncated ? 'subagente_agoto_iteraciones' : null) ||
+            (out.verify?.status === 'failed' ? 'subagente_no_verificado' : 'subagente_incompleto'),
         tool: action.tool,
         elapsed: Math.round((Date.now() - t0) / 1000),
       };
@@ -2847,13 +3034,82 @@ class AgentLoop {
    * @param {AbortSignal|null} p.signal
    * @returns {Promise<{steps: string[], criteria: string[], text: string}|null>}
    */
-  async _buildPlan({ userMessage, taskIntent, toolCatalog, llm, llmOpts, signal }) {
+  async _buildRepositorySnapshot(userMessage) {
+    const cwd = AP.PROJECT_CWD || process.cwd();
+    const ignored = new Set(['.git', 'node_modules', 'dist', 'build', 'coverage', '.cache']);
+    const files = [];
+    const visit = (dir, depth) => {
+      if (depth > 2 || files.length >= 160) return;
+      let entries = [];
+      try {
+        entries = fs
+          .readdirSync(dir, { withFileTypes: true })
+          .sort((a, b) => a.name.localeCompare(b.name));
+      } catch (_) {
+        return;
+      }
+      for (const entry of entries) {
+        if (files.length >= 160 || ignored.has(entry.name)) break;
+        const absolute = path.join(dir, entry.name);
+        const relative = path.relative(cwd, absolute);
+        files.push(entry.isDirectory() ? `${relative}/` : relative);
+        if (entry.isDirectory()) visit(absolute, depth + 1);
+      }
+    };
+    visit(cwd, 0);
+
+    let scripts = [];
+    try {
+      const pkg = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf-8'));
+      scripts = Object.keys(pkg.scripts || {}).slice(0, 30);
+    } catch (_) {}
+    let gitSummary = '';
+    try {
+      const status = await this._git?.status?.(cwd);
+      if (status) gitSummary = JSON.stringify(status).slice(0, 1800);
+    } catch (_) {}
+    const keywords = [
+      ...new Set(
+        String(userMessage || '')
+          .toLowerCase()
+          .match(/[a-záéíóúñ_][\wáéíóúñ.-]{3,}/g) || []
+      ),
+    ]
+      .filter((word) => !/^(para|como|todo|esta|este|that|with|from|tarea|proyecto)$/.test(word))
+      .slice(0, 20);
+    return [
+      '# RECONOCIMIENTO DEL REPOSITORIO',
+      `Raíz: ${cwd}`,
+      `Términos de la tarea: ${keywords.join(', ') || '(ninguno)'}`,
+      `Scripts disponibles: ${scripts.join(', ') || '(no detectados)'}`,
+      gitSummary ? `Estado Git: ${gitSummary}` : 'Estado Git: no disponible',
+      'Árbol parcial (profundidad 2):',
+      files.map((file) => `- ${file}`).join('\n') || '- (vacío)',
+      '',
+      'El plan debe basarse en estas rutas reales. Si falta detalle, el primer paso debe inspeccionar símbolos o archivos relevantes antes de editar.',
+    ]
+      .join('\n')
+      .slice(0, 7000);
+  }
+
+  async _buildPlan({
+    userMessage,
+    taskIntent,
+    toolCatalog: _toolCatalog,
+    llm,
+    llmOpts,
+    signal,
+    repositorySnapshot = '',
+    correctionContext = '',
+  }) {
     const domain = taskIntent?.domain || null;
     const planPrompt = [
       '# PLANIFICACIÓN — desglosar la tarea antes de ejecutar',
       '',
       `Intención del usuario: ${String(userMessage).slice(0, 800)}`,
       domain ? `Dominio: ${domain}` : '',
+      repositorySnapshot ? `\n${repositorySnapshot}` : '',
+      correctionContext ? `\nMotivo de replanificación:\n${correctionContext}` : '',
       '',
       'Vas a ejecutar esta tarea en un bucle agente con herramientas (una por vez).',
       'Antes de empezar, generá un plan de ejecución de 2 a 6 pasos concretos.',
@@ -2964,9 +3220,10 @@ class AgentLoop {
     lines.push('Plan generado antes de actuar. Ejecutá los pasos en orden con tus');
     lines.push('herramientas, SIN pedir confirmación; si algo falla, corregilo y seguí:');
     for (const [index, step] of steps.entries()) {
-      lines.push(`- [ ] ${step}`);
+      lines.push(`- [ ] ${step} (PASO ${index + 1})`);
       if (criteria[index]) lines.push(`  Evidencia requerida: ${criteria[index]}`);
     }
+    lines.push('En cada tool call indica step_ordinal; en bloques textuales usa PASO: <número>.');
     return lines.join('\n');
   }
 
@@ -3191,11 +3448,15 @@ class AgentLoop {
    *     LLM tenga el estado reciente real, no un resumen),
    *   - y se anexa el mensaje de resultado de la última tool.
    */
-  _buildLLMMessages(iterationHistory, currentUserMsg, userMessage, toolResults, iteration) {
+  _buildLLMMessages(iterationHistory, currentUserMsg, userMessage, toolResults, _iteration) {
     const msgs = [{ role: 'user', content: userMessage }];
+    const historyChars = iterationHistory.reduce(
+      (total, message) => total + String(message?.content || '').length,
+      0
+    );
 
     if (
-      iterationHistory.length >= COMPACT_MIN_TURNS &&
+      (iterationHistory.length >= COMPACT_MIN_TURNS || historyChars > this._historyCharBudget) &&
       iterationHistory.length - COMPACT_KEEP_TAIL > 0
     ) {
       const keep = iterationHistory.slice(-COMPACT_KEEP_TAIL);
@@ -3310,7 +3571,11 @@ class AgentLoop {
   _completedSummary(toolResults) {
     const done = (toolResults || []).filter((r) => r && r.ok);
     if (done.length === 0) return '';
-    return '¡La tarea quedó terminada! ✓\n\n' + done.map((r) => `✓ ${r.tool}`).join('\n') + '\n\n';
+    return (
+      'Acciones completadas antes de la interrupción:\n\n' +
+      done.map((r) => `✓ ${r.tool}`).join('\n') +
+      '\n\n'
+    );
   }
 
   /**
@@ -3385,31 +3650,41 @@ class AgentLoop {
     if (raw === null || raw === undefined) return 'Sin resultado.';
 
     if (typeof raw === 'string') {
-      if (raw.length <= RESULT_TRUNCATE_LIMIT) return raw;
+      const limit = result.tool === 'read' ? READ_RESULT_TRUNCATE_LIMIT : RESULT_TRUNCATE_LIMIT;
+      if (raw.length <= limit) return raw;
+      const half = Math.floor(limit / 2);
       return (
-        raw.slice(0, RESULT_TRUNCATE_LIMIT) +
-        `\n\n[... resultado truncado: ${raw.length} caracteres totales]`
+        raw.slice(0, half) +
+        `\n\n[... ${raw.length - limit} caracteres omitidos; usa read con start_line/max_lines para recuperar el tramo ...]\n\n` +
+        raw.slice(-half)
       );
     }
 
     if (typeof raw === 'object') {
+      if (typeof raw.content === 'string' && Number.isFinite(raw.total_lines)) {
+        return [
+          `[${raw.path || 'archivo'} · líneas ${raw.start_line}-${raw.end_line} de ${raw.total_lines} · eof=${Boolean(raw.eof)}${raw.next_line ? ` · next_line=${raw.next_line}` : ''}]`,
+          raw.content.slice(0, READ_RESULT_TRUNCATE_LIMIT),
+        ].join('\n');
+      }
       if (raw.stdout !== undefined) {
         const stdout = (raw.stdout || '').trim();
         const stderr = (raw.stderr || '').trim();
         let summary = '';
         if (stdout) {
+          const half = Math.floor(RESULT_TRUNCATE_LIMIT / 2);
           summary +=
             stdout.length <= RESULT_TRUNCATE_LIMIT
               ? stdout
-              : stdout.slice(0, RESULT_TRUNCATE_LIMIT) +
-                `\n[... stdout truncado: ${stdout.length} chars]`;
+              : `${stdout.slice(0, half)}\n[... stdout omitido: ${stdout.length - RESULT_TRUNCATE_LIMIT} chars ...]\n${stdout.slice(-half)}`;
         }
         if (stderr) {
+          const stderrLimit = RESULT_TRUNCATE_LIMIT;
           summary +=
             (summary ? '\n' : '') +
-            (stderr.length <= RESULT_TRUNCATE_LIMIT / 2
+            (stderr.length <= stderrLimit
               ? stderr
-              : stderr.slice(0, RESULT_TRUNCATE_LIMIT / 2) + `\n[... stderr truncado]`);
+              : `[stderr, últimos ${stderrLimit} caracteres]\n${stderr.slice(-stderrLimit)}`);
         }
         if (raw.exitCode !== undefined && raw.exitCode !== 0) {
           summary += `\n[exit code: ${raw.exitCode}]`;

@@ -116,6 +116,7 @@ const INVOKE_ALLOWLIST = new Set([
   'chat-tts-stream',
   'chat-asr-stream',
   'chat-llm-state',
+  'chat-context-status',
   'chat-llm-configure',
   'chat-llm-complete',
   'chat-commands-names',

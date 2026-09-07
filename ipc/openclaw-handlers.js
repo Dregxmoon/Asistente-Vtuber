@@ -33,12 +33,13 @@ function register(ctx) {
 
   // Cancelación del agent-run en curso: el renderer envía 'agent-cancel' y el
   // AbortController rompe el stream HTTP del LLM y el loop del agente.
-  let activeAbort = null;
+  const activeRuns = new Map();
 
-  ipcMain.on('agent-cancel', () => {
-    if (activeAbort) {
-      activeAbort.abort();
-      activeAbort = null;
+  ipcMain.on('agent-cancel', (event) => {
+    const active = activeRuns.get(event.sender.id);
+    if (active) {
+      active.abort.abort();
+      activeRuns.delete(event.sender.id);
       logger.info('openclaw-handlers', '[main] agent-run cancelado por el usuario');
     }
   });
@@ -72,7 +73,10 @@ function register(ctx) {
     } catch (_) {}
 
     const abort = new AbortController();
-    activeAbort = abort;
+    const runId = `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const priorRun = activeRuns.get(e.sender.id);
+    if (priorRun) priorRun.abort.abort();
+    activeRuns.set(e.sender.id, { runId, abort });
     // Gesto: Kaoru "piensa" mientras la tarea agéntica corre.
     ctx.gestureEvents?.emit('task-start');
     try {
@@ -83,7 +87,7 @@ function register(ctx) {
         // bloque colapsable con el nombre del perfil.
         onSubagentProgress: (p) => {
           if (S.chatWindow && !S.chatWindow.isDestroyed()) {
-            sendToChat('agent-subagent-progress', p);
+            sendToChat('agent-subagent-progress', { ...p, runId });
           }
         },
         onApprovalNeeded: async (action) => {
@@ -153,7 +157,7 @@ function register(ctx) {
         },
 
         onProgress: (progress) => {
-          sendToChat('agent-progress', progress);
+          sendToChat('agent-progress', { ...progress, runId });
           // Gesto espontáneo según fase de la tarea (think al trabajar,
           // happy/sad al terminar).
           ctx.gestureEvents?.emit('agent-progress', { status: progress?.status });
@@ -162,7 +166,7 @@ function register(ctx) {
         // Plan explícito (HUD del chat): cada cambio de progreso del plan se
         // reenvía al renderer para pintar el widget de pasos en vivo.
         onPlan: (plan) => {
-          sendToChat('agent-plan', plan);
+          sendToChat('agent-plan', { ...plan, runId });
         },
 
         // Streaming: cada fragmento de texto que genera el LLM se reenvía al
@@ -191,19 +195,24 @@ function register(ctx) {
       });
 
       return {
+        runId,
         response: result.response,
         iterations: result.iterations,
         toolResults: result.toolResults,
         error: result.error,
         truncated: result.truncated || false,
         cancelled: result.cancelled || false,
+        verify: result.verify || null,
+        plan: result.plan || null,
+        checkpoint: result.checkpoint || null,
+        mutationJournal: result.mutationJournal || null,
       };
     } catch (e) {
       logger.error('openclaw-handlers', '[main] error en agent-run:', e.message);
       ctx.gestureEvents?.emit('task-result', { ok: false, error: e.message });
       return { response: null, iterations: 0, toolResults: [], error: e.message };
     } finally {
-      if (activeAbort === abort) activeAbort = null;
+      if (activeRuns.get(e.sender.id)?.runId === runId) activeRuns.delete(e.sender.id);
     }
   });
 }

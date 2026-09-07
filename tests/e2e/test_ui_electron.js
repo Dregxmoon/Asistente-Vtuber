@@ -4,7 +4,7 @@
 
 // Los callbacks de page.evaluate() corren en la página (browser), aunque el
 // test en sí viva en Node — por eso window/document se declaran como globals.
-/* global window, document, KeyboardEvent */
+/* global window, document, KeyboardEvent, MouseEvent, renderPlanBlock, preservePlanBlock, pausePlanBlock, resetPlanBlock, renderActivityBlock */
 
 /**
  * E2E UI real — lanza la app Electron completa con Playwright (_electron)
@@ -177,6 +177,7 @@ console.log(C.bold(C.cyan('═════════════════�
 
     // ── Carga básica del chat ─────────────────────────────────────────────
     await chat.waitForSelector('#msg-input', { timeout: 20000 });
+    await chat.waitForLoadState('load');
 
     const headerOk = await chat.evaluate(() => {
       const title = document.getElementById('workspace-title');
@@ -194,6 +195,8 @@ console.log(C.bold(C.cyan('═════════════════�
         hasCloseBtn: !!document.getElementById('close-btn'),
         hasUpdateBanner: !!document.getElementById('update-banner'),
         hasKeysBanner: !!document.getElementById('keys-banner'),
+        hasTaskDock: !!document.getElementById('task-dock'),
+        hasNoViewIndicator: !document.getElementById('view-indicator'),
         title: title ? title.textContent.trim() : null,
       };
     });
@@ -211,11 +214,147 @@ console.log(C.bold(C.cyan('═════════════════�
     assert(headerOk.hasCloseBtn, 'botón de cerrar presente');
     assert(headerOk.hasUpdateBanner, 'banner de auto-update presente (oculto en dev)');
     assert(headerOk.hasKeysBanner, 'banner de API keys presente');
+    assert(headerOk.hasTaskDock, 'espacio persistente para el plan presente');
+    assert(headerOk.hasNoViewIndicator, 'el label temporal de pose Live2D fue eliminado');
+
+    const executionUi = await chat.evaluate(() => {
+      renderPlanBlock({
+        kind: 'created',
+        steps: ['Inspeccionar', 'Editar', 'Verificar'],
+        done: 1,
+        total: 3,
+      });
+      const dock = document.getElementById('task-dock');
+      const plan = dock.querySelector('.plan-block');
+
+      const feed = document.getElementById('messages');
+      renderActivityBlock(feed, {
+        phase: 'start',
+        iteration: 999,
+        tool: 'edit',
+        params: { path: 'demo.js' },
+      });
+      renderActivityBlock(feed, {
+        phase: 'end',
+        iteration: 999,
+        tool: 'edit',
+        params: { path: 'demo.js' },
+        status: 'ok',
+        result: 'ok',
+        meta: {
+          oldContent: 'const value = 1;',
+          newContent: 'const value = 2;',
+          removedLines: [1],
+          addedLines: [1],
+        },
+      });
+      const activity = feed.querySelector('.activity-block');
+      const result = {
+        planVisible: !dock.hidden && plan?.classList.contains('open'),
+        planProgress: plan?.textContent.includes('1/3'),
+        removedVisible: !!activity?.querySelector('.activity-split-col.old .changed'),
+        addedVisible: !!activity?.querySelector('.activity-split-col.new .changed'),
+      };
+      preservePlanBlock();
+      result.planSurvivesNextPrompt =
+        dock.querySelector('.plan-block') === plan && plan?.textContent.includes('PLAN PENDIENTE');
+      pausePlanBlock();
+      result.planShowsPausedFailure =
+        dock.querySelector('.plan-block') === plan && plan?.textContent.includes('PLAN PAUSADO');
+      renderPlanBlock({
+        kind: 'created',
+        steps: ['Nuevo análisis', 'Nueva verificación'],
+        done: 0,
+        total: 2,
+      });
+      result.newPlanReplacesPrevious =
+        dock.querySelector('.plan-block') === plan &&
+        plan?.textContent.includes('Nuevo análisis') &&
+        !plan?.textContent.includes('Inspeccionar');
+      renderPlanBlock({
+        kind: 'progress',
+        steps: ['Nuevo análisis', 'Nueva verificación'],
+        done: 2,
+        total: 2,
+      });
+      preservePlanBlock();
+      result.completedPlanRemainsVisible =
+        dock.querySelector('.plan-block') === plan &&
+        plan?.textContent.includes('PLAN COMPLETADO · 2/2') &&
+        plan?.classList.contains('complete');
+      activity?.remove();
+      resetPlanBlock();
+      return result;
+    });
+    assert(
+      executionUi.planVisible && executionUi.planProgress,
+      'el plan elegido aparece abierto y muestra progreso'
+    );
+    assert(
+      executionUi.removedVisible && executionUi.addedVisible,
+      'las ediciones muestran líneas eliminadas y agregadas'
+    );
+    assert(executionUi.planSurvivesNextPrompt, 'un mensaje nuevo conserva el plan pendiente');
+    assert(executionUi.planShowsPausedFailure, 'un fallo conserva y marca el plan como pausado');
+    assert(
+      executionUi.newPlanReplacesPrevious,
+      'un plan nuevo reemplaza al anterior sin duplicarlo'
+    );
+    assert(executionUi.completedPlanRemainsVisible, 'el plan completado permanece visible');
 
     const bannerVisible = await chat.evaluate(() =>
       document.getElementById('update-banner').classList.contains('visible')
     );
     assert(!bannerVisible, 'banner de auto-update NO visible en desarrollo');
+    await sleep(150);
+    const contextLabel = await chat.evaluate(() =>
+      document.getElementById('footer-session').textContent.trim()
+    );
+    assert(
+      contextLabel.startsWith('Contexto') && !contextLabel.toLowerCase().includes('sesión'),
+      'el pie explica el contexto del modelo y no muestra un label de sesión',
+      contextLabel
+    );
+
+    // Reducir por debajo del breakpoint responsive y restaurar. El panel del
+    // avatar debe conservar un tamaño válido; antes terminaba en 0x0 y PIXI
+    // dejaba el modelo recortado o invisible al volver.
+    await app.evaluate(({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows().find((candidate) =>
+        candidate.webContents.getURL().includes('chat.html')
+      );
+      if (win) win.setSize(700, 520);
+    });
+    await sleep(250);
+    const compactAvatar = await chat.evaluate(() => {
+      const panel = document.getElementById('model-panel');
+      const container = document.getElementById('model-canvas-container');
+      const canvas = document.getElementById('live2d-chat-canvas');
+      const rect = container.getBoundingClientRect();
+      return {
+        visible: window.getComputedStyle(panel).display !== 'none',
+        validSize: rect.width > 1 && rect.height > 1 && canvas.width > 1 && canvas.height > 1,
+      };
+    });
+    assert(
+      compactAvatar.visible && compactAvatar.validSize,
+      'Live2D conserva dimensiones válidas al compactar la UI'
+    );
+    await app.evaluate(({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows().find((candidate) =>
+        candidate.webContents.getURL().includes('chat.html')
+      );
+      if (win) win.setSize(1040, 720);
+    });
+    await sleep(250);
+    assert(
+      await chat.evaluate(() => {
+        const container = document.getElementById('model-canvas-container').getBoundingClientRect();
+        const canvas = document.getElementById('live2d-chat-canvas');
+        return container.width > 1 && container.height > 1 && canvas.width > 1 && canvas.height > 1;
+      }),
+      'Live2D recupera el tamaño al restaurar la UI'
+    );
 
     // ── Tema ──────────────────────────────────────────────────────────────
     // La app envía 'init-theme' en el evento did-finish-load; si se prueba el
@@ -226,7 +365,6 @@ console.log(C.bold(C.cyan('═════════════════�
     // ventana de chat en `sandbox: true`, los clicks reales de Playwright no
     // completan la actionability (rAF del renderer sandboxed muy throttled en
     // entornos sin WM), pero el handler del toggle corre igual.
-    await chat.waitForLoadState('load');
     const themeBefore = await chat.evaluate(() => ({
       name: document.documentElement.getAttribute('data-theme'),
       background: window.getComputedStyle(document.documentElement).getPropertyValue('--term-bg'),
@@ -273,6 +411,25 @@ console.log(C.bold(C.cyan('═════════════════�
       await chat.evaluate(() => document.getElementById('mcp-modal').classList.contains('visible')),
       'acceso MCP abre su módulo'
     );
+    const mcpUi = await chat.evaluate(() => {
+      const close = document.getElementById('mcp-close').getBoundingClientRect();
+      const row = document.querySelector('#mcp-box .settings-title-row, #mcp-box .mcp-title-row');
+      const frame = row ? row.getBoundingClientRect() : close;
+      return {
+        noLogos: !document.querySelector('#mcp-modal .mcp-card-icon'),
+        noCategoryIcons: !document.querySelector('#mcp-modal .mcp-cat-icon'),
+        closeInside: close.left >= frame.left && close.right <= frame.right + 1,
+        closeCentered: Math.abs(close.width - close.height) < 1,
+      };
+    });
+    assert(
+      mcpUi.noLogos && mcpUi.noCategoryIcons,
+      'MCP no muestra logos ni emojis fuera de las tarjetas'
+    );
+    assert(
+      mcpUi.closeInside && mcpUi.closeCentered,
+      'la X de MCP queda centrada dentro del encabezado'
+    );
     await chat.evaluate(() => document.getElementById('mcp-close').click());
 
     await chat.evaluate(() => document.getElementById('perms-btn').click());
@@ -283,6 +440,22 @@ console.log(C.bold(C.cyan('═════════════════�
       ),
       'acceso Permisos abre su módulo'
     );
+    const permsUi = await chat.evaluate(() => {
+      const tool = document.getElementById('perms-tool');
+      const path = document.getElementById('perms-path');
+      const close = document.getElementById('perms-close-x').getBoundingClientRect();
+      return {
+        sameFont:
+          tool &&
+          path &&
+          window.getComputedStyle(tool).fontFamily === window.getComputedStyle(path).fontFamily &&
+          window.getComputedStyle(tool).fontFamily ===
+            window.getComputedStyle(document.body).fontFamily,
+        closeCentered: Math.abs(close.width - close.height) < 1,
+      };
+    });
+    assert(permsUi.sameFont, 'campos y placeholders de permisos usan la tipografía terminal');
+    assert(permsUi.closeCentered, 'la X de Permisos está centrada');
     await chat.evaluate(() => document.getElementById('perms-close-x').click());
 
     await chat.fill('#msg-input', '');
@@ -319,6 +492,50 @@ console.log(C.bold(C.cyan('═════════════════�
       return first ? first.querySelector('.mbr-provider') !== null : false;
     });
     assert(mbrHasProvider, 'cada modelo muestra su empresa debajo');
+    await chat.fill('#msg-input', '/model chatgpt');
+    await chat.evaluate(() => {
+      document.getElementById('msg-input').dispatchEvent(new Event('input'));
+    });
+    await sleep(150);
+    const searchDedupe = await chat.evaluate(() => {
+      const labels = [...document.querySelectorAll('#model-browser-list .mbr-name')].map((el) =>
+        el.textContent.trim().toLowerCase()
+      );
+      return { count: labels.length, unique: new Set(labels).size };
+    });
+    assert(
+      searchDedupe.count > 0 && searchDedupe.count === searchDedupe.unique,
+      'la búsqueda por empresa no repite modelos'
+    );
+    await chat.fill('#msg-input', '/model o3');
+    await chat.evaluate(() => {
+      document.getElementById('msg-input').dispatchEvent(new Event('input'));
+    });
+    await sleep(150);
+    const reasoningRow = await chat.evaluate(() => {
+      const row = document.querySelector(
+        '#model-browser-list .mbr-group[data-provider="openai"] .model-browser-row, #model-browser-list .mbr-group[data-provider="openrouter"] .model-browser-row'
+      );
+      if (!row) {
+        return {
+          found: false,
+          providers: [...document.querySelectorAll('.mbr-group')].map(
+            (group) => group.dataset.provider
+          ),
+        };
+      }
+      row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      return { found: true, label: row.textContent.trim() };
+    });
+    await sleep(100);
+    const hasEffortControl = await chat.evaluate(() =>
+      Boolean(document.querySelector('.mbr-effort-select'))
+    );
+    assert(
+      reasoningRow.found && hasEffortControl,
+      'los modelos compatibles permiten elegir esfuerzo de razonamiento',
+      JSON.stringify({ reasoningRow, hasEffortControl })
+    );
     await chat.evaluate(() => {
       document
         .getElementById('msg-input')

@@ -57,12 +57,19 @@ class Harness {
   constructor(opts = {}) {
     this.workspace = opts.workspace;
     this.llmKey = opts.llmKey || process.env.LLM_KEY_GROQ;
-    this.maxIterations = opts.maxIterations || 10;
-    this.mode = opts.mode || 'fast';
+    this.maxIterations = opts.maxIterations || 25;
+    this.mode = opts.mode || 'smart';
     this._core = null;
   }
 
   async start() {
+    if (!this.llmKey) {
+      const error = new Error(
+        'Benchmark omitido: falta LLM_KEY_GROQ; no se registrará como fallo del agente.'
+      );
+      error.code = 'BENCHMARK_NO_API_KEY';
+      throw error;
+    }
     // Puerto efímero por corrida: el server de Core (fork hereda env) y el
     // bridge (lee env) usan este puerto, sin colisión entre corridas.
     this.port = await findFreePort();

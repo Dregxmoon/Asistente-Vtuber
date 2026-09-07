@@ -481,6 +481,32 @@ async function buildContext(sessionHistory, activeProvider, options = {}) {
   // Fase 1: nativeToolSchemas se pasa al AgentLoop para completeWithTools()
   // en todos los turnos, filtrado solo por precedencia (Skill > MCP > OpenClaw).
   if (mode === 'agent') {
+    // El modo agent retorna antes que los demás modos, por lo que estas dos
+    // señales críticas deben incorporarse aquí: reglas aprendidas y errores
+    // actuales del workspace.
+    if (enforcementRules && enforcementRules.rules.length) {
+      const enforcer = state.graph?.getPromptEnforcer?.();
+      const section = enforcer?.serialize?.(enforcementRules);
+      if (section) result.systemPrompt += '\n\n' + section;
+    }
+    if (state.lspErrorWatcher) {
+      try {
+        const errors = state.lspErrorWatcher.getRecentErrors?.({ limit: 5 }) || [];
+        if (errors.length > 0) {
+          const ws = state.activeWorkspace || state.openclawWorkspace || '';
+          const lines = errors.map((e) => {
+            const rel =
+              ws && e.filePath.startsWith(ws) ? e.filePath.slice(ws.length + 1) : e.filePath;
+            return `- ${rel}:${e.line + 1} [${e.language}] ${e.message}${e.source ? ` (${e.source})` : ''}`;
+          });
+          let section = `## Errores actuales del workspace (LSP)\n${lines.join('\n')}`;
+          if (section.length > 1400) section = section.slice(0, 1400) + '\n…';
+          result.systemPrompt += '\n\n' + section;
+        }
+      } catch (e) {
+        logger.debug('context', '[core] error armando diagnósticos LSP para agent:', e.message);
+      }
+    }
     // El presupuesto de MAX_SYSTEM_CHARS se aplica en AgentLoop.run(), DESPUÉS
     // del ensamblado completo (AGENT_LOOP_SYSTEM + catálogo + recall + skills),
     // no aquí: truncar antes de los appends hacía que el presupuesto no contara
@@ -492,6 +518,9 @@ async function buildContext(sessionHistory, activeProvider, options = {}) {
       taskIntent,
       mode,
       nativeToolSchemas: resolvedTools?.nativeToolSchemas || null,
+      nativeMcpMap: resolvedTools?.nativeMcpMap || {},
+      toolCatalog,
+      resolvedSkills: resolvedTools?.matchedSkills || null,
     };
   }
 

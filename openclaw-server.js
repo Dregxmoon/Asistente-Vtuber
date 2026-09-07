@@ -887,7 +887,26 @@ const HANDLERS = {
     if (!fs.existsSync(filePath)) return { error: `File not found: ${filePath}` };
 
     const content = fs.readFileSync(filePath, input.encoding || 'utf-8');
-    return { result: content };
+    const wantsRange = input.start_line !== undefined || input.max_lines !== undefined;
+    if (!wantsRange) return { result: content };
+
+    const lines = String(content).split(/\r?\n/);
+    const startLine = Math.max(1, Math.floor(Number(input.start_line) || 1));
+    const maxLines = Math.min(400, Math.max(1, Math.floor(Number(input.max_lines) || 200)));
+    const selected = lines.slice(startLine - 1, startLine - 1 + maxLines);
+    const endLine = selected.length ? startLine + selected.length - 1 : startLine - 1;
+    const eof = endLine >= lines.length;
+    return {
+      result: {
+        path: filePath,
+        start_line: startLine,
+        end_line: endLine,
+        total_lines: lines.length,
+        eof,
+        next_line: eof ? null : endLine + 1,
+        content: selected.map((line, index) => `${startLine + index}: ${line}`).join('\n'),
+      },
+    };
   },
 
   write(input) {

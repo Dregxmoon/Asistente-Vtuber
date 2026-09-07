@@ -218,6 +218,37 @@ function testRecordUsageExtraction() {
   assert(streamEv, 'evento marca stream=true');
 }
 
+function testProviderContextStatus() {
+  console.log(C.bold('\n── Contexto del modelo: uso reportado por API ─────────────'));
+  const LLM = require('../core/llm/LLMProvider.js');
+  const tracker = new UsageTracker(null, { verbose: false });
+  LLM.setUsageTracker(tracker);
+  LLM.configure({
+    llm: {
+      primary: 'groq',
+      providers: {
+        groq: {
+          apiKey: 'test-only',
+          model: { smart: 'llama-3.3-70b-versatile' },
+        },
+      },
+    },
+  });
+  LLM._debug_recordUsage(
+    'groq',
+    { name: 'Groq' },
+    'llama-3.3-70b-versatile',
+    'smart',
+    { usage: { prompt_tokens: 1234, completion_tokens: 56 } },
+    {},
+    Date.now()
+  );
+  const status = LLM.getContextStatus('smart');
+  assertEqual(status.promptTokens, 1234, 'usa prompt_tokens informado por el proveedor');
+  assert(status.maxContext > 0, 'incluye la capacidad declarada del modelo');
+  assertEqual(status.source, 'provider', 'identifica la fuente como proveedor');
+}
+
 // ── Run ─────────────────────────────────────────────────────────────────────
 
 console.log(C.bold(C.cyan('\n════════════════════════════════════════════════════════')));
@@ -231,6 +262,7 @@ function main() {
   testLoggerLevels();
   testLoggerFile();
   testRecordUsageExtraction();
+  testProviderContextStatus();
 
   console.log(C.bold('\n════════════════════════════════════════════════════════'));
   const total = passed + failed + skipped;

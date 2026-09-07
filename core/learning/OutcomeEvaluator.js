@@ -1,44 +1,25 @@
 // @ts-check
 'use strict';
 
+const {
+  isSuccessfulMutationResult,
+  DIRECT_MUTATORS,
+  DIRECTLY_VERIFIABLE_MUTATORS,
+} = require('../planner/MutationJournal.js');
+
 /**
  * Clasifica el resultado observable de una corrida sin confiar en el texto del
  * modelo. Mantiene separadas cuatro ideas que antes se mezclaban:
  * terminación, mutación, verificación y éxito apto para aprendizaje.
  */
 
-const MUTATING_TOOLS = new Set([
-  'write',
-  'edit',
-  'apply_patch',
-  'create_file',
-  'edit_file',
-  'git_add',
-  'git_commit',
-  'git_stash',
-  'git_merge',
-  'git_rebase',
-  'git_push',
-  'github_issue_create',
-  'github_issue_comment',
-  'github_issue_close',
-  'github_pr_create',
-  'github_pr_review',
-]);
+const MUTATING_TOOLS = DIRECT_MUTATORS;
 
-const DIRECTLY_VERIFIABLE_TOOLS = new Set([
-  'git_commit',
-  'git_push',
-  'github_issue_create',
-  'github_issue_comment',
-  'github_issue_close',
-  'github_pr_create',
-  'github_pr_review',
-]);
+const DIRECTLY_VERIFIABLE_TOOLS = DIRECTLY_VERIFIABLE_MUTATORS;
 
 /**
  * @typedef {{tool?:string, ok?:boolean, _action?:{tool?:string}}} OutcomeToolResult
- * @typedef {{toolResults?:OutcomeToolResult[], error?:string|null, truncated?:boolean, cancelled?:boolean, unverifiedEdits?:string, verify?:{status?:string, reason?:string}}} AgentResult
+ * @typedef {{toolResults?:OutcomeToolResult[], error?:string|null, truncated?:boolean, cancelled?:boolean, unverifiedEdits?:string, verify?:{status?:string, reason?:string}, mutationJournal?:{count?:number}}} AgentResult
  */
 
 /** @param {AgentResult} result */
@@ -48,7 +29,10 @@ function evaluateTaskOutcome(result = {}) {
     .filter((item) => item && item.ok)
     .map((item) => String(item.tool || item._action?.tool || ''))
     .filter(Boolean);
-  const mutationCount = successfulTools.filter((tool) => MUTATING_TOOLS.has(tool)).length;
+  const journalCount = Number(result.mutationJournal?.count);
+  const mutationCount = Number.isFinite(journalCount)
+    ? journalCount
+    : toolResults.filter(isSuccessfulMutationResult).length;
   const terminalSuccess = !result.error && !result.truncated && !result.cancelled;
   const verify = result.verify && typeof result.verify === 'object' ? result.verify : null;
 

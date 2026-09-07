@@ -284,22 +284,6 @@ function mcpStatusLabel(status) {
   return 'desconectado';
 }
 
-function categoryIcon(catId) {
-  const icons = {
-    code: '[CODE]',
-    data: '[DATA]',
-    web: '[WEB]',
-    files: '[FILE]',
-    comm: '[CHAT]',
-    cloud: '[CLD]',
-    ai: '[AI]',
-    productivity: '[PRD]',
-    security: '[SEC]',
-    other: '[TOOL]',
-  };
-  return icons[catId] || '[TOOL]';
-}
-
 function categoryName(catId) {
   const names = {
     code: 'Código',
@@ -318,10 +302,10 @@ function categoryName(catId) {
 
 function escapeHtml(str) {
   return String(str || '')
-    .replace(/&/g, '&')
-    .replace(/</g, '<')
-    .replace(/>/g, '>')
-    .replace(/"/g, '"')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
 }
 
@@ -385,13 +369,12 @@ async function loadInitialData() {
 function renderCategories() {
   const container = document.getElementById('mcp-category-tabs');
   if (!container) return;
-  const allCat = { id: 'all', name: 'Todos', icon: '[STR]' };
+  const allCat = { id: 'all', name: 'Todos' };
   const cats = [allCat, ...mcpState.categories];
   container.innerHTML = cats
     .map(
       (cat) => `
     <button class="mcp-cat-tab ${cat.id === mcpState.selectedCategory ? 'active' : ''}" data-cat="${cat.id}">
-      <span class="mcp-cat-icon">${cat.icon}</span>
       <span class="mcp-cat-name">${cat.name}</span>
     </button>
   `
@@ -443,7 +426,6 @@ function renderServerCard(server, isInstalled = false) {
   return `
     <article class="mcp-server-card ${connected ? 'connected' : ''} ${degraded ? 'degraded' : ''} ${isInstalled ? 'installed' : ''}" data-id="${server.id || server.identifier}" data-category="${server.category || 'other'}">
       <div class="mcp-card-header">
-        <div class="mcp-card-icon">${getServerIcon(server.name, server.identifier)}</div>
         <div class="mcp-card-meta">
           <h3 class="mcp-card-name">${escapeHtml(server.name)}</h3>
           <div class="mcp-card-badges">${popularBadge}${authBadge}${installedBadge}${healthBadge}</div>
@@ -452,7 +434,7 @@ function renderServerCard(server, isInstalled = false) {
       <p class="mcp-card-desc">${escapeHtml(server.description || 'Sin descripción')}</p>
       ${toolsPreview ? `<div class="mcp-card-tools">[TLS] ${escapeHtml(toolsPreview)}${toolsCount > 3 ? ` +${toolsCount - 3} más` : ''}</div>` : ''}
       <div class="mcp-card-footer">
-        <span class="mcp-card-category">${categoryIcon(server.category)} ${categoryName(server.category)}</span>
+        <span class="mcp-card-category">${categoryName(server.category)}</span>
         ${
           !isInstalled
             ? `
@@ -480,31 +462,6 @@ function renderServerCard(server, isInstalled = false) {
       }
     </article>
   `;
-}
-
-function getServerIcon(name, identifier) {
-  const nameLower = (name || '').toLowerCase();
-  const idLower = (identifier || '').toLowerCase();
-  if (nameLower.includes('github') || idLower.includes('github')) return '[GIT]';
-  if (nameLower.includes('gitlab') || idLower.includes('gitlab')) return '[GLB]';
-  if (nameLower.includes('filesystem') || idLower.includes('filesystem')) return '[FS]';
-  if (nameLower.includes('memory') || idLower.includes('memory')) return '[MEM]';
-  if (nameLower.includes('sequential') || idLower.includes('thinking')) return '[SEQ]';
-  if (nameLower.includes('brave') || idLower.includes('search')) return '[SRC]';
-  if (nameLower.includes('fetch')) return '[FCH]';
-  if (nameLower.includes('sqlite') || idLower.includes('sqlite')) return '[SQL]';
-  if (nameLower.includes('postgres') || idLower.includes('postgres')) return '[PGS]';
-  if (nameLower.includes('redis')) return '[RDS]';
-  if (nameLower.includes('slack')) return '[SLK]';
-  if (nameLower.includes('gdrive') || nameLower.includes('drive')) return '[GDR]';
-  if (nameLower.includes('notion')) return '[NOT]';
-  if (nameLower.includes('linear')) return '[LIN]';
-  if (nameLower.includes('jira')) return '[JRA]';
-  if (nameLower.includes('aws')) return '[AWS]';
-  if (nameLower.includes('kubernetes') || nameLower.includes('k8s')) return '[K8S]';
-  if (nameLower.includes('docker')) return '[DKR]';
-  if (nameLower.includes('everything')) return '[ALL]';
-  return '[MCP]';
 }
 
 async function renderFeatured() {

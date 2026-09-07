@@ -1,6 +1,7 @@
 // @ts-nocheck
 // Live2D
-const viewIndicator = document.getElementById('view-indicator');
+let _modelResizeFrame = 0;
+let _modelResizeObserver = null;
 
 async function loadModel() {
   await loadLLMConfig();
@@ -20,6 +21,8 @@ async function loadModel() {
   }
 
   const container = document.getElementById('model-canvas-container');
+  const initialWidth = Math.max(1, container.clientWidth);
+  const initialHeight = Math.max(1, container.clientHeight);
   const oldCanvas = document.getElementById('live2d-chat-canvas');
   if (oldCanvas) oldCanvas.remove();
   const canvas = document.createElement('canvas');
@@ -28,8 +31,8 @@ async function loadModel() {
 
   pixiApp = new PIXI.Application({
     view: canvas,
-    width: container.clientWidth,
-    height: container.clientHeight,
+    width: initialWidth,
+    height: initialHeight,
     backgroundAlpha: 0,
     antialias: true,
     resolution: window.devicePixelRatio || 1,
@@ -79,6 +82,7 @@ async function loadModel() {
     clearInterval(_motionTimer);
     _motionTimer = setInterval(triggerMotion, 8000);
     startAutonomousView();
+    _observeModelContainer(container);
   } catch (e) {
     console.error('model error:', e);
     _showModelError('No se pudo cargar el modelo Live2D: ' + ((e && e.message) || e));
@@ -123,17 +127,14 @@ function applyView(view, animate = false) {
   const B = modelBounds || { x: 0, y: 0, width: modelNativeW || 1, height: modelNativeH || 1 };
   const cw = modelNativeW || B.width;
   const ch = modelNativeH || B.height;
+  if (![W, H, B.width, B.height, cw, ch].every((n) => Number.isFinite(n) && n > 0)) return;
   const ts = cfg.crop ? H / cfg.f / B.height : Math.min((W * cfg.tw) / B.width, H / B.height);
+  if (!Number.isFinite(ts) || ts <= 0) return;
   const S = ts * B.height;
   const cx = (cfg.crop && B.headCx != null ? B.headCx : B.x + B.width / 2) / cw;
   const ay = B.y / ch;
   const tx = W / 2,
     ty = H - S * cfg.f;
-  viewIndicator.textContent = view.toUpperCase();
-  viewIndicator.style.opacity = '.5';
-  setTimeout(() => {
-    viewIndicator.style.opacity = '0';
-  }, 2000);
   if (!animate) {
     model.scale.set(ts);
     model.anchor.set(cx, ay);
@@ -200,9 +201,41 @@ function startAutonomousView() {
   setTimeout(schedule, 12000 + Math.random() * 8000);
 }
 
-window.addEventListener('resize', () => {
-  if (!pixiApp || !model) return;
-  const container = document.getElementById('model-canvas-container');
-  pixiApp.renderer.resize(container.clientWidth, container.clientHeight);
+function _resizeModelToContainer(container) {
+  if (!pixiApp || !model || !container) return;
+  const width = Math.round(container.clientWidth);
+  const height = Math.round(container.clientHeight);
+  // Al minimizar u ocultar un panel Chromium informa 0x0. Redimensionar PIXI
+  // con ese valor destruye la proyección útil y el modelo vuelve recortado.
+  if (width < 2 || height < 2) return;
+  if (Math.round(pixiApp.screen.width) === width && Math.round(pixiApp.screen.height) === height) {
+    return;
+  }
+  pixiApp.renderer.resize(width, height);
   applyView(currentView, false);
+}
+
+function _scheduleModelResize(container) {
+  if (_modelResizeFrame) cancelAnimationFrame(_modelResizeFrame);
+  _modelResizeFrame = requestAnimationFrame(() => {
+    _modelResizeFrame = 0;
+    _resizeModelToContainer(container);
+  });
+}
+
+function _observeModelContainer(container) {
+  if (_modelResizeObserver) _modelResizeObserver.disconnect();
+  if (typeof ResizeObserver === 'function') {
+    _modelResizeObserver = new ResizeObserver(() => _scheduleModelResize(container));
+    _modelResizeObserver.observe(container);
+  }
+}
+
+window.addEventListener(
+  'resize',
+  () => _scheduleModelResize(document.getElementById('model-canvas-container')),
+  { passive: true }
+);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) _scheduleModelResize(document.getElementById('model-canvas-container'));
 });

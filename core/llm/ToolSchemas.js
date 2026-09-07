@@ -20,12 +20,24 @@ const TOOL_SCHEMAS = [
   },
   {
     name: 'read',
-    description: 'Lee el contenido completo de un archivo del sistema de archivos',
+    description:
+      'Lee un archivo. Para archivos grandes usa start_line y max_lines y continúa desde next_line hasta eof=true.',
     inputSchema: {
       type: 'object',
       properties: {
         path: { type: 'string', description: 'Ruta absoluta o relativa del archivo a leer' },
         encoding: { type: 'string', description: 'Codificación del archivo', default: 'utf-8' },
+        start_line: {
+          type: 'number',
+          description: 'Primera línea a devolver (base 1). Opcional.',
+          minimum: 1,
+        },
+        max_lines: {
+          type: 'number',
+          description: 'Máximo de líneas a devolver (1-400). Opcional.',
+          minimum: 1,
+          maximum: 400,
+        },
       },
       required: ['path'],
     },
