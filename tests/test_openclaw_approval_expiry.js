@@ -345,6 +345,50 @@ async function testAutoApproveSkipsCard() {
   mockIpcMain.emit('agent-cancel');
 }
 
+async function testRunStatusAndSteering() {
+  console.log(C.bold('\n── Test 8: estado del run + steering entre iteraciones ─────────'));
+  let runOpts = null;
+  let finishRun = null;
+  const ctx = {
+    S: { chatWindow: { isDestroyed: () => false } },
+    sendToChat: (channel, payload) => sendLog.push({ channel, payload }),
+    loadEffectiveConfig: () => ({ agent: {} }),
+    Core: {
+      runAgent: async (_text, opts) => {
+        runOpts = opts;
+        return new Promise((resolve) => {
+          finishRun = resolve;
+        });
+      },
+      isOpenClawAvailable: () => true,
+      getOpenClawStatus: () => ({ available: true }),
+    },
+  };
+  register(ctx);
+  const event = { sender: { id: 42 } };
+  const pending = mockIpcMain.invokeHandler('agent-run', event, { text: 'analiza el proyecto' });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const running = await mockIpcMain.invokeHandler('agent-run-status', event, {});
+  assert(running?.state === 'running' && running.active, 'status expone el run activo');
+
+  mockIpcMain.emit('agent-steer', event, { text: 'prioriza la cancelación' });
+  const steering = runOpts.consumeSteering();
+  assert(steering.length === 1, 'el mensaje se encola para el AgentLoop activo');
+  assert(steering[0].text === 'prioriza la cancelación', 'el loop recibe la actualización exacta');
+
+  finishRun({ response: 'hecho', iterations: 2, toolResults: [], error: null });
+  const result = await pending;
+  assert(result.execution?.state === 'completed', 'el resultado incluye estado terminal');
+  const completed = await mockIpcMain.invokeHandler('agent-run-status', event, {
+    runId: result.runId,
+  });
+  assert(
+    completed?.state === 'completed' && !completed.active,
+    'status conserva historial reciente'
+  );
+}
+
 // ── Run ───────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -360,6 +404,7 @@ async function main() {
     await testAgentLoopPlainDenyNoNotice();
     await testAgentLoopObjectDecisionNotApproved();
     await testAutoApproveSkipsCard();
+    await testRunStatusAndSteering();
   } finally {
     Module._load = realLoad;
   }

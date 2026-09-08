@@ -84,6 +84,7 @@ async function resolveToolset(context = {}) {
 
   // 2. Collect all candidate tools
   const openclawTools = registry._getOpenClawTools ? registry._getOpenClawTools() : [];
+  const desktopTools = registry._getDesktopTools ? registry._getDesktopTools() : [];
   const lspTools = registry._getLSPTools ? registry._getLSPTools() : [];
   const gitTools = registry._getGitTools ? registry._getGitTools() : [];
   const githubTools = registry._getGitHubTools ? registry._getGitHubTools() : [];
@@ -140,6 +141,7 @@ async function resolveToolset(context = {}) {
   // 5. Build result
   const ranked = router.rank([
     ...filteredOpenclaw,
+    ...desktopTools,
     ...lspTools,
     ...gitTools,
     ...githubTools,
@@ -233,6 +235,7 @@ function _buildPromptCatalog(tools, domain, flags) {
   lines.push('');
 
   const openclawTools = tools.filter((t) => t.source === 'openclaw');
+  const desktopTools = tools.filter((t) => t.source === 'desktop');
   const lspTools = tools.filter((t) => t.source === 'lsp');
   const gitTools = tools.filter((t) => t.source === 'git');
   const githubTools = tools.filter((t) => t.source === 'github');
@@ -241,6 +244,16 @@ function _buildPromptCatalog(tools, domain, flags) {
   if (openclawTools.length > 0) {
     lines.push('## Herramientas del sistema');
     for (const t of openclawTools) {
+      let line = `  - ${t.name}`;
+      if (t.description) line += `: ${t.description}`;
+      lines.push(line);
+    }
+    lines.push('');
+  }
+
+  if (desktopTools.length > 0) {
+    lines.push('## Control visible del escritorio');
+    for (const t of desktopTools) {
       let line = `  - ${t.name}`;
       if (t.description) line += `: ${t.description}`;
       lines.push(line);

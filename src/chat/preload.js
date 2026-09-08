@@ -44,6 +44,7 @@ const INVOKE_ALLOWLIST = new Set([
   'pick-workspace-folder',
   'grounding-build-context',
   'agent-run',
+  'agent-run-status',
   // Modelo 3D / vistas
   'get-model-info',
   'models-list',
@@ -129,6 +130,7 @@ const INVOKE_ALLOWLIST = new Set([
 const SEND_ALLOWLIST = new Set([
   'agent-approval-response',
   'agent-cancel',
+  'agent-steer',
   'chat-close',
   'chat-theme-changed',
   'initiative-decision',
@@ -145,6 +147,7 @@ const ON_ALLOWLIST = new Set([
   'agent-progress',
   'agent-subagent-progress',
   'agent-result-meta',
+  'agent-steer-status',
   'agent-token',
   'chat-message',
   'gesture',

@@ -271,6 +271,53 @@ async function main() {
         LLMProvider.completeWithTools = original;
       }
     }
+
+    // 4d. kill-switch de capacidad: bloquea toda la familia antes del prompt.
+    {
+      const executed = [];
+      const pm = new PermissionManager();
+      pm.setRule({ tool: 'capability:processes', path: '', action: 'deny' });
+      const original = LLMProvider.completeWithTools;
+      let calls = 0;
+      LLMProvider.completeWithTools = async () => {
+        calls++;
+        if (calls === 1) {
+          return { content: null, toolCalls: [{ tool: 'process_stop', params: { pid: 42 } }] };
+        }
+        return { content: 'proceso conservado', toolCalls: null };
+      };
+      try {
+        let approvalCalls = 0;
+        const loop = new AgentLoop({
+          maxIterations: 3,
+          llm: async () => 'x',
+          bridge: {
+            execute: async (tool) => {
+              executed.push(tool);
+              return { ok: true, result: 'detenido', error: null, tool, elapsed: 0 };
+            },
+          },
+        });
+        await loop.run('detén el proceso 42', 'Eres un asistente.', [], {
+          tools: [
+            {
+              name: 'process_stop',
+              description: 'termina proceso',
+              inputSchema: { type: 'object', properties: { pid: { type: 'number' } } },
+            },
+          ],
+          permissionManager: pm,
+          onApprovalNeeded: async () => {
+            approvalCalls++;
+            return true;
+          },
+        });
+        assert(executed.length === 0, 'capability:processes bloquea toda acción de procesos');
+        assert(approvalCalls === 0, 'una capacidad bloqueada no solicita aprobación inútil');
+      } finally {
+        LLMProvider.completeWithTools = original;
+      }
+    }
   }
 
   fs.rmSync(tmp, { recursive: true, force: true });

@@ -10,12 +10,18 @@ const {
 
 const { ipcMain } = require('electron');
 const { getToolRegistry } = require('../core/task/ToolRegistry.js');
+const { AgentRunController } = require('../core/planner/AgentRunController.js');
 
 // Tiempo máximo (ms) que el usuario tiene para responder a un card de
 // aprobación. Configurable en config.json → agent.approvalTimeoutMs. 120s
 // porque el usuario puede estar leyendo el resto de la respuesta del agente
 // antes de llegar a la tarjeta.
 const DEFAULT_APPROVAL_TIMEOUT_MS = 120_000;
+
+/** Electron siempre entrega sender.id; el fallback conserva compatibilidad con harnesses aislados. */
+function senderId(event) {
+  return Number(event?.sender?.id) || 0;
+}
 
 function register(ctx) {
   const { Core, S, sendToChat } = ctx;
@@ -34,12 +40,34 @@ function register(ctx) {
   // Cancelación del agent-run en curso: el renderer envía 'agent-cancel' y el
   // AbortController rompe el stream HTTP del LLM y el loop del agente.
   const activeRuns = new Map();
+  const recentRuns = new Map();
+
+  const rememberRun = (senderId, snapshot) => {
+    const history = recentRuns.get(senderId) || [];
+    history.unshift(snapshot);
+    recentRuns.set(senderId, history.slice(0, 20));
+  };
+
+  ipcMain.handle('agent-run-status', async (event, input = {}) => {
+    const ownerId = senderId(event);
+    const active = activeRuns.get(ownerId);
+    if (active && (!input.runId || input.runId === active.runId)) return active.snapshot();
+    const history = recentRuns.get(ownerId) || [];
+    if (input.runId) return history.find((run) => run.runId === input.runId) || null;
+    return history[0] || null;
+  });
+
+  ipcMain.on('agent-steer', (event, input = {}) => {
+    const active = activeRuns.get(senderId(event));
+    if (!active || (input.runId && input.runId !== active.runId)) return;
+    const queued = active.steer(input.text);
+    sendToChat('agent-steer-status', { runId: active.runId, ...queued });
+  });
 
   ipcMain.on('agent-cancel', (event) => {
-    const active = activeRuns.get(event.sender.id);
+    const active = activeRuns.get(senderId(event));
     if (active) {
-      active.abort.abort();
-      activeRuns.delete(event.sender.id);
+      active.cancel();
       logger.info('openclaw-handlers', '[main] agent-run cancelado por el usuario');
     }
   });
@@ -58,7 +86,7 @@ function register(ctx) {
     // el resto de la respuesta del agente antes de llegar a la tarjeta; si
     // expira, la acción se deniega y la UI marca el card como expirado.
     let approvalTimeoutMs = DEFAULT_APPROVAL_TIMEOUT_MS;
-    let approvalConfig = { autoApprove: false };
+    let approvalConfig = { autoApprove: false, rollbackOnVerificationFailure: false };
     try {
       const cfg =
         typeof ctx.loadEffectiveConfig === 'function'
@@ -66,22 +94,39 @@ function register(ctx) {
           : ctx.savedConfig || {};
       const n = Number(cfg?.agent?.approvalTimeoutMs);
       if (Number.isFinite(n) && n > 0) approvalTimeoutMs = n;
-      approvalConfig = { autoApprove: cfg?.agent?.autoApprove === true };
+      approvalConfig = {
+        autoApprove: cfg?.agent?.autoApprove === true,
+        rollbackOnVerificationFailure: cfg?.agent?.rollbackOnVerificationFailure === true,
+      };
       // Subagentes por perfil (F1): agent.subagent.enabled (default true).
       // Apagado quita la tool subagent del catálogo que ve el agente.
       getToolRegistry().setSubagentsEnabled(cfg?.agent?.subagent?.enabled !== false);
     } catch (_) {}
 
+    const ownerId = senderId(e);
     const abort = new AbortController();
     const runId = `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    const priorRun = activeRuns.get(e.sender.id);
-    if (priorRun) priorRun.abort.abort();
-    activeRuns.set(e.sender.id, { runId, abort });
+    const priorRun = activeRuns.get(ownerId);
+    if (priorRun) {
+      return {
+        runId: priorRun.runId,
+        response: null,
+        iterations: 0,
+        toolResults: [],
+        error: 'run_in_progress',
+        execution: priorRun.snapshot(),
+      };
+    }
+    const controller = new AgentRunController({ runId, abortController: abort });
+    activeRuns.set(ownerId, controller);
+    controller.start();
     // Gesto: Kaoru "piensa" mientras la tarea agéntica corre.
     ctx.gestureEvents?.emit('task-start');
     try {
       const result = await Core.runAgent(text, {
         signal: abort.signal,
+        consumeSteering: () => controller.consumeSteering(),
+        rollbackOnVerificationFailure: approvalConfig.rollbackOnVerificationFailure,
         // Progreso de subagentes por perfil: el run anidado reporta sus fases
         // (start/action/complete) y acá se re-emiten al chat para pintar el
         // bloque colapsable con el nombre del perfil.
@@ -91,11 +136,33 @@ function register(ctx) {
           }
         },
         onApprovalNeeded: async (action) => {
+          controller.noteProgress({ phase: 'approval', tool: action.tool, status: 'waiting' });
           return new Promise((resolve) => {
             const pattern = approvalPattern(action);
+            const alwaysPromptTools = new Set([
+              'browser',
+              'desktop_snapshot',
+              'desktop_screenshot',
+              'pointer_click',
+              'window_list',
+              'window_focus',
+              'ui_click',
+              'ui_type',
+              'ui_press',
+              'ui_select',
+              'window_close',
+              'desktop_capabilities',
+              'process_list',
+              'process_stop',
+              'camera_status',
+              'open_camera',
+            ]);
             // Auto-aprobación global (config.json → agent.autoApprove): el
             // agente ejecuta acciones de alto impacto sin mostrar el card.
-            if (approvalConfig.autoApprove) {
+            // El control interactivo queda excluido: contenido web o una UI
+            // comprometida no puede convertir una preferencia global antigua
+            // en acceso silencioso al escritorio.
+            if (approvalConfig.autoApprove && !alwaysPromptTools.has(action.tool)) {
               resolve(true);
               return;
             }
@@ -157,6 +224,7 @@ function register(ctx) {
         },
 
         onProgress: (progress) => {
+          controller.noteProgress(progress);
           sendToChat('agent-progress', { ...progress, runId });
           // Gesto espontáneo según fase de la tarea (think al trabajar,
           // happy/sad al terminar).
@@ -166,6 +234,7 @@ function register(ctx) {
         // Plan explícito (HUD del chat): cada cambio de progreso del plan se
         // reenvía al renderer para pintar el widget de pasos en vivo.
         onPlan: (plan) => {
+          controller.notePlan(plan);
           sendToChat('agent-plan', { ...plan, runId });
         },
 
@@ -177,6 +246,17 @@ function register(ctx) {
       });
 
       const taskOk = !result.error && !result.truncated && !result.cancelled;
+      const lifecycle = controller.finish(result);
+      const execution = {
+        ...lifecycle,
+        ...(result.execution || {}),
+        runId,
+        active: false,
+        createdAt: lifecycle.createdAt,
+        startedAt: lifecycle.startedAt,
+        finishedAt: lifecycle.finishedAt,
+        steering: lifecycle.steering,
+      };
       ctx.gestureEvents?.emit('task-result', { ok: taskOk, error: result.error });
 
       // Chips de resultado para la UI: skills usadas + verificación de
@@ -206,13 +286,22 @@ function register(ctx) {
         plan: result.plan || null,
         checkpoint: result.checkpoint || null,
         mutationJournal: result.mutationJournal || null,
+        steering: result.steering || null,
+        execution,
+        rollback: result.rollback || null,
+        executionMode: result.executionMode || null,
       };
     } catch (e) {
       logger.error('openclaw-handlers', '[main] error en agent-run:', e.message);
       ctx.gestureEvents?.emit('task-result', { ok: false, error: e.message });
       return { response: null, iterations: 0, toolResults: [], error: e.message };
     } finally {
-      if (activeRuns.get(e.sender.id)?.runId === runId) activeRuns.delete(e.sender.id);
+      const active = activeRuns.get(ownerId);
+      if (active?.runId === runId) {
+        if (active.snapshot().active) active.finish({ error: 'agent_exception' });
+        rememberRun(ownerId, active.snapshot());
+        activeRuns.delete(ownerId);
+      }
     }
   });
 }

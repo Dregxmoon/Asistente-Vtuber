@@ -1,7 +1,7 @@
 // @ts-nocheck
-// OpenClaw — sin badge en la UI; el flag openclawAvailable solo decide el
-// flujo del agent loop (proceso.js). El estado en vivo llega por el canal
-// 'openclaw-status' (ipc.js). Aquí se consulta el estado completo al arrancar
+// OpenClaw — el flag openclawAvailable informa disponibilidad de tools y
+// sandbox, pero no cambia el pipeline: toda entrada usa AgentLoop. El estado
+// en vivo llega por 'openclaw-status' (ipc.js). Aquí se consulta al arrancar
 // (disponibilidad + aislamiento de proceso bwrap).
 async function checkOpenClaw() {
   try {

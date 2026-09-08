@@ -197,6 +197,7 @@ console.log(C.bold(C.cyan('═════════════════�
         hasKeysBanner: !!document.getElementById('keys-banner'),
         hasTaskDock: !!document.getElementById('task-dock'),
         hasNoViewIndicator: !document.getElementById('view-indicator'),
+        unifiedMode: document.getElementById('agent-mode-badge')?.textContent.trim() === 'AUTO',
         title: title ? title.textContent.trim() : null,
       };
     });
@@ -216,6 +217,7 @@ console.log(C.bold(C.cyan('═════════════════�
     assert(headerOk.hasKeysBanner, 'banner de API keys presente');
     assert(headerOk.hasTaskDock, 'espacio persistente para el plan presente');
     assert(headerOk.hasNoViewIndicator, 'el label temporal de pose Live2D fue eliminado');
+    assert(headerOk.unifiedMode, 'la UI expone un flujo AUTO único, sin selector chat/agente');
 
     const executionUi = await chat.evaluate(() => {
       renderPlanBlock({
@@ -255,12 +257,20 @@ console.log(C.bold(C.cyan('═════════════════�
         removedVisible: !!activity?.querySelector('.activity-split-col.old .changed'),
         addedVisible: !!activity?.querySelector('.activity-split-col.new .changed'),
       };
-      preservePlanBlock();
-      result.planSurvivesNextPrompt =
-        dock.querySelector('.plan-block') === plan && plan?.textContent.includes('PLAN PENDIENTE');
+      resetPlanBlock();
+      result.planClearsForNextPrompt = dock.hidden && !dock.querySelector('.plan-block');
+      renderPlanBlock({
+        kind: 'resumed',
+        goalId: 22,
+        steps: ['Inspeccionar', 'Editar', 'Verificar'],
+        done: 1,
+        total: 3,
+      });
+      const resumedPlan = dock.querySelector('.plan-block');
       pausePlanBlock();
       result.planShowsPausedFailure =
-        dock.querySelector('.plan-block') === plan && plan?.textContent.includes('PLAN PAUSADO');
+        dock.querySelector('.plan-block') === resumedPlan &&
+        resumedPlan?.textContent.includes('PLAN PAUSADO');
       renderPlanBlock({
         kind: 'created',
         steps: ['Nuevo análisis', 'Nueva verificación'],
@@ -268,9 +278,9 @@ console.log(C.bold(C.cyan('═════════════════�
         total: 2,
       });
       result.newPlanReplacesPrevious =
-        dock.querySelector('.plan-block') === plan &&
-        plan?.textContent.includes('Nuevo análisis') &&
-        !plan?.textContent.includes('Inspeccionar');
+        dock.querySelector('.plan-block') === resumedPlan &&
+        resumedPlan?.textContent.includes('Nuevo análisis') &&
+        !resumedPlan?.textContent.includes('Inspeccionar');
       renderPlanBlock({
         kind: 'progress',
         steps: ['Nuevo análisis', 'Nueva verificación'],
@@ -279,9 +289,9 @@ console.log(C.bold(C.cyan('═════════════════�
       });
       preservePlanBlock();
       result.completedPlanRemainsVisible =
-        dock.querySelector('.plan-block') === plan &&
-        plan?.textContent.includes('PLAN COMPLETADO · 2/2') &&
-        plan?.classList.contains('complete');
+        dock.querySelector('.plan-block') === resumedPlan &&
+        resumedPlan?.textContent.includes('PLAN COMPLETADO · 2/2') &&
+        resumedPlan?.classList.contains('complete');
       activity?.remove();
       resetPlanBlock();
       return result;
@@ -294,7 +304,10 @@ console.log(C.bold(C.cyan('═════════════════�
       executionUi.removedVisible && executionUi.addedVisible,
       'las ediciones muestran líneas eliminadas y agregadas'
     );
-    assert(executionUi.planSurvivesNextPrompt, 'un mensaje nuevo conserva el plan pendiente');
+    assert(
+      executionUi.planClearsForNextPrompt,
+      'un mensaje nuevo descarta el HUD de la tarea anterior'
+    );
     assert(executionUi.planShowsPausedFailure, 'un fallo conserva y marca el plan como pausado');
     assert(
       executionUi.newPlanReplacesPrevious,
@@ -326,20 +339,47 @@ console.log(C.bold(C.cyan('═════════════════�
       if (win) win.setSize(700, 520);
     });
     await sleep(250);
-    const compactAvatar = await chat.evaluate(() => {
+    const compactAvatar = await chat.evaluate(async () => {
       const panel = document.getElementById('model-panel');
       const container = document.getElementById('model-canvas-container');
       const canvas = document.getElementById('live2d-chat-canvas');
-      const rect = container.getBoundingClientRect();
+      const panelRect = panel.getBoundingClientRect();
+      const restingRect = container.getBoundingClientRect();
+      const restingOverflow = window.getComputedStyle(panel).overflow;
+      window.animateAvatarPresence('working');
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const animatedRect = container.getBoundingClientRect();
+      const animatedStyle = window.getComputedStyle(container);
+      const protruding = container.classList.contains('avatar-protruding');
       return {
         visible: window.getComputedStyle(panel).display !== 'none',
-        validSize: rect.width > 1 && rect.height > 1 && canvas.width > 1 && canvas.height > 1,
+        validSize:
+          restingRect.width > 1 && restingRect.height > 1 && canvas.width > 1 && canvas.height > 1,
+        containedAtRest:
+          restingOverflow === 'hidden' &&
+          Math.abs(restingRect.left - panelRect.left) < 2 &&
+          Math.abs(restingRect.width - panelRect.width) < 2,
+        escapesFrame:
+          window.getComputedStyle(panel).overflow === 'visible' &&
+          (animatedRect.left < panelRect.left ||
+            (protruding && animatedStyle.transitionProperty.includes('left'))),
+        animated: container.classList.contains('avatar-working'),
       };
     });
     assert(
       compactAvatar.visible && compactAvatar.validSize,
       'Live2D conserva dimensiones válidas al compactar la UI'
     );
+    assert(
+      compactAvatar.containedAtRest,
+      'Live2D queda alineado y contenido cuando está en reposo'
+    );
+    assert(
+      compactAvatar.escapesFrame,
+      'Live2D solo desborda ligeramente durante una animación',
+      JSON.stringify(compactAvatar)
+    );
+    assert(compactAvatar.animated, 'Live2D activa estados visuales de presencia');
     await app.evaluate(({ BrowserWindow }) => {
       const win = BrowserWindow.getAllWindows().find((candidate) =>
         candidate.webContents.getURL().includes('chat.html')

@@ -237,7 +237,29 @@ function isHighImpact(tool, params) {
 
   if (tool === 'read' && params.path) return _isOutsideProject(params.path);
 
-  if (tool === 'browser') return true;
+  if (
+    tool === 'browser' ||
+    tool === 'list_apps' ||
+    tool === 'launch_app' ||
+    tool === 'open_website' ||
+    tool === 'play_media' ||
+    tool === 'desktop_snapshot' ||
+    tool === 'desktop_screenshot' ||
+    tool === 'pointer_click' ||
+    tool === 'window_list' ||
+    tool === 'window_focus' ||
+    tool === 'ui_click' ||
+    tool === 'ui_type' ||
+    tool === 'ui_press' ||
+    tool === 'ui_select' ||
+    tool === 'window_close' ||
+    tool === 'desktop_capabilities' ||
+    tool === 'process_list' ||
+    tool === 'process_stop' ||
+    tool === 'camera_status' ||
+    tool === 'open_camera'
+  )
+    return true;
 
   if (tool === 'edit_file' && params.path)
     return _isSensitivePath(params.path) || _isOutsideProject(params.path);

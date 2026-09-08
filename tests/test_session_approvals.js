@@ -63,9 +63,90 @@ function testApprovalPatterns() {
     approvalPattern({ tool: 'edit', params: { filePath: 'rel/archivo.js' } }) || ''
   );
   assert(
-    approvalPattern({ tool: 'browser', params: { action: 'navigate' } }) === 'tool:browser',
-    'sin path → "tool:<tool>"',
+    approvalPattern({ tool: 'browser', params: { action: 'navigate' } }) ===
+      'browser:background::navigate:page:e3b0c44298fc1c14',
+    'browser sin URL conserva alcance de acción y modo',
     approvalPattern({ tool: 'browser', params: {} }) || ''
+  );
+  assert(
+    approvalPattern({
+      tool: 'browser',
+      params: { action: 'navigate', mode: 'managed', url: 'https://youtube.com/results' },
+    }) === 'browser:managed:navigate:youtube.com',
+    'browser navigate limita aprobación por modo y hostname'
+  );
+  assert(
+    approvalPattern({
+      tool: 'browser',
+      params: { action: 'click', mode: 'managed', role: 'button', name: 'Reproducir' },
+    }) === null,
+    'browser interactivo sin sesión/origen no puede aprobarse permanentemente'
+  );
+  const scopedType = approvalPattern({
+    tool: 'browser',
+    params: {
+      action: 'type',
+      mode: 'managed',
+      sessionId: 's1',
+      pageId: 'p1',
+      expectedOrigin: 'https://example.com',
+      role: 'textbox',
+      value: 'secreto-a',
+    },
+  });
+  const changedValue = approvalPattern({
+    tool: 'browser',
+    params: {
+      action: 'type',
+      mode: 'managed',
+      sessionId: 's1',
+      pageId: 'p1',
+      expectedOrigin: 'https://example.com',
+      role: 'textbox',
+      value: 'secreto-b',
+    },
+  });
+  assert(scopedType !== changedValue, 'la aprobación de escritura queda ligada al valor');
+  assert(
+    approvalPattern({ tool: 'launch_app', params: { app: 'Firefox' } }) === 'launch_app:firefox',
+    'launch_app → aprobación limitada a esa aplicación'
+  );
+  assert(
+    approvalPattern({
+      tool: 'open_website',
+      params: { target: 'https://youtube.com/watch?v=1' },
+    }) === 'open_website:external:default:youtube.com',
+    'open_website URL → aprobación del navegador personal limitada al hostname'
+  );
+  assert(
+    approvalPattern({ tool: 'open_website', params: { target: 'drive' } }) ===
+      'open_website:external:default:drive',
+    'open_website alias → aprobación limitada al alias'
+  );
+  assert(
+    approvalPattern({
+      tool: 'open_website',
+      params: { target: 'https://gmail.com/', control: 'managed' },
+    }) === 'open_website:managed:kaoru:gmail.com',
+    'el navegador administrado conserva un consentimiento separado'
+  );
+  assert(
+    approvalPattern({ tool: 'play_media', params: { query: '  Guitarra   acústica ' } }) ===
+      'play_media:managed:kaoru:youtube:guitarra acústica',
+    'play_media → aprobación limitada al servicio y consulta'
+  );
+  assert(
+    approvalPattern({ tool: 'process_stop', params: { pid: 42 } }) === 'process_stop:42',
+    'process_stop → aprobación ligada al PID exacto'
+  );
+  assert(
+    approvalPattern({ tool: 'process_list', params: { query: 'Electron' } }) ===
+      'process_list:electron',
+    'process_list → aprobación ligada al filtro'
+  );
+  assert(
+    approvalPattern({ tool: 'camera_status', params: {} }) === 'camera_status',
+    'cámara → patrón estable'
   );
   assert(approvalPattern(null) === null, 'action null → null');
 }

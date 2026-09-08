@@ -73,6 +73,47 @@ jobs:
         # no bloquea los instaladores ni marca como fallido todo el workflow.
         continue-on-error: true
 
+  desktop-contracts:
+    name: Desktop automation · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Contratos JS de escritorio (Linux)
+        if: runner.os == 'Linux'
+        run: ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_desktop_automation.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_desktop_control.js
+
+      - name: Contratos JS de escritorio (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:ELECTRON_RUN_AS_NODE = '1'
+          & .\node_modules\electron\dist\electron.exe tests\test_desktop_automation.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\node_modules\electron\dist\electron.exe tests\test_desktop_control.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Smoke test de Windows UI Automation
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $json = '{"operation":"health"}' | & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File core\desktop\helpers\windows_uiautomation.ps1
+          $health = $json | ConvertFrom-Json
+          if (-not $health.ok) { throw $health.error }
+
   e2e-ui:
     name: E2E UI (Electron + Playwright)
     runs-on: ubuntu-latest

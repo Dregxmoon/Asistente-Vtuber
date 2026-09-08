@@ -42,7 +42,15 @@ function buildPrompt(messages, systemPrompt, tools = []) {
   const transcript = (Array.isArray(messages) ? messages : [])
     .map((message) => {
       const role = message.role === 'assistant' ? 'ASSISTANT' : 'USER';
-      return `${role}: ${typeof message.content === 'string' ? message.content : JSON.stringify(message.content)}`;
+      const content = Array.isArray(message.content)
+        ? message.content
+            .filter((block) => block?.type === 'text')
+            .map((block) => String(block.text || ''))
+            .join('\n') + '\n[Imagen omitida: Codex CLI local no admite adjuntos en este puente]'
+        : typeof message.content === 'string'
+          ? message.content
+          : JSON.stringify(message.content);
+      return `${role}: ${content}`;
     })
     .join('\n\n');
   const toolSection = tools.length

@@ -4,6 +4,27 @@
 // IPC a core/security/PermissionManager.js (userData/permissions.json).
 
 const permsModal = document.getElementById('perms-modal');
+const DESKTOP_CAPABILITIES = [
+  ['applications', 'Aplicaciones'],
+  ['browser', 'Navegador y multimedia'],
+  ['screen', 'Pantalla y accesibilidad'],
+  ['pointer', 'Puntero y controles'],
+  ['keyboard', 'Teclado observado'],
+  ['processes', 'Procesos'],
+  ['camera', 'Cámara'],
+];
+
+function renderDesktopCapabilities(rules) {
+  const container = document.getElementById('desktop-capabilities');
+  if (!container) return;
+  container.innerHTML = DESKTOP_CAPABILITIES.map(([id, label]) => {
+    const rule = rules.find((item) => item.tool === `capability:${id}` && !item.path);
+    const enabled = !rule || rule.action !== 'deny';
+    return `<button class="desktop-capability ${enabled ? 'enabled' : 'disabled'}" data-capability="${id}" data-enabled="${enabled ? '1' : '0'}" type="button" aria-pressed="${enabled ? 'true' : 'false'}">
+      <span>${escapeHtml(label)}</span><strong>${enabled ? 'ACTIVO' : 'BLOQUEADO'}</strong>
+    </button>`;
+  }).join('');
+}
 
 function openPermsModal() {
   permsModal.classList.add('visible');
@@ -27,14 +48,17 @@ async function renderPermsList() {
     listEl.innerHTML = '<div class="session-error">No se pudieron cargar los permisos.</div>';
     return;
   }
-  if (!rules || rules.length === 0) {
+  rules = Array.isArray(rules) ? rules : [];
+  renderDesktopCapabilities(rules);
+  const toolRules = rules.filter((rule) => !String(rule.tool || '').startsWith('capability:'));
+  if (toolRules.length === 0) {
     listEl.innerHTML = '';
     emptyEl.style.display = 'block';
     return;
   }
   emptyEl.style.display = 'none';
   const actionLabels = { allow: 'Permitir', ask: 'Preguntar', deny: 'Bloquear' };
-  listEl.innerHTML = rules
+  listEl.innerHTML = toolRules
     .map(
       (r) => `<div class="perm-row">
         <span class="perm-tool">${escapeHtml(r.tool)}</span>
@@ -96,6 +120,25 @@ function attachPermsEvents() {
         renderPermsList();
       } catch (e) {
         console.error('[perms] error eliminando regla:', e.message || e);
+      }
+    });
+  }
+
+  const capabilities = document.getElementById('desktop-capabilities');
+  if (capabilities) {
+    capabilities.addEventListener('click', async (e) => {
+      const button = e.target.closest('.desktop-capability');
+      if (!button) return;
+      const enabled = button.dataset.enabled === '1';
+      try {
+        await window.assistant.invoke('permissions-set', {
+          tool: `capability:${button.dataset.capability}`,
+          path: '',
+          action: enabled ? 'deny' : 'ask',
+        });
+        renderPermsList();
+      } catch (error) {
+        document.getElementById('perms-status').textContent = error.message || 'error';
       }
     });
   }

@@ -5,8 +5,7 @@
 // (OPENCLAW_PORT) y se inyecta el fake de playwright para browser/web_search.
 
 const http = require('http');
-const BrowserBridge = require('../core/planner/BrowserBridge.js');
-const { OpenClawBridge, getOpenClawBridge } = require('../core/planner/OpenClawBridge.js');
+const { OpenClawBridge } = require('../core/planner/OpenClawBridge.js');
 
 const C = {
   green: (s) => `\x1b[32m${s}\x1b[0m`,
@@ -115,9 +114,13 @@ function startMockOpenclaw() {
 
 // ── Fake de playwright (para browser/web_search) ───────────────────────────────
 function installFakePlaywright() {
+  let currentUrl = 'about:blank';
   const fakePage = {
     isClosed: () => false,
-    goto: async () => {},
+    url: () => currentUrl,
+    goto: async (url) => {
+      currentUrl = url;
+    },
     title: async () => 'Título mock',
     click: async () => {},
     textContent: async () => 'texto mock',
@@ -226,7 +229,7 @@ async function testBrowserDispatch() {
   const bridge = new OpenClawBridge();
   const nav = await bridge.execute('browser', { action: 'navigate', url: 'https://x.com' });
   assert(
-    nav.ok === true && nav.result.includes('Título mock'),
+    nav.ok === true && nav.result.title === 'Título mock' && nav.result.url === 'https://x.com',
     'browser navigate vía BrowserBridge'
   );
 
@@ -264,6 +267,8 @@ async function testLogAndStats() {
   const stats = bridge.getStats();
   assert(stats.total === log.length, 'getStats.total coincide con actionLog');
   assert(stats.tools.includes('exec'), 'getStats.tools incluye exec');
+  assert(stats.byTool.exec.ok >= 1, 'getStats calcula éxito por herramienta');
+  assert(stats.byTool.turbo.failed === 1, 'getStats conserva fallos por herramienta');
 }
 
 async function testCloseBrowserShortcut() {

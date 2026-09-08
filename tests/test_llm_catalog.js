@@ -57,7 +57,12 @@ function testCatalogMetadata() {
     for (const m of Object.values(meta)) {
       if (!m || typeof m.label !== 'string' || !m.label) metaErrors++;
       if (typeof m.tools !== 'boolean') metaErrors++;
-      if (typeof m.context !== 'number' || m.context <= 0) metaErrors++;
+      // Los proveedores remotos publican una ventana positiva. codex-cli
+      // delega el presupuesto a la cuenta/CLI local y usa 0 como "dinámico".
+      const validContext =
+        typeof m.context === 'number' &&
+        (m.context > 0 || (p.id === 'codex-cli' && m.context === 0));
+      if (!validContext) metaErrors++;
     }
     // Los defaults de cada rol deben existir en el catálogo y tener tools.
     const active = p.activeModel || {};

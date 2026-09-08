@@ -37,8 +37,8 @@
         <span
           id="agent-mode-badge"
           class="agent-mode-badge"
-          title="Modo: agent usa herramientas, chat solo conversa. Tab para cambiar."
-          >AGENTE</span
+          title="Flujo unificado: Kaoru elige automáticamente entre respuesta rápida y ejecución completa."
+          >AUTO</span
         >
         <div id="sessions-modal">
           <div id="sessions-box">
@@ -283,6 +283,9 @@
           regla a todas las herramientas y deja la carpeta vacía para usarla globalmente.
         </div>
 
+        <div class="desktop-capabilities-title">CAPACIDADES DE ESCRITORIO</div>
+        <div id="desktop-capabilities" class="desktop-capabilities"></div>
+
         <div class="perms-form">
           <input
             id="perms-tool"
@@ -304,6 +307,11 @@
             <option value="git_rebase"></option>
             <option value="web_search"></option>
             <option value="browser"></option>
+            <option value="desktop_capabilities"></option>
+            <option value="process_list"></option>
+            <option value="process_stop"></option>
+            <option value="camera_status"></option>
+            <option value="open_camera"></option>
             <option value="webfetch"></option>
             <option value="subagent"></option>
             <option value="*"></option>

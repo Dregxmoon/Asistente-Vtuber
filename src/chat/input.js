@@ -700,11 +700,8 @@ input.addEventListener('keydown', (e) => {
   if (e.key === 'Tab' || e.key === 'ArrowDown' || e.key === 'ArrowUp') {
     const atEl = document.getElementById('at-suggestions');
     if (atEl.style.display !== 'block') {
-      // Tab sin sugerencias abiertas: alternar el modo de agente (agent/chat).
-      if (e.key === 'Tab') {
-        e.preventDefault();
-        toggleAgentMode();
-      }
+      // En el flujo unificado Tab ya no alterna un pipeline oculto. Sin
+      // sugerencias, conserva el comportamiento normal de foco del navegador.
       return;
     }
     e.preventDefault();

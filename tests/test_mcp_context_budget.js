@@ -94,7 +94,9 @@ async function testCalendarCallUnderPressure() {
   };
   LLMProvider.completeWithTools = async (_messages, systemPrompt, tools) => {
     captured.push(systemPrompt);
-    assert(systemPrompt.length <= 30000);
+    // AgentLoop conserva un presupuesto propio de 40K para incluir el contrato
+    // del loop y el catálogo sin perder tools bajo presión de memoria.
+    assert(systemPrompt.length <= 40000);
     assert(systemPrompt.includes('google-calendar'));
     assert(systemPrompt.includes('# MODO AGENTE'));
     assert(systemPrompt.includes(catalog));

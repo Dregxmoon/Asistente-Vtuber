@@ -82,10 +82,22 @@ Con fallback al parser regex del `Planner` si el modelo no usa el formato estruc
   `removedLines`) para colorear en la UI y alimentar el `meta` del loop.
 - Verifica disponibilidad del servicio cada 30 s y reporta disponibilidad al motor proactivo.
 
-## `BrowserBridge.js` — navegador headless propio
+## `BrowserBridge.js` — navegador aislado y administrado
 
-Navegador Chromium headless mantenido con Playwright, **separado del navegador personal del usuario**:
-navegación, lectura de páginas, capturas de pantalla y búsqueda web sin API key.
+Dos sesiones Chromium mantenidas con Playwright y **separadas del navegador personal del usuario**:
+una headless para búsquedas y otra visible administrada. Todas las solicitudes pasan por la política
+de URL; las pestañas tienen IDs, las mutaciones exigen el origen observado y se distinguen ejecución
+y postcondición verificada.
+
+`open_website` usa por defecto el navegador personal/predeterminado para conservar las sesiones del
+usuario (por ejemplo, Gmail). El modo `managed` sólo se elige explícitamente cuando Kaoru necesita
+observar y controlar el DOM; `play_media` lo usa para completar y verificar el flujo de YouTube.
+
+El control de aplicaciones nativas vive en `core/desktop/`: AT-SPI2 en Linux y UI Automation en
+Windows. `desktop_snapshot` entrega referencias efímeras; las acciones UI consumen esas referencias
+y `desktop_screenshot` + `pointer_click` forman el fallback visual para canvas o juegos. Las familias
+de aplicaciones, navegador, pantalla, puntero, teclado, procesos y cámara tienen interruptores de
+permiso independientes; habilitar una familia no sustituye la aprobación puntual de una acción.
 
 ---
 
@@ -98,6 +110,7 @@ navegación, lectura de páginas, capturas de pantalla y búsqueda web sin API k
 | `edit` / `write` / `create_file` | Sí                  |
 | `exec` / `run_command`           | Sí                  |
 | `browser` / `web_search`         | Sí                  |
+| `desktop_*` / `window_*` / `ui_*` | Sí                 |
 | `apply_patch`                    | Sí                  |
 | `code_execution`                 | Sí                  |
 

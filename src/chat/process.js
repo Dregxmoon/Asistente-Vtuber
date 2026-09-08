@@ -1,5 +1,5 @@
 // @ts-nocheck
-/* global _renderResultChips, _takeResultMeta, preservePlanBlock, pausePlanBlock */
+/* global _renderResultChips, _takeResultMeta, pausePlanBlock */
 // Compresión de historial
 // Comprime mensajes de assistant repetitivos (fallos, "lo siento"s) para no
 // saturar el contexto del LLM con ruido auto-generado.
@@ -116,6 +116,7 @@ function _maskUnclosedGesture(text) {
 // bubble solo acumula la respuesta final (que la reemplaza sin cambio visual)
 // y no da la ilusión de que el mensaje "cambia" a otro.
 let _activeAgentStream = null;
+let _agentRunActive = false;
 
 function closeStreamSegment() {
   const s = _activeAgentStream;
@@ -203,10 +204,22 @@ async function processMessage(text, files = []) {
     ipcRenderer.send('memory-add-turn', { role: 'user', content: sessionMsg });
   }
 
+  // Si ya hay un AgentLoop ejecutándose, un segundo mensaje no cancela ni
+  // reemplaza el run: entra como steering y se aplica en el siguiente límite
+  // seguro entre iteraciones. El mensaje ya quedó visible y en la sesión.
+  if (_agentRunActive && getAgentMode() === 'agent') {
+    ipcRenderer.send('agent-steer', { text: trimmed });
+    setAgentState('thinking', 'Actualización en cola');
+    return;
+  }
+
   showThinking();
   triggerMotion();
   resetActivities();
-  preservePlanBlock();
+  // Cada mensaje raíz inicia un run nuevo: no conservar el HUD de otra tarea.
+  // Si es "continúa", AgentLoop reemitirá inmediatamente el plan persistido
+  // de la intención más reciente con kind=resumed.
+  resetPlanBlock();
   resetDiffBlocks();
 
   // Botón de cancelación: visible durante la generación. Aborta el agent-run
@@ -240,7 +253,7 @@ async function processMessage(text, files = []) {
   let error = null;
   let agentBubble = null;
 
-  if (openclawAvailable && getAgentMode() === 'agent') {
+  if (getAgentMode() === 'agent') {
     // NUEVO FLUJO: AgentLoop (Fase 2)
     // processMessage llama a runAgent() vía IPC agent-run. AgentLoop ejecuta
     // el loop LLM→tool→result→LLM→...→texto_final. La respuesta final se
@@ -248,6 +261,7 @@ async function processMessage(text, files = []) {
     let offStream = null;
     let mdTimer = 0;
     try {
+      _agentRunActive = true;
       const { bubble } = addMessage('assistant', '');
       agentBubble = bubble;
       // La clase markdown se añade desde el inicio para que el streaming en
@@ -316,6 +330,9 @@ async function processMessage(text, files = []) {
       const result = await ipcRenderer.invoke('agent-run', {
         text: trimmed,
       });
+      if (typeof window.updateUnifiedModeBadge === 'function') {
+        window.updateUnifiedModeBadge(result.executionMode || null);
+      }
 
       offStream();
       offStream = null;
@@ -406,6 +423,7 @@ async function processMessage(text, files = []) {
         return;
       }
     } finally {
+      _agentRunActive = false;
       if (offStream) offStream();
       if (mdTimer) clearTimeout(mdTimer);
       _activeAgentStream = null;

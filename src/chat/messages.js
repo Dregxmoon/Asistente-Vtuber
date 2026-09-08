@@ -187,7 +187,7 @@ async function refreshFooterSession() {
   if (!el) return;
   try {
     const status = await ipcRenderer.invoke('chat-context-status', {
-      mode: getAgentMode() === 'agent' ? 'smart' : 'fast',
+      mode: document.body.dataset.executionMode || 'smart',
     });
     const formatTokens = (value) => {
       if (value >= 1000000) return `${(value / 1000000).toFixed(1).replace(/\.0$/, '')}M`;

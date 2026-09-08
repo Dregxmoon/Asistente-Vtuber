@@ -97,18 +97,81 @@ const TOOL_SCHEMAS = [
   {
     name: 'browser',
     description:
-      'Navega a una URL y obtiene el contenido de la página. Usa el navegador headless del asistente. IMPORTANTE: solo usá URLs que aparecieron en la conversación — nunca inventes URLs.',
+      'Controla una sesión web: navegar, localizar por atributos visibles, hacer clic, escribir, enviar teclas, esperar, leer y verificar URL. mode=managed muestra el navegador controlable de Kaoru; background lo mantiene oculto. IMPORTANTE: solo usá URLs que aparecieron en la conversación.',
     inputSchema: {
       type: 'object',
       properties: {
         action: {
           type: 'string',
           description: 'Acción a realizar',
-          enum: ['navigate', 'click', 'get_text', 'screenshot'],
+          enum: [
+            'navigate',
+            'click',
+            'type',
+            'press',
+            'wait_for',
+            'get_text',
+            'get_url',
+            'back',
+            'forward',
+            'screenshot',
+            'snapshot',
+            'tabs',
+            'new_tab',
+            'select_tab',
+            'close_tab',
+            'select',
+            'check',
+            'uncheck',
+            'hover',
+            'scroll',
+            'upload',
+            'download',
+            'dialog',
+          ],
           default: 'navigate',
         },
+        mode: {
+          type: 'string',
+          enum: ['background', 'managed'],
+          default: 'background',
+          description: 'managed abre la sesión visible que Kaoru puede controlar y verificar',
+        },
         url: { type: 'string', description: 'URL a navegar (obligatorio para action=navigate)' },
-        selector: { type: 'string', description: 'Selector CSS (para action=click o get_text)' },
+        selector: { type: 'string', description: 'Selector CSS opcional' },
+        role: { type: 'string', description: 'Rol accesible, por ejemplo button o textbox' },
+        name: { type: 'string', description: 'Nombre accesible asociado al role' },
+        text: { type: 'string', description: 'Texto visible del elemento' },
+        label: { type: 'string', description: 'Etiqueta visible del campo' },
+        placeholder: { type: 'string', description: 'Placeholder visible del campo' },
+        value: { type: 'string', description: 'Texto para action=type' },
+        key: { type: 'string', description: 'Tecla para action=press, por ejemplo Enter' },
+        timeout: { type: 'number', description: 'Espera máxima para action=wait_for' },
+        sessionId: { type: 'string', description: 'Sesión devuelta por snapshot/tabs' },
+        pageId: { type: 'string', description: 'Pestaña devuelta por snapshot/tabs' },
+        expectedOrigin: {
+          type: 'string',
+          description: 'Origen observado que debe seguir activo antes de mutar la página',
+        },
+        option: { type: 'string', description: 'Valor o etiqueta para action=select' },
+        expectedUrl: {
+          type: 'string',
+          description: 'Fragmento de URL esperado después de un click para verificar su intención',
+        },
+        direction: {
+          type: 'string',
+          enum: ['up', 'down', 'left', 'right'],
+          description: 'Dirección para action=scroll',
+        },
+        path: {
+          type: 'string',
+          description: 'Archivo del workspace para upload o destino para download',
+        },
+        dialogAction: {
+          type: 'string',
+          enum: ['accept', 'dismiss'],
+          description: 'Respuesta para action=dialog',
+        },
       },
       required: ['action'],
     },
@@ -125,6 +188,204 @@ const TOOL_SCHEMAS = [
       },
       required: ['query'],
     },
+  },
+  {
+    name: 'list_apps',
+    description:
+      'Lista aplicaciones instaladas y visibles. Úsala cuando no conozcas el nombre exacto antes de launch_app. Requiere aprobación por privacidad.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Filtro opcional por nombre de aplicación' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'launch_app',
+    description:
+      'Abre una aplicación, juego o launcher instalado en el escritorio visible. Requiere aprobación. No admite comandos ni argumentos arbitrarios.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        app: { type: 'string', description: 'Nombre exacto o alias, por ejemplo firefox o steam' },
+      },
+      required: ['app'],
+    },
+  },
+  {
+    name: 'open_website',
+    description:
+      'Abre un sitio en el navegador visible del usuario. Usa un alias conocido (drive, youtube, whatsapp, gmail) o una URL https completa. Requiere aprobación.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        target: { type: 'string', description: 'Alias del sitio o URL https completa' },
+        browser: {
+          type: 'string',
+          enum: ['brave', 'chrome', 'chromium', 'edge', 'firefox'],
+          description: 'Navegador opcional; si se omite usa el predeterminado',
+        },
+        control: {
+          type: 'string',
+          enum: ['managed', 'external'],
+          default: 'external',
+          description:
+            'external (predeterminado) usa el navegador personal con sus sesiones; managed usa un Chromium aislado controlable',
+        },
+      },
+      required: ['target'],
+    },
+  },
+  {
+    name: 'play_media',
+    description:
+      'Para órdenes compuestas como "abre YouTube, busca un video de guitarra y reprodúcelo". Usa por defecto el navegador visible administrado por Kaoru, pulsa reproducir y verifica que el video esté reproduciéndose. Requiere aprobación.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Tema o video solicitado' },
+        service: { type: 'string', enum: ['youtube'], default: 'youtube' },
+        control: {
+          type: 'string',
+          enum: ['managed', 'external'],
+          default: 'managed',
+          description:
+            'managed permite controlar y verificar; external solo abre el navegador elegido y no puede garantizar reproducción',
+        },
+        browser: {
+          type: 'string',
+          enum: ['brave', 'chrome', 'chromium', 'edge', 'firefox'],
+          description: 'Navegador opcional, usado únicamente con control=external',
+        },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'desktop_snapshot',
+    description:
+      'Observa la interfaz accesible del escritorio en Linux o Windows y devuelve referencias efímeras. Debe ejecutarse antes de cualquier acción UI.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        application: { type: 'string', description: 'Aplicación o ventana que se quiere observar' },
+        maxDepth: { type: 'number', description: 'Profundidad máxima del árbol accesible' },
+        maxNodes: { type: 'number', description: 'Máximo de elementos devueltos' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'desktop_screenshot',
+    description:
+      'Captura una pantalla o ventana visible en Linux o Windows como imagen JPEG para interfaces sin accesibilidad.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sourceId: { type: 'string', description: 'ID exacto de pantalla/ventana, si se conoce' },
+        sourceName: { type: 'string', description: 'Nombre parcial de la ventana' },
+        width: { type: 'number', description: 'Ancho máximo, hasta 1920' },
+        height: { type: 'number', description: 'Alto máximo, hasta 1080' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'pointer_click',
+    description:
+      'Fallback visual para canvas o juegos: hace clic en coordenadas de una desktop_screenshot vigente. Debe observarse otra vez inmediatamente.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        captureId: { type: 'string', description: 'ID efímero de desktop_screenshot' },
+        x: { type: 'number', description: 'Coordenada X dentro de la imagen capturada' },
+        y: { type: 'number', description: 'Coordenada Y dentro de la imagen capturada' },
+      },
+      required: ['captureId', 'x', 'y'],
+    },
+  },
+  {
+    name: 'window_list',
+    description: 'Lista ventanas visibles mediante AT-SPI2 en Linux o UI Automation en Windows.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        application: { type: 'string', description: 'Filtro opcional por aplicación o ventana' },
+      },
+      required: [],
+    },
+  },
+  ...[
+    ['window_focus', 'Enfoca una ventana o control previamente observado.'],
+    ['ui_click', 'Invoca un botón o control previamente observado.'],
+    ['ui_type', 'Introduce texto en un campo editable previamente observado.'],
+    ['ui_press', 'Envía una tecla permitida al elemento previamente observado.'],
+    ['ui_select', 'Selecciona una opción o elemento previamente observado.'],
+    ['window_close', 'Cierra una ventana previamente observada.'],
+  ].map(([name, description]) => ({
+    name,
+    description: `${description} Requiere observationId y ref vigentes; expected permite verificar la postcondición.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        observationId: { type: 'string', description: 'ID de la última observación' },
+        ref: { type: 'string', description: 'Referencia ui-N de esa observación' },
+        value: { type: 'string', description: 'Texto para ui_type' },
+        key: { type: 'string', description: 'Tecla para ui_press' },
+        expected: {
+          type: 'object',
+          description: 'Postcondición observable: name, role, state o absent',
+          properties: {
+            name: { type: 'string' },
+            role: { type: 'string' },
+            state: { type: 'string' },
+            absent: { type: 'boolean' },
+          },
+        },
+      },
+      required: ['observationId', 'ref'],
+    },
+  })),
+  {
+    name: 'desktop_capabilities',
+    description:
+      'Informa qué familias de control de escritorio admite la plataforma, sin ejecutar acciones.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'process_list',
+    description:
+      'Lista una cantidad acotada de procesos por PID y nombre. No devuelve argumentos ni variables de entorno.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Filtro opcional por nombre' },
+        limit: { type: 'number', description: 'Máximo de procesos, hasta 250' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'process_stop',
+    description:
+      'Solicita terminar un proceso por PID con SIGTERM. Requiere aprobación específica y no admite PID 1 ni el proceso de Kaoru.',
+    inputSchema: {
+      type: 'object',
+      properties: { pid: { type: 'number', description: 'PID exacto previamente observado' } },
+      required: ['pid'],
+    },
+  },
+  {
+    name: 'camera_status',
+    description: 'Consulta el estado de acceso a cámara del sistema. No enciende ni captura video.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'open_camera',
+    description:
+      'Abre una aplicación de cámara conocida. No captura ni transmite video y requiere aprobación.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
   },
   {
     name: 'websearch',

@@ -19,7 +19,7 @@
 /**
  * Payload del evento agent-plan (tal cual lo emite AgentLoop).
  * @typedef {Object} AgentPlanPayload
- * @property {'created'|'replaced'|'progress'} kind
+ * @property {'created'|'replaced'|'resumed'|'progress'} kind
  * @property {number|null} [goalId]
  * @property {AgentPlanStep[]} steps
  * @property {number} done

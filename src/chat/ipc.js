@@ -87,27 +87,23 @@ ipcRenderer.on('openclaw-status', (e, status) => {
   openclawSandbox = sandbox === undefined || sandbox === null ? null : Boolean(sandbox);
   openclawSandboxReason = sandboxReason || null;
   updateSandboxBanner();
-  if (!openclawAvailable) setAgentMode('chat');
 });
 
-// Badge de modo agente (Tab alterna). Se refleja también en el body dataset
-// para que el CSS pueda diferenciar el estado.
-onAgentMode((mode) => {
+// El badge informa el routing interno del flujo único; ya no es un selector.
+function updateUnifiedModeBadge(executionMode = null) {
+  const routed = executionMode === 'fast' || executionMode === 'smart' ? executionMode : null;
   const badge = document.getElementById('agent-mode-badge');
   if (badge) {
-    badge.textContent = mode === 'agent' ? 'AGENTE' : 'CHAT';
-    badge.classList.toggle('chat', mode !== 'agent');
+    badge.textContent = routed ? `AUTO·${routed.toUpperCase()}` : 'AUTO';
+    badge.classList.remove('chat');
     badge.title =
-      mode === 'agent'
-        ? 'Modo agente: usa herramientas (escribir, editar, bash). Tab para cambiar a chat.'
-        : 'Modo chat: solo conversación, sin herramientas. Tab para cambiar a agente.';
+      'Flujo unificado: Kaoru decide automáticamente si esta solicitud necesita respuesta rápida o ejecución completa.';
   }
-  document.body.dataset.agentMode = mode;
-});
-
-// El badge también alterna el modo al hacer clic (además de Tab).
-const _modeBadge = document.getElementById('agent-mode-badge');
-if (_modeBadge) _modeBadge.addEventListener('click', () => toggleAgentMode());
+  document.body.dataset.agentMode = 'agent';
+  if (routed) document.body.dataset.executionMode = routed;
+}
+window.updateUnifiedModeBadge = updateUnifiedModeBadge;
+onAgentMode(() => updateUnifiedModeBadge());
 
 // Agent Loop IPC (Fase 2 → Cambio 1/2 del rediseño: ActivityBlocks + estados)
 // renderActivityBlock/resetActivityBlocks vienen de chat/activityBlock.js
@@ -121,6 +117,13 @@ ipcRenderer.on('agent-progress', (e, progress) => {
   const state = agentStates ? agentStates.stateFromProgress(progress) : null;
   if (chatGestureEngine)
     chatGestureEngine.onEvent('agent-progress', { state, status: progress.status });
+  if (typeof window.animateAvatarPresence === 'function') {
+    if (progress.phase === 'start') window.animateAvatarPresence('working');
+    else if (progress.phase === 'end' && progress.status === 'error')
+      window.animateAvatarPresence('react');
+    else if (progress.phase === 'end' && progress.status === 'ok')
+      window.animateAvatarPresence('peek');
+  }
   // Recordar el último archivo escrito para que el frame de preview HTML
   // muestre su ruta (write/apply_patch llevan el path en params).
   if (
@@ -202,6 +205,9 @@ ipcRenderer.on('agent-approval-expired', (e, { actionId }) => {
 // proactividad, errores LSP…): el mini-avatar reacciona igual que el overlay.
 ipcRenderer.on('gesture', (e, payload = {}) => {
   if (!payload || typeof payload.mood !== 'string') return;
+  if (typeof window.animateAvatarPresence === 'function') {
+    window.animateAvatarPresence(payload.mood === 'happy' ? 'celebrate' : 'react');
+  }
   if (chatGestureEngine) {
     chatGestureEngine.play(payload.mood);
     return;

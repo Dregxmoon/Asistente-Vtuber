@@ -43,6 +43,7 @@ function main() {
     const alphaOnly = graph.listActiveIntentions({ workspace: workspaceA });
     assert(alphaOnly.length === 1, 'filtra intenciones por workspace');
     assert(alphaOnly[0].goal.includes('alpha'), 'no mezcla el objetivo de otro proyecto');
+    graph.completeIntention(alphaOnly[0].id);
 
     const commitment = beginGoal({
       graph,
@@ -97,6 +98,16 @@ function main() {
       graph.getGoalGovernance(commitment.id)?.attempts === 0,
       'la ejecución interactiva no consume reintentos autónomos'
     );
+    const continued = beginGoal({
+      graph,
+      sessionId: 'session-a',
+      workspace: workspaceA,
+      goal: 'continúa',
+    });
+    assert(
+      continued?.id === commitment.id && continued.resumed,
+      'una orden explícita de continuar retoma el mismo objetivo'
+    );
 
     const completed = settleGoal({
       graph,
@@ -121,6 +132,26 @@ function main() {
     assert(
       graph.listGoalEvents(commitment.id).some((event) => event.type === 'goal_completed'),
       'conserva un ledger del cierre verificable'
+    );
+    graph.createIntention({
+      sessionId: 'session-a',
+      workspace: workspaceA,
+      goal: 'Tarea anterior aún pendiente',
+    });
+    const latestId = graph.createIntention({
+      sessionId: 'session-a',
+      workspace: workspaceA,
+      goal: 'Última tarea en ejecución',
+    });
+    const latest = beginGoal({
+      graph,
+      sessionId: 'session-a',
+      workspace: workspaceA,
+      goal: 'continúa',
+    });
+    assert(
+      latest?.id === latestId && latest?.goal === 'Última tarea en ejecución',
+      'continúa retoma el tope más reciente cuando existen varias tareas activas'
     );
   } finally {
     graph.close();

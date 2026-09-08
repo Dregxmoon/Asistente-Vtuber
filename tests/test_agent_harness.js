@@ -114,11 +114,107 @@ async function testToolBudgetAndHooks() {
   }
 }
 
+async function testPlanIsNeverOptionalInProductionMode() {
+  let calls = 0;
+  const loop = new AgentLoop({
+    maxIterations: 3,
+    llm: async () => {
+      calls++;
+      return calls === 1 ? 'respuesta sin formato de plan' : 'No pude completar todavía.';
+    },
+  });
+  const result = await loop.run('corrige el archivo de configuración del proyecto', 'sistema', [], {
+    planning: false,
+    requirePlan: true,
+    strictCompletion: true,
+  });
+  assert(result.plan && result.plan.total >= 3, 'modo producción conserva un plan fallback');
+  assert(result.error === 'plan_incomplete', 'no declara éxito si quedan pasos sin evidencia');
+  assert(
+    String(result.response).includes('INCOMPLETA') && String(result.response).includes('reanudará'),
+    'el cierre informa estado incompleto y reanudación'
+  );
+}
+
+async function testSteeringIsAppliedBetweenIterations() {
+  let promptMessages = [];
+  const loop = new AgentLoop({
+    llm: async (messages) => {
+      promptMessages = messages;
+      return 'Resultado ajustado.';
+    },
+  });
+  let consumed = false;
+  const result = await loop.run('analiza el proyecto', 'sistema', [], {
+    reportMode: true,
+    consumeSteering: () => {
+      if (consumed) return [];
+      consumed = true;
+      return [{ text: 'prioriza los fallos de cancelación' }];
+    },
+  });
+  assert(result.steering?.applied === 1, 'el resultado informa steering aplicado');
+  assert(
+    promptMessages.some((message) =>
+      String(message.content || '').includes('prioriza los fallos de cancelación')
+    ),
+    'la actualización entra al contexto de la siguiente decisión'
+  );
+  assert(
+    promptMessages.some((message) => String(message.content || '').includes('No la interpretes')),
+    'el steering no se presenta como autorización'
+  );
+}
+
+async function testExecutionContractAndOptInRollback() {
+  let finalized = 0;
+  let reverted = 0;
+  const checkpoint = {
+    async finalize() {
+      finalized++;
+      return this.metadata();
+    },
+    metadata() {
+      return { canRevert: true, files: ['fallo.js'] };
+    },
+    async revert() {
+      reverted++;
+      return { ok: true, reverted: ['fallo.js'] };
+    },
+  };
+  const loop = new AgentLoop({ checkpoint, llm: async () => 'sin usar' });
+  loop._runInternal = async () => ({
+    response: 'La verificación falló.',
+    iterations: 2,
+    toolResults: [{ ok: true, tool: 'write', result: 'ok' }],
+    error: 'verification_failed',
+    verify: { status: 'failed' },
+  });
+  const result = await loop.run('corrige el archivo', 'sistema', [], {
+    rollbackOnVerificationFailure: true,
+  });
+  assert(reverted === 1 && finalized >= 1, 'rollback opt-in revierte un checkpoint verificable');
+  assert(result.rollback?.ok === true, 'el resultado expone evidencia del rollback');
+  assert(
+    result.execution?.state === 'paused' && result.execution?.resumable === true,
+    'el contrato terminal conserva la tarea para reanudar'
+  );
+
+  reverted = 0;
+  const conservative = new AgentLoop({ checkpoint, llm: async () => 'sin usar' });
+  conservative._runInternal = loop._runInternal;
+  const noRollback = await conservative.run('corrige el archivo', 'sistema', [], {});
+  assert(reverted === 0 && !noRollback.rollback, 'sin opt-in nunca revierte automáticamente');
+}
+
 (async () => {
   console.log('\nAgent harness avanzado');
   await testLifecycleHooks();
   await testParallelReadOnlySubagents();
   await testToolBudgetAndHooks();
+  await testPlanIsNeverOptionalInProductionMode();
+  await testSteeringIsAppliedBetweenIterations();
+  await testExecutionContractAndOptInRollback();
   console.log(`\nResultado: ${passed} passed / ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })().catch((error) => {

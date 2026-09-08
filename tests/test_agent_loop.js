@@ -308,6 +308,69 @@ async function testMutationExplanationDoesNotForceTools() {
   assert(result.toolResults.length === 0, 'no ejecuta mutaciones');
 }
 
+async function testObservableRequestCannotEndAsGenericChat() {
+  console.log(C.bold('\n── Cumplimiento: abrir/reproducir exige una tool ───────────────'));
+  const { AgentLoop } = require('../core/planner/AgentLoop.js');
+  const mockLLM = createMockLLM([
+    'Hmm, ¿me repetís qué necesitas con la landing?',
+    '```action\nACCIÓN: play_media | SERVICIO: youtube | QUERY: video de guitarra\n```',
+    'Abrí el primer video de guitarra en YouTube.',
+  ]);
+  const loop = new AgentLoop({
+    maxIterations: 5,
+    llm: mockLLM,
+    bridge: createMockBridge(process.cwd()),
+  });
+  const result = await loop.run(
+    'ábreme youtube y busca un video de guitarra y reprodúcelo',
+    'Eres un asistente.',
+    [],
+    { onApprovalNeeded: async () => true }
+  );
+  assert(mockLLM.callCount() === 3, 'la respuesta genérica se replantea antes de cerrar');
+  assert(
+    result.toolResults.some((item) => item.ok && item.tool === 'play_media'),
+    'play_media se ejecutó realmente'
+  );
+}
+
+async function testMediaRequestRequiresSuccessfulPlaybackTool() {
+  console.log(C.bold('\n── Cumplimiento: abrir YouTube no equivale a reproducir ────────'));
+  const { AgentLoop } = require('../core/planner/AgentLoop.js');
+  const mockLLM = createMockLLM([
+    '```action\nACCIÓN: open_website | SITIO: youtube\n```',
+    'YouTube quedó abierto.',
+    '```action\nACCIÓN: play_media | SERVICIO: youtube | QUERY: Yorushika\n```',
+    'No pude reproducirlo.',
+    '```action\nACCIÓN: play_media | SERVICIO: youtube | QUERY: Yorushika official\n```',
+    'La reproducción quedó verificada.',
+  ]);
+  let playAttempts = 0;
+  const bridge = {
+    execute: async (tool) => {
+      if (tool === 'play_media') {
+        playAttempts++;
+        return playAttempts === 1
+          ? { ok: false, tool, result: null, error: 'captcha', elapsed: 1 }
+          : { ok: true, tool, result: { playing: true, verified: true }, error: null, elapsed: 1 };
+      }
+      return { ok: true, tool, result: {}, error: null, elapsed: 1 };
+    },
+  };
+  const loop = new AgentLoop({ maxIterations: 8, llm: mockLLM, bridge });
+  const result = await loop.run(
+    'abre YouTube, busca Yorushika y reproduce el video',
+    'Eres un asistente.',
+    [],
+    { onApprovalNeeded: async () => true }
+  );
+  assert(playAttempts === 2, 'reintenta play_media después de un fallo verificable');
+  assert(
+    result.toolResults.some((item) => item.ok && item.tool === 'play_media'),
+    'solo considera satisfecha la orden cuando play_media tiene éxito'
+  );
+}
+
 // ── Test 2: Loop se adapta al resultado real (archivo no existe → create) ─────
 
 async function testAdaptsToRealResult() {
@@ -1203,6 +1266,54 @@ async function testMultiToolPerIteration() {
   }
 
   teardown();
+}
+
+async function testUiActionsObserveBetweenMutations() {
+  console.log(C.bold('\n── UI: una acción por ciclo de observación ───────────────'));
+  const { AgentLoop } = require('../core/planner/AgentLoop.js');
+  const LLMProvider = require('../core/llm/LLMProvider.js');
+  const originalCompleteWithTools = LLMProvider.completeWithTools;
+  let calls = 0;
+  const executed = [];
+  LLMProvider.completeWithTools = async () => {
+    calls++;
+    if (calls === 1) {
+      return {
+        content: null,
+        toolCalls: [
+          { tool: 'browser', params: { action: 'navigate', url: 'https://example.com' } },
+          { tool: 'browser', params: { action: 'click', selector: '#stale' } },
+        ],
+      };
+    }
+    return { content: 'La navegación quedó verificada.', toolCalls: null };
+  };
+  try {
+    const loop = new AgentLoop({
+      maxIterations: 4,
+      llm: createMockLLM(['no se usa']),
+      bridge: {
+        execute: async (tool, params) => {
+          executed.push({ tool, params });
+          return { ok: true, tool, result: { verified: true }, error: null, elapsed: 1 };
+        },
+      },
+    });
+    const result = await loop.run('navega al sitio', 'Eres un asistente.', [], {
+      tools: [
+        {
+          name: 'browser',
+          description: 'navegador',
+          inputSchema: { type: 'object', properties: {} },
+        },
+      ],
+      onApprovalNeeded: async () => true,
+    });
+    assert(result.toolResults.length === 1, 'descarta acciones UI decididas sobre estado obsoleto');
+    assert(executed[0].params.action === 'navigate', 'ejecuta únicamente la primera acción UI');
+  } finally {
+    LLMProvider.completeWithTools = originalCompleteWithTools;
+  }
 }
 
 // ── Test 9: compactación de contexto (G.1) ────────────────────────────────────
@@ -2635,7 +2746,10 @@ async function testPlanFailureFallsBack() {
 
   const result = await loop.run(msg, 'Eres un asistente.', [], { planning: true });
 
-  assert(!result.plan, 'sin plan (no parseable)');
+  assert(
+    result.plan && result.plan.total >= 3,
+    'plan local de respaldo cuando el proveedor no devuelve pasos parseables'
+  );
   assert(
     mockLLM.callCount() === 2,
     'el bucle continuó normal (1 plan fallida + 1 iteración)',
@@ -2735,6 +2849,8 @@ async function main() {
   await testTextResponse();
   await testMutationRequestCannotStopAfterInspection();
   await testMutationExplanationDoesNotForceTools();
+  await testObservableRequestCannotEndAsGenericChat();
+  await testMediaRequestRequiresSuccessfulPlaybackTool();
   await testArtifactVerifyCorrection();
   await testAdaptsToRealResult();
   await testMaxIterations();
@@ -2749,6 +2865,7 @@ async function main() {
   await testNativeMCPToolCallNormalization();
   await testMCPUnknownToolClearError();
   await testMultiToolPerIteration();
+  await testUiActionsObserveBetweenMutations();
   await testContextCompaction();
   await testSubagentDispatch();
   await testSubagentDepthLimit();

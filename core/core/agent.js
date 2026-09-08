@@ -137,6 +137,45 @@ function resolveAgentMode(userMessage, opts = {}) {
 }
 
 /**
+ * Garantiza que una intención durable nunca quede sin un itinerario mínimo,
+ * incluso si el contexto, el proveedor o la planificación fallan antes de
+ * entrar al AgentLoop.
+ * @param {any} graph
+ * @param {any} commitment
+ * @param {string} goal
+ * @returns {{steps:string[],criteria:string[]}|null}
+ */
+function ensureFallbackGoalPlan(graph, commitment, goal) {
+  if (!graph || !commitment?.id || typeof graph.createGoalPlan !== 'function') return null;
+  const existing = graph.getGoalPlan?.(commitment.id) || [];
+  if (Array.isArray(existing) && existing.length) return null;
+  const subject = String(goal || 'la tarea')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 160);
+  const plan = {
+    steps: [
+      `Inspeccionar el contexto real de ${subject}.`,
+      'Ejecutar la acción autorizada y registrar su resultado observable.',
+      'Verificar el resultado y cerrar sólo con evidencia; si falla, conservar el bloqueo para reanudarlo.',
+    ],
+    criteria: [
+      'Existe evidencia real del contexto y del problema.',
+      'La herramienta ejecutada devuelve un resultado observable.',
+      'La verificación confirma el objetivo o deja un motivo explícito de reanudación.',
+    ],
+  };
+  graph.createGoalPlan(
+    Number(commitment.id),
+    plan.steps.map((description, index) => ({
+      description,
+      successCriteria: [plan.criteria[index]],
+    }))
+  );
+  return plan;
+}
+
+/**
  * Ejecuta el loop cerrado de agente para un mensaje del usuario.
  * Reemplaza el flujo plan→execute con un loop single-step donde el LLM
  * decide tool por tool, condicionado por el resultado real del paso anterior.
@@ -145,6 +184,10 @@ function resolveAgentMode(userMessage, opts = {}) {
  * @param {object} [opts] - Opciones
  * @param {function} [opts.onApprovalNeeded] - Callback de aprobación
  * @param {function} [opts.onProgress] - Callback de progreso
+ * @param {()=>Array<{text:string,at?:number}>} [opts.consumeSteering] - Correcciones
+ *   del usuario que el loop consume entre iteraciones
+ * @param {boolean} [opts.rollbackOnVerificationFailure] - Revierte el checkpoint
+ *   si falla la verificación; opt-in, nunca lo decide el modelo
  * @param {number} [opts.maxIterations] - Máximo de iteraciones
  * @param {boolean} [opts.evalMode] - Modo benchmark: auto-aprueba toda tool de
  *   alto impacto y suprime la interacción con el usuario (sin onApprovalNeeded)
@@ -210,14 +253,22 @@ async function runAgent(userMessage, opts = {}) {
 
   // Modo automático por intención; el compromiso durable nace antes de
   // construir contexto para que sobreviva a fallos de grounding/proveedor.
-  const { mode, maxIterations } = resolveAgentMode(effectiveMessage, opts);
+  let { mode, maxIterations } = resolveAgentMode(effectiveMessage, opts);
   const projectCwd =
     state.activeWorkspace ||
     state.openclawWorkspace ||
     require('../planner/ActionParser.js').PROJECT_CWD;
+  const continuationHint =
+    /^(?:contin[uú]a|continuar|sigue|prosigue|retoma|reanuda|intenta de nuevo|prueba otra vez|corrige lo que falta)\b/i.test(
+      String(effectiveMessage || '').trim()
+    );
+  const resumableIntentions = continuationHint
+    ? state.graph?.listActiveIntentions?.({ limit: 50, workspace: projectCwd }) || []
+    : [];
   const goalTextMatch = /(?:^|\n)Objetivo:\s*(.+?)\s*$/m.exec(String(effectiveMessage || ''));
   const durableGoal = beginGoal({
-    graph: mode === 'smart' ? state.graph : null,
+    graph:
+      mode === 'smart' || (continuationHint && resumableIntentions.length) ? state.graph : null,
     sessionId,
     workspace: projectCwd,
     goal: goalTextMatch?.[1] || effectiveMessage,
@@ -232,6 +283,12 @@ async function runAgent(userMessage, opts = {}) {
       error: 'goal_already_running',
     };
   }
+  // "continúa" debe retomar una tarea activa con el mismo runtime de trabajo,
+  // aunque el detector de intención clasifique esa frase aislada como charla.
+  if (durableGoal?.resumed && !opts.mode) {
+    mode = 'smart';
+    maxIterations = 25;
+  }
 
   const context = await buildContext(sessionHistory, null, {
     mode: 'agent',
@@ -243,11 +300,26 @@ async function runAgent(userMessage, opts = {}) {
   }
 
   if (!context || !context.systemPrompt) {
+    const fallbackPlan = ensureFallbackGoalPlan(state.graph, durableGoal, effectiveMessage);
     const contextFailure = {
       response: null,
       iterations: 0,
       toolResults: [],
       error: 'No se pudo construir contexto',
+      plan: fallbackPlan
+        ? {
+            steps: fallbackPlan.steps,
+            criteria: fallbackPlan.criteria,
+            stepStates: fallbackPlan.steps.map((_, index) => ({
+              ordinal: index + 1,
+              status: 'pending',
+              evidence: [],
+            })),
+            done: 0,
+            total: fallbackPlan.steps.length,
+            coverageComplete: false,
+          }
+        : null,
     };
     try {
       settleGoal({
@@ -292,6 +364,12 @@ async function runAgent(userMessage, opts = {}) {
     // AgentLoop conserva el hook para usos directos (tests, SDK interno), pero
     // no debe invocarlo dos veces en la ruta normal de Core.runAgent.
     beforeAgentRunHandled: true,
+    // En una tarea real el plan es un contrato de ejecución, no una mejora
+    // opcional del prompt. AgentLoop conserva el opt-in antiguo para usos
+    // directos, pero Core exige plan y cierre con evidencia.
+    planning: opts.planning === undefined ? true : opts.planning,
+    requirePlan: mode === 'smart',
+    strictCompletion: mode === 'smart',
     permissionManager: state.permissionManager || null,
     contextWindowTokens:
       Number(opts.contextWindowTokens) || LLMProvider.getContextStatus?.(mode)?.maxContext || 0,
@@ -418,12 +496,44 @@ async function runAgent(userMessage, opts = {}) {
   const usageTracker = LLMProvider.getUsageTracker?.() || null;
   const usageBefore = usageTracker ? usageTracker.recent(0) : [];
 
-  const result = await loop.run(
-    effectiveMessage,
-    context.systemPrompt,
-    context.messages || [],
-    loopOpts
-  );
+  let result;
+  try {
+    result = await loop.run(
+      effectiveMessage,
+      context.systemPrompt,
+      context.messages || [],
+      loopOpts
+    );
+  } catch (e) {
+    logger.error('agent', '[core] excepción no controlada en AgentLoop:', e.message);
+    const fallbackPlan =
+      (loop._plan && {
+        steps: loop._plan.steps || [],
+        criteria: loop._plan.criteria || [],
+      }) ||
+      ensureFallbackGoalPlan(state.graph, durableGoal, effectiveMessage);
+    result = {
+      response:
+        'La ejecución se interrumpió por un evento extraordinario. No voy a afirmar que la tarea terminó; el objetivo queda activo para reanudarlo desde el plan pendiente.',
+      iterations: 0,
+      toolResults: [],
+      error: 'agent_exception',
+      plan: fallbackPlan
+        ? {
+            steps: fallbackPlan.steps,
+            criteria: fallbackPlan.criteria,
+            stepStates: fallbackPlan.steps.map((_, index) => ({
+              ordinal: index + 1,
+              status: 'pending',
+              evidence: [],
+            })),
+            done: 0,
+            total: fallbackPlan.steps.length,
+            coverageComplete: false,
+          }
+        : null,
+    };
+  }
 
   // Registrar la respuesta de Kaoru para evaluación (feedback loop)
   if (result.response && state.graph) {
@@ -450,8 +560,13 @@ async function runAgent(userMessage, opts = {}) {
   //    /revertir-tarea). Se adjunta metadata al resultado y un hint al texto.
   const cpMeta = checkpoint.metadata();
   if (cpMeta && cpMeta.canRevert) {
-    result.checkpoint = cpMeta;
-    if (typeof result.response === 'string' && result.response.trim() && !result.cancelled) {
+    result.checkpoint = result.rollback?.ok ? { ...cpMeta, rolledBack: true } : cpMeta;
+    if (
+      !result.rollback?.ok &&
+      typeof result.response === 'string' &&
+      result.response.trim() &&
+      !result.cancelled
+    ) {
       const hint = `\n\n[Checkpoint de la tarea creado (${cpMeta.files.length} archivo(s) tocados). Si querés deshacer SOLO los cambios de esta tarea, escribí: \`/revertir-tarea\`]`;
       result.response += hint;
     }
@@ -665,7 +780,7 @@ async function runAgent(userMessage, opts = {}) {
       verificationReason: evaluated.verificationReason,
       mutationCount: evaluated.mutationCount,
       successfulTools: evaluated.successfulTools,
-      rollbackAvailable: Boolean(result.checkpoint?.canRevert),
+      rollbackAvailable: Boolean(result.checkpoint?.canRevert && !result.checkpoint?.rolledBack),
       sessionId: sessionId || null,
       error: result.error || null,
       iterations: result.iterations,
@@ -728,6 +843,7 @@ async function runAgent(userMessage, opts = {}) {
     'agent',
     `[agent-timing] loop total ${Date.now() - _t0}ms (${result.iterations} iteraciones)`
   );
+  result.executionMode = mode;
   return result;
 }
 

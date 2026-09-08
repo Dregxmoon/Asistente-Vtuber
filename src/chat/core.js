@@ -260,19 +260,14 @@ function updateSandboxBanner() {
   }
 }
 
-// Modo de agente: 'agent' (tools + AgentLoop) o 'chat' (solo LLM). El modo
-// 'agent' requiere que openclaw esté disponible. Tab en el input alterna el
-// modo; el badge del header muestra el actual.
-let _agentMode = 'agent';
+// Flujo unificado: toda entrada usa Core.runAgent → AgentLoop. `fast`/`smart`
+// siguen existiendo como routing interno automático, no como dos productos
+// que el usuario deba alternar manualmente.
+const _agentMode = 'agent';
 const _agentModeListeners = new Set();
 
-function setAgentMode(mode) {
-  if (mode !== 'agent' && mode !== 'chat') mode = 'agent';
-  const next = mode === 'agent' && !openclawAvailable ? 'chat' : mode;
-  if (next === _agentMode) return;
-  _agentMode = next;
-  _agentModeListeners.forEach((fn) => fn(next));
-  return next;
+function setAgentMode() {
+  return _agentMode;
 }
 
 function getAgentMode() {
@@ -280,7 +275,7 @@ function getAgentMode() {
 }
 
 function toggleAgentMode() {
-  return setAgentMode(_agentMode === 'agent' ? 'chat' : 'agent');
+  return _agentMode;
 }
 
 function onAgentMode(fn) {

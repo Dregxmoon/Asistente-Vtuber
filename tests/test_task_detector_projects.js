@@ -11,6 +11,9 @@ const cases = [
   ['elimina el contenido del directorio', 'filesystem'],
   ['borra todo lo que hay en esta carpeta', 'filesystem'],
   ['borra todo lo que hay en la carpeta y crea una landing sencilla', 'code'],
+  ['ábreme youtube y busca un video de guitarra y reprodúcelo', 'web'],
+  ['abre firefox', 'system'],
+  ['ábreme steam', 'system'],
 ];
 
 let failed = 0;

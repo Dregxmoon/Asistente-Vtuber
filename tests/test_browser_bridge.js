@@ -32,6 +32,11 @@ function assert(condition, label, detail = '') {
 // ── Fake de playwright + page ──────────────────────────────────────────────────
 const fakePageState = {
   bodyText: 'Contenido del body de la página',
+  videoHref: '/watch?v=abc123_DEF',
+  playing: false,
+  filled: '',
+  pressed: '',
+  currentUrl: 'https://x.com/',
   results: [
     { title: 'Resultado Uno', url: 'https://ejemplo.com/1', snippet: 'snippet uno' },
     { title: 'Resultado Dos', url: 'https://ejemplo.com/2', snippet: 'snippet dos' },
@@ -41,11 +46,50 @@ const fakePageState = {
 const fakePage = {
   isClosed: () => false,
   goto: async () => {},
+  url: () => fakePageState.currentUrl,
+  goBack: async () => {},
+  goForward: async () => {},
+  keyboard: { press: async (key) => (fakePageState.pressed = key) },
+  setDefaultTimeout: () => {},
+  bringToFront: async () => {},
   title: async () => 'Título de prueba',
   click: async () => {},
   textContent: async (sel) => (sel === '#missing' ? null : 'Contenido del selector'),
   screenshot: async () => Buffer.alloc(64),
+  locator: (selector) => ({
+    first() {
+      return this;
+    },
+    waitFor: async () => {},
+    getAttribute: async () => fakePageState.videoHref,
+    textContent: async () => (selector === '#missing' ? null : 'Contenido del selector'),
+    fill: async (value) => (fakePageState.filled = value),
+    inputValue: async () => fakePageState.filled,
+    press: async (key) => (fakePageState.pressed = key),
+    click: async () => {
+      if (selector.includes('play-button')) fakePageState.playing = true;
+    },
+  }),
+  getByRole: () => ({
+    first() {
+      return this;
+    },
+    count: async () => 0,
+    click: async () => {},
+    fill: async (value) => (fakePageState.filled = value),
+    press: async (key) => (fakePageState.pressed = key),
+    waitFor: async () => {},
+    textContent: async () => 'Contenido semántico',
+  }),
+  getByLabel: () => fakePage.locator('#label'),
+  getByPlaceholder: () => fakePage.locator('#placeholder'),
+  getByText: () => fakePage.locator('#text'),
+  waitForFunction: async () => {
+    if (!fakePageState.playing) throw new Error('no reproduce');
+  },
   evaluate: async (fn, arg) => {
+    if (fn.toString().includes("querySelector('video')")) return fakePageState.playing;
+    if (fn.toString().includes('video-title')) return fakePageState.videoHref;
     // get_text sin selector: evaluate(fn) sin arg → body; web_search:
     // evaluate(fn, max_results) → resultados del DOM fake.
     if (arg === undefined) return fakePageState.bodyText;
@@ -58,7 +102,17 @@ const fakePage = {
 };
 
 const fakeBrowser = { newPage: async () => fakePage, close: async () => {} };
-const fakePlaywright = { chromium: { launch: async () => fakeBrowser } };
+const fakeManagedContext = {
+  pages: () => [fakePage],
+  newPage: async () => fakePage,
+  close: async () => {},
+};
+const fakePlaywright = {
+  chromium: {
+    launch: async () => fakeBrowser,
+    launchPersistentContext: async () => fakeManagedContext,
+  },
+};
 
 function installFakePlaywright() {
   const resolved = require.resolve('playwright');
@@ -86,34 +140,97 @@ async function testBrowserActions() {
     action: 'navigate',
     url: 'https://x.com',
   });
-  assert(nav.result.includes('Título de prueba'), 'navigate devuelve url + título', nav.result);
+  assert(nav.result.title === 'Título de prueba', 'navigate devuelve metadatos + título');
 
   await expectReject(
     () => BrowserBridge.executeBrowserAction({ action: 'navigate' }),
     'navigate sin url → Error'
   );
 
-  const click = await BrowserBridge.executeBrowserAction({ action: 'click', selector: '#boton' });
-  assert(click.result.includes('#boton'), 'click devuelve selector', click.result);
+  const click = await BrowserBridge.executeBrowserAction({
+    action: 'click',
+    selector: '#boton',
+    sessionId: nav.result.sessionId,
+    pageId: nav.result.pageId,
+    expectedOrigin: nav.result.origin,
+  });
+  assert(
+    click.result.executed && click.result.status === 'executed_unverified',
+    'click diferencia ejecución de intención verificada'
+  );
 
   await expectReject(
-    () => BrowserBridge.executeBrowserAction({ action: 'click' }),
+    () =>
+      BrowserBridge.executeBrowserAction({
+        action: 'click',
+        sessionId: nav.result.sessionId,
+        pageId: nav.result.pageId,
+        expectedOrigin: nav.result.origin,
+      }),
     'click sin selector → Error'
   );
 
-  const sel = await BrowserBridge.executeBrowserAction({ action: 'get_text', selector: '#titulo' });
-  assert(typeof sel.result === 'string' && sel.result.length > 0, 'get_text con selector');
+  const browserScope = {
+    sessionId: nav.result.sessionId,
+    pageId: nav.result.pageId,
+    expectedOrigin: nav.result.origin,
+  };
+  const sel = await BrowserBridge.executeBrowserAction({
+    action: 'get_text',
+    selector: '#titulo',
+    ...browserScope,
+  });
+  assert(
+    typeof sel.result.text === 'string' && sel.result.text.length > 0,
+    'get_text con selector'
+  );
 
   await expectReject(
-    () => BrowserBridge.executeBrowserAction({ action: 'get_text', selector: '#missing' }),
+    () =>
+      BrowserBridge.executeBrowserAction({
+        action: 'get_text',
+        selector: '#missing',
+        ...browserScope,
+      }),
     'get_text con elemento inexistente → Error'
   );
 
-  const body = await BrowserBridge.executeBrowserAction({ action: 'get_text' });
-  assert(typeof body.result === 'string', 'get_text sin selector → body');
+  const body = await BrowserBridge.executeBrowserAction({ action: 'get_text', ...browserScope });
+  assert(typeof body.result.text === 'string', 'get_text sin selector → body');
 
-  const shot = await BrowserBridge.executeBrowserAction({ action: 'screenshot' });
-  assert(shot.result.includes('64 bytes'), 'screenshot devuelve tamaño', shot.result);
+  const managed = await BrowserBridge.executeBrowserAction({ action: 'snapshot', mode: 'managed' });
+
+  await BrowserBridge.executeBrowserAction({
+    action: 'type',
+    role: 'textbox',
+    name: 'Buscar',
+    value: 'Yorushika',
+    mode: 'managed',
+    sessionId: managed.result.sessionId,
+    pageId: managed.result.pageId,
+    expectedOrigin: managed.result.origin,
+  });
+  assert(fakePageState.filled === 'Yorushika', 'type usa localizador semántico en modo visible');
+  await BrowserBridge.executeBrowserAction({
+    action: 'press',
+    key: 'Enter',
+    mode: 'managed',
+    sessionId: managed.result.sessionId,
+    pageId: managed.result.pageId,
+    expectedOrigin: managed.result.origin,
+  });
+  assert(fakePageState.pressed === 'Enter', 'press controla el teclado de la sesión visible');
+  const current = await BrowserBridge.executeBrowserAction({
+    action: 'get_url',
+    mode: 'managed',
+  });
+  assert(current.result.url === 'https://x.com/', 'get_url devuelve URL y contexto verificable');
+
+  const shot = await BrowserBridge.executeBrowserAction({ action: 'screenshot', ...browserScope });
+  assert(
+    shot.result.byteLength === 64 && shot.result.dataUrl.startsWith('data:image/jpeg;base64,'),
+    'screenshot devuelve imagen y metadatos'
+  );
 
   await expectReject(
     () => BrowserBridge.executeBrowserAction({ action: 'hack' }),
@@ -142,6 +259,58 @@ async function testWebSearch() {
   await expectReject(() => BrowserBridge.executeWebSearch({}), 'web_search sin query → Error');
 }
 
+async function testNetworkPolicy() {
+  console.log(C.bold('\n── política de red y contexto ────────────────────────────'));
+  let handler = null;
+  const context = {
+    route: async (_pattern, callback) => {
+      handler = callback;
+    },
+  };
+  BrowserBridge._setUrlGuardForTests(null);
+  await BrowserBridge._installNetworkPolicy(context);
+  let aborted = false;
+  let continued = false;
+  await handler({
+    request: () => ({ url: () => 'http://127.0.0.1/private' }),
+    continue: async () => {
+      continued = true;
+    },
+    abort: async () => {
+      aborted = true;
+    },
+  });
+  assert(aborted && !continued, 'bloquea solicitudes del contexto hacia loopback');
+  BrowserBridge._setUrlGuardForTests(async () => ({ safe: true }));
+}
+
+async function testYouTubeResolver() {
+  console.log(C.bold('\n── YouTube: resolver primer video ──────────────────────'));
+  const url = await BrowserBridge.findFirstYouTubeVideo('guitarra acústica');
+  assert(
+    url.startsWith('https://www.youtube.com/watch?v=abc123_DEF'),
+    'acepta solo /watch de YouTube'
+  );
+  assert(url.includes('autoplay=1'), 'solicita reproducción automática');
+  assert(
+    BrowserBridge._youtubeWatchUrl('https://evil.example/watch?v=abc123_DEF') === null,
+    'rechaza un host externo aunque imite /watch'
+  );
+  const ranked = BrowserBridge._rankYouTubeCandidates('Ado kira kira', [
+    { title: 'Kira Kira pop mix', href: '/watch?v=wrong12' },
+    { title: 'Ado - Kira Kira (Official Video)', href: '/watch?v=correct9' },
+  ]);
+  assert(
+    ranked?.includes('v=correct9'),
+    'elige el resultado que mejor cubre artista y canción, no solo el primero'
+  );
+  fakePageState.playing = false;
+  const playback = await BrowserBridge.playYouTubeMedia('guitarra acústica');
+  assert(playback.browser === 'kaoru-managed-chromium', 'usa un navegador visible controlable');
+  assert(playback.playing && playback.verified, 'verifica reproducción real tras pulsar play');
+  await expectReject(() => BrowserBridge.findFirstYouTubeVideo(''), 'rechaza consulta vacía');
+}
+
 async function testCloseBrowser() {
   console.log(C.bold('\n── closeBrowser: idempotente ───────────────────────────────────'));
   await BrowserBridge.closeBrowser();
@@ -151,8 +320,11 @@ async function testCloseBrowser() {
 
 async function main() {
   installFakePlaywright();
+  BrowserBridge._setUrlGuardForTests(async () => ({ safe: true }));
   await testBrowserActions();
+  await testNetworkPolicy();
   await testWebSearch();
+  await testYouTubeResolver();
   await testCloseBrowser();
 
   console.log(C.bold('\n════════════════════════════════════════════════════════'));

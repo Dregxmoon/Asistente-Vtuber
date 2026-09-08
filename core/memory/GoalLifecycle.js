@@ -69,7 +69,11 @@ function beginGoal({
     );
   const prior =
     active.find((item) => text(item?.goal) === normalizedGoal) ||
-    (continuation && active.length === 1 ? active[0] : null);
+    // listActiveIntentions es una pila (updated_at DESC, id DESC): una orden
+    // genérica retoma siempre el trabajo más reciente del workspace.
+    (continuation ? active[0] : null);
+  // Una orden genérica de "continúa" no debe crear una intención fantasma.
+  if (continuation && !prior) return null;
   let id = Number(prior?.id) || 0;
   if (!id) {
     id = Number(

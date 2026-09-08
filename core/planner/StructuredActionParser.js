@@ -51,8 +51,6 @@
 'use strict';
 const logger = require('../observability/Logger.js');
 
-const path = require('path');
-
 // V-05: Prototype pollution prevention — strip dangerous keys from LLM output
 const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 function _sanitizeLLMObject(obj) {
@@ -91,6 +89,25 @@ const ACTION_TO_TOOL = {
   websearch: 'websearch',
   webfetch: 'webfetch',
   fetch_web: 'webfetch',
+  list_apps: 'list_apps',
+  launch_app: 'launch_app',
+  open_website: 'open_website',
+  play_media: 'play_media',
+  desktop_snapshot: 'desktop_snapshot',
+  desktop_screenshot: 'desktop_screenshot',
+  pointer_click: 'pointer_click',
+  window_list: 'window_list',
+  window_focus: 'window_focus',
+  ui_click: 'ui_click',
+  ui_type: 'ui_type',
+  ui_press: 'ui_press',
+  ui_select: 'ui_select',
+  window_close: 'window_close',
+  desktop_capabilities: 'desktop_capabilities',
+  process_list: 'process_list',
+  process_stop: 'process_stop',
+  camera_status: 'camera_status',
+  open_camera: 'open_camera',
   navigate_browser: 'browser',
   browser_action: 'browser',
   apply_patch: 'apply_patch',
@@ -137,6 +154,39 @@ function _buildDescription(action, fields) {
       return `Buscar en la web (ligero): "${f.QUERY || ''}"`;
     case 'webfetch':
       return `Leer URL: ${f.URL || '(sin URL)'}`;
+    case 'list_apps':
+      return `Listar aplicaciones${f.QUERY ? `: ${f.QUERY}` : ''}`;
+    case 'launch_app':
+      return `Abrir aplicación: ${f.APLICACIÓN || f.APLICACION || f.APP || f.NOMBRE || '?'}`;
+    case 'open_website':
+      return `Abrir sitio: ${f.SITIO || f.URL || '?'}`;
+    case 'play_media':
+      return `Reproducir en ${f.SERVICIO || 'YouTube'}: ${f.QUERY || '?'}`;
+    case 'desktop_snapshot':
+      return `Observar escritorio: ${f.APLICACIÓN || f.APLICACION || f.APP || 'todas las ventanas'}`;
+    case 'desktop_screenshot':
+      return `Capturar escritorio: ${f.VENTANA || f.NOMBRE || 'pantalla principal'}`;
+    case 'pointer_click':
+      return `Clic visual: ${f.X || '?'} x ${f.Y || '?'}`;
+    case 'window_list':
+      return `Listar ventanas: ${f.APLICACIÓN || f.APLICACION || f.APP || 'todas'}`;
+    case 'window_focus':
+    case 'ui_click':
+    case 'ui_type':
+    case 'ui_press':
+    case 'ui_select':
+    case 'window_close':
+      return `${action}: ${f.REF || '(sin referencia)'}`;
+    case 'desktop_capabilities':
+      return 'Consultar capacidades de escritorio';
+    case 'process_list':
+      return `Listar procesos${f.QUERY ? `: ${f.QUERY}` : ''}`;
+    case 'process_stop':
+      return `Terminar proceso PID ${f.PID || '?'}`;
+    case 'camera_status':
+      return 'Consultar estado de cámara';
+    case 'open_camera':
+      return 'Abrir aplicación de cámara';
     case 'navigate_browser':
       return `Navegar a: ${f.URL || '(sin URL)'}`;
     case 'browser_action':
@@ -465,11 +515,86 @@ function _buildParams(action, fields, userGoal, projectCwd) {
     case 'webfetch':
       return { url: fields.URL };
 
+    case 'list_apps':
+      return { query: fields.QUERY || fields.APLICACIÓN || fields.APLICACION || '' };
+
+    case 'launch_app':
+      return { app: fields.APLICACIÓN || fields.APLICACION || fields.APP || fields.NOMBRE };
+
+    case 'open_website':
+      return {
+        target: fields.SITIO || fields.URL,
+        browser: fields.NAVEGADOR || fields.BROWSER,
+        control: fields.CONTROL || 'external',
+      };
+
+    case 'play_media':
+      return {
+        query: fields.QUERY,
+        service: fields.SERVICIO || fields.SERVICE || 'youtube',
+        control: fields.CONTROL || 'managed',
+        browser: fields.NAVEGADOR || fields.BROWSER,
+      };
+
+    case 'desktop_snapshot':
+    case 'window_list':
+      return {
+        application: fields.APLICACIÓN || fields.APLICACION || fields.APP || fields.VENTANA,
+        maxDepth: fields.PROFUNDIDAD ? Number(fields.PROFUNDIDAD) : undefined,
+        maxNodes: fields.LIMITE ? Number(fields.LIMITE) : undefined,
+      };
+
+    case 'desktop_screenshot':
+      return {
+        sourceId: fields.SOURCE_ID,
+        sourceName: fields.VENTANA || fields.NOMBRE,
+        width: fields.ANCHO ? Number(fields.ANCHO) : undefined,
+        height: fields.ALTO ? Number(fields.ALTO) : undefined,
+      };
+
+    case 'pointer_click':
+      return {
+        captureId: fields.CAPTURA || fields.CAPTURE_ID,
+        x: Number(fields.X),
+        y: Number(fields.Y),
+      };
+
+    case 'window_focus':
+    case 'ui_click':
+    case 'ui_type':
+    case 'ui_press':
+    case 'ui_select':
+    case 'window_close':
+      return {
+        observationId: fields.OBSERVACION || fields.OBSERVATION_ID,
+        ref: fields.REF,
+        value: fields.VALOR || fields.VALUE,
+        key: fields.TECLA || fields.KEY,
+      };
+
+    case 'process_list':
+      return { query: fields.QUERY, limit: fields.LIMITE ? Number(fields.LIMITE) : undefined };
+
+    case 'process_stop':
+      return { pid: Number(fields.PID) };
+
+    case 'desktop_capabilities':
+    case 'camera_status':
+    case 'open_camera':
+      return {};
+
     case 'navigate_browser':
     case 'browser_action':
       return {
         action: fields.ACCION?.toLowerCase() || fields.ACTION?.toLowerCase() || 'navigate',
         url: fields.URL,
+        mode: fields.MODO?.toLowerCase() || fields.MODE?.toLowerCase() || 'background',
+        selector: fields.SELECTOR,
+        role: fields.ROL || fields.ROLE,
+        name: fields.NOMBRE || fields.NAME,
+        text: fields.TEXTO || fields.TEXT,
+        value: fields.VALOR || fields.VALUE,
+        key: fields.TECLA || fields.KEY,
       };
 
     case 'apply_patch':
@@ -744,6 +869,27 @@ class StructuredActionParser {
 
     if (action === 'webfetch' && !fields.URL) {
       logger.warn('StructuredActionParser', '[structured-parser] webfetch sin campo URL');
+      return null;
+    }
+
+    if (
+      action === 'launch_app' &&
+      !fields.APLICACIÓN &&
+      !fields.APLICACION &&
+      !fields.APP &&
+      !fields.NOMBRE
+    ) {
+      logger.warn('StructuredActionParser', '[structured-parser] launch_app sin APLICACIÓN');
+      return null;
+    }
+
+    if (action === 'open_website' && !fields.SITIO && !fields.URL) {
+      logger.warn('StructuredActionParser', '[structured-parser] open_website sin SITIO o URL');
+      return null;
+    }
+
+    if (action === 'play_media' && !fields.QUERY) {
+      logger.warn('StructuredActionParser', '[structured-parser] play_media sin QUERY');
       return null;
     }
 

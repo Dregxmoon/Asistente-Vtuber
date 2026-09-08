@@ -1147,7 +1147,13 @@ async function callOpenAI(providerId, messages, systemPrompt, mode = 'fast', opt
   const maxTokens = Number(opts?.maxTokens) > 0 ? Number(opts.maxTokens) : MAX_OUTPUT[safeMode];
   const timeoutMs = def.timeoutMs?.[safeMode] ?? TIMEOUT_MS[safeMode] ?? TIMEOUT_MS.fast;
   const history = _trimHistoryForMode(messages, safeMode);
-  const msgs = [{ role: 'system', content: systemPrompt }, ...history];
+  const msgs = [
+    { role: 'system', content: systemPrompt },
+    ...history.map((message) => ({
+      ...message,
+      content: _providerMessageContent(message.content, 'openai'),
+    })),
+  ];
   const startedAt = Date.now();
 
   logger.info(
@@ -1204,7 +1210,7 @@ async function callGeminiProvider(providerId, messages, systemPrompt, mode = 'fa
   const history = _trimHistoryForMode(messages, safeMode);
   const contents = history.map((m) => ({
     role: m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: m.content }],
+    parts: _providerMessageContent(m.content, 'gemini'),
   }));
   const startedAt = Date.now();
 
@@ -1291,6 +1297,40 @@ function _parseGeminiSSE(raw, onToken) {
   return { text: out, toolCalls, usageMetadata };
 }
 
+function _providerMessageContent(content, providerType) {
+  if (!Array.isArray(content)) {
+    return providerType === 'gemini' ? [{ text: String(content || '') }] : content;
+  }
+  if (providerType === 'openai') return content;
+  const blocks = [];
+  for (const block of content) {
+    if (block?.type === 'text') {
+      blocks.push({ text: String(block.text || '') });
+      continue;
+    }
+    const dataUrl = block?.image_url?.url;
+    const match =
+      typeof dataUrl === 'string'
+        ? dataUrl.match(/^data:(image\/(?:jpeg|png));base64,([A-Za-z0-9+/=]+)$/)
+        : null;
+    if (!match || match[2].length > 3_000_000) continue;
+    if (providerType === 'anthropic') {
+      blocks.push({
+        type: 'image',
+        source: { type: 'base64', media_type: match[1], data: match[2] },
+      });
+    } else if (providerType === 'gemini') {
+      blocks.push({ inline_data: { mime_type: match[1], data: match[2] } });
+    }
+  }
+  if (providerType === 'anthropic') {
+    return blocks.map((block) =>
+      block.text !== undefined ? { type: 'text', text: block.text } : block
+    );
+  }
+  return blocks.length ? blocks : [{ text: '[Imagen no disponible]' }];
+}
+
 // ── Generic Anthropic caller ──────────────────────────────────────────────────
 async function callAnthropic(providerId, messages, systemPrompt, mode = 'fast', opts = {}) {
   const def = _registry.get(providerId);
@@ -1307,7 +1347,7 @@ async function callAnthropic(providerId, messages, systemPrompt, mode = 'fast', 
 
   const msgs = history.map((m) => ({
     role: m.role === 'assistant' ? 'assistant' : 'user',
-    content: m.content,
+    content: _providerMessageContent(m.content, 'anthropic'),
   }));
 
   logger.info(
@@ -1381,7 +1421,7 @@ async function callAnthropicWithTools(providerId, messages, systemPrompt, mode, 
 
   const msgs = history.map((m) => ({
     role: m.role === 'assistant' ? 'assistant' : 'user',
-    content: m.content,
+    content: _providerMessageContent(m.content, 'anthropic'),
   }));
   const startedAt = Date.now();
 
@@ -1583,7 +1623,13 @@ async function callOpenAIWithTools(providerId, messages, systemPrompt, mode, too
   const maxTokens = MAX_OUTPUT[safeMode];
   const timeoutMs = def.timeoutMs?.[safeMode] ?? TIMEOUT_MS[safeMode] ?? TIMEOUT_MS.fast;
   const history = _trimHistoryForMode(messages, safeMode);
-  const msgs = [{ role: 'system', content: systemPrompt }, ...history];
+  const msgs = [
+    { role: 'system', content: systemPrompt },
+    ...history.map((message) => ({
+      ...message,
+      content: _providerMessageContent(message.content, 'openai'),
+    })),
+  ];
   const startedAt = Date.now();
 
   const body = {
@@ -1659,7 +1705,7 @@ async function callGeminiWithTools(providerId, messages, systemPrompt, mode, too
   const history = _trimHistoryForMode(messages, safeMode);
   const contents = history.map((m) => ({
     role: m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: m.content }],
+    parts: _providerMessageContent(m.content, 'gemini'),
   }));
   const startedAt = Date.now();
 
@@ -2525,6 +2571,7 @@ module.exports = {
   _debug_buildOpenAITools: _buildOpenAITools,
   _debug_buildGeminiTools: _buildGeminiTools,
   _debug_buildAnthropicTools: _buildAnthropicTools,
+  _debug_providerMessageContent: _providerMessageContent,
   _debug_getToolCaller: _getToolCaller,
   _debug_callAnthropicWithTools: callAnthropicWithTools,
   _debug_postStream: postStream,

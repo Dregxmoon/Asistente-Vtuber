@@ -2,6 +2,42 @@
 // Live2D
 let _modelResizeFrame = 0;
 let _modelResizeObserver = null;
+let _avatarPresenceTimer = 0;
+let _avatarOverflowTimer = 0;
+
+/**
+ * Hace que el avatar invada ligeramente el área del chat sin mover el layout.
+ * Las clases solo transforman la capa visual; PIXI conserva su canvas y sus
+ * coordenadas internas.
+ */
+function animateAvatarPresence(mode = 'peek') {
+  const container = document.getElementById('model-canvas-container');
+  const panel = document.getElementById('model-panel');
+  if (!container) return;
+  const allowed = new Set(['peek', 'working', 'react', 'celebrate']);
+  const next = allowed.has(mode) ? mode : 'peek';
+  clearTimeout(_avatarPresenceTimer);
+  clearTimeout(_avatarOverflowTimer);
+  container.classList.remove('avatar-peek', 'avatar-working', 'avatar-react', 'avatar-celebrate');
+  container.classList.remove('avatar-protruding');
+  if (panel) panel.classList.remove('avatar-overflow-active');
+  // Reinicia la animación aunque el mismo estado ocurra dos veces seguidas.
+  void container.offsetWidth;
+  container.classList.add(`avatar-${next}`);
+  if (panel) panel.classList.add('avatar-overflow-active');
+  container.classList.add('avatar-protruding');
+  _avatarPresenceTimer = setTimeout(
+    () => {
+      container.classList.remove(`avatar-${next}`);
+      container.classList.remove('avatar-protruding');
+      _avatarOverflowTimer = setTimeout(() => {
+        if (panel) panel.classList.remove('avatar-overflow-active');
+      }, 340);
+    },
+    next === 'working' ? 1500 : 1050
+  );
+}
+window.animateAvatarPresence = animateAvatarPresence;
 
 async function loadModel() {
   await loadLLMConfig();
@@ -81,7 +117,6 @@ async function loadModel() {
     setTimeout(triggerMotion, 600);
     clearInterval(_motionTimer);
     _motionTimer = setInterval(triggerMotion, 8000);
-    startAutonomousView();
     _observeModelContainer(container);
   } catch (e) {
     console.error('model error:', e);
@@ -115,7 +150,7 @@ async function reloadModel() {
   await loadModel();
 }
 
-function applyView(view, animate = false) {
+function applyView(view) {
   if (!model || !pixiApp) {
     currentView = view;
     return;
@@ -135,34 +170,10 @@ function applyView(view, animate = false) {
   const ay = B.y / ch;
   const tx = W / 2,
     ty = H - S * cfg.f;
-  if (!animate) {
-    model.scale.set(ts);
-    model.anchor.set(cx, ay);
-    model.position.set(tx, ty);
-    currentView = view;
-    return;
-  }
-  const dur = 700,
-    start = performance.now();
-  const fs2 = model.scale.x,
-    fx = model.x,
-    fy = model.y;
-  const fax = model.anchor.x,
-    fay = model.anchor.y;
-  const ease = (t) => (t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t);
-  const tick = (n) => {
-    const t = Math.min((n - start) / dur, 1),
-      e = ease(t);
-    model.scale.set(fs2 + (ts - fs2) * e);
-    model.anchor.set(fax + (cx - fax) * e, fay + (ay - fay) * e);
-    model.position.set(fx + (tx - fx) * e, fy + (ty - fy) * e);
-    if (t < 1) requestAnimationFrame(tick);
-    else {
-      currentView = view;
-      triggerMotion();
-    }
-  };
-  requestAnimationFrame(tick);
+  model.scale.set(ts);
+  model.anchor.set(cx, ay);
+  model.position.set(tx, ty);
+  currentView = view;
 }
 
 function triggerMotion() {
@@ -170,35 +181,8 @@ function triggerMotion() {
     const defs = model?.internalModel?.motionManager?.definitions;
     if (!defs || !Array.isArray(defs.Idle) || !defs.Idle.length) return;
     model.motion('Idle', Math.floor(Math.random() * defs.Idle.length));
+    if (Math.random() < 0.35) animateAvatarPresence('peek');
   } catch (_) {}
-}
-
-function pickNextView() {
-  const names = Object.keys(VIEW);
-  const total = names.reduce((s, v) => s + VIEW_PERSONALITY.weights[v], 0);
-  let r = Math.random() * total;
-  for (const v of names) {
-    r -= VIEW_PERSONALITY.weights[v];
-    if (r <= 0) return v;
-  }
-  return names[names.length - 1];
-}
-function startAutonomousView() {
-  if (viewMode !== 'random') return;
-  const schedule = () => {
-    const d = VIEW_PERSONALITY.duration[currentView];
-    const wait = (d.min + Math.random() * (d.max - d.min)) * 1000;
-    setTimeout(() => {
-      if (viewMode !== 'random') {
-        schedule();
-        return;
-      }
-      const next = pickNextView();
-      if (next && model && next !== currentView) applyView(next, true);
-      schedule();
-    }, wait);
-  };
-  setTimeout(schedule, 12000 + Math.random() * 8000);
 }
 
 function _resizeModelToContainer(container) {

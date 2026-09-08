@@ -49,7 +49,7 @@ function testToolHandlerCoverage() {
   // browser y web_search se resuelven con BrowserBridge (en proceso), no HTTP
   const BROWSER_TOOLS = new Set(['browser', 'web_search']);
   // subagent se resuelve en proceso con un AgentLoop anidado, no HTTP
-  const INPROCESS_TOOLS = new Set(['subagent']);
+  const INPROCESS_TOOLS = new Set(['subagent', 'subagent_batch']);
 
   for (const schema of schemas) {
     if (BROWSER_TOOLS.has(schema.name)) {
@@ -63,7 +63,7 @@ function testToolHandlerCoverage() {
     }
   }
 
-  assertEqual(schemas.length, 13, '13 herramientas OpenClaw en ToolRegistry');
+  assertEqual(schemas.length, 14, '14 herramientas OpenClaw en ToolRegistry');
   assertEqual(serverHandlers.size, 10, '10 handlers en openclaw-server');
 }
 
@@ -411,6 +411,8 @@ async function testToolResolverCatalog() {
 
   const { resolveToolset } = require('../core/task/ToolResolver.js');
   const registry = getToolRegistry();
+  registry.setOpenClawBridge({ getStats: () => ({ available: true }) });
+  registry.setLSPManager({ isRunning: true });
 
   const result = await resolveToolset({
     toolRegistry: registry,
@@ -426,6 +428,7 @@ async function testToolResolverCatalog() {
   // en el catálogo (Git/GitHub nativas son parte del toolset desde §10).
   const allToolNames = [
     ...registry._getOpenClawTools().map((t) => t.name),
+    ...registry._getDesktopTools().map((t) => t.name),
     ...registry._getLSPTools().map((t) => t.name),
     ...registry._getGitTools().map((t) => t.name),
     ...registry._getGitHubTools().map((t) => t.name),

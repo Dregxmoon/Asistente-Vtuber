@@ -149,17 +149,240 @@ const TOOL_SCHEMAS = [
     name: 'browser',
     domain: ['web'],
     source: 'openclaw',
-    description: 'Navega a una URL y obtiene el contenido de la página',
+    description:
+      'Controla una sesión web visible o en segundo plano mediante navegación, localizadores semánticos, clic, escritura, teclas y verificación',
     params: [
       {
         name: 'action',
         type: 'string',
-        description: 'Acción (navigate, click, read)',
+        description:
+          'navigate, click, type, press, wait_for, get_text, get_url, back, forward, screenshot, snapshot, tabs, new_tab, select_tab, close_tab, select, check, uncheck, hover, scroll, upload, download o dialog',
         default: 'navigate',
       },
-      { name: 'url', type: 'string', description: 'URL a navegar', required: true },
+      { name: 'mode', type: 'string', description: 'background o managed' },
+      { name: 'url', type: 'string', description: 'URL para navegar' },
+      { name: 'selector', type: 'string', description: 'Selector CSS opcional' },
+      { name: 'role', type: 'string', description: 'Rol accesible del elemento' },
+      { name: 'name', type: 'string', description: 'Nombre accesible del elemento' },
+      { name: 'text', type: 'string', description: 'Texto visible del elemento' },
+      { name: 'label', type: 'string', description: 'Etiqueta accesible del elemento' },
+      { name: 'placeholder', type: 'string', description: 'Placeholder visible del campo' },
+      { name: 'value', type: 'string', description: 'Texto que se escribirá' },
+      { name: 'key', type: 'string', description: 'Tecla que se enviará' },
+      { name: 'timeout', type: 'number', description: 'Espera máxima en milisegundos' },
+      { name: 'sessionId', type: 'string', description: 'ID de sesión observado' },
+      { name: 'pageId', type: 'string', description: 'ID de pestaña observado' },
+      { name: 'expectedOrigin', type: 'string', description: 'Origen esperado antes de mutar' },
+      { name: 'option', type: 'string', description: 'Opción para select' },
+      { name: 'expectedUrl', type: 'string', description: 'URL esperada después del click' },
+      { name: 'direction', type: 'string', description: 'Dirección para scroll' },
+      { name: 'path', type: 'string', description: 'Archivo/destino dentro del workspace' },
+      { name: 'dialogAction', type: 'string', description: 'accept o dismiss' },
     ],
     examples: [{ cmd: 'navegar a github.com', desc: 'Abrir página web' }],
+    highImpact: true,
+  },
+  {
+    id: 'desktop.list_apps',
+    name: 'list_apps',
+    domain: ['desktop', 'system'],
+    source: 'desktop',
+    description:
+      'Lista aplicaciones visibles instaladas para encontrar su nombre exacto. Requiere aprobación por privacidad',
+    params: [{ name: 'query', type: 'string', description: 'Filtro opcional por nombre' }],
+    highImpact: true,
+  },
+  {
+    id: 'desktop.launch_app',
+    name: 'launch_app',
+    domain: ['desktop', 'system'],
+    source: 'desktop',
+    description:
+      'Abre una aplicación instalada en el escritorio visible. Requiere aprobación del usuario',
+    params: [
+      {
+        name: 'app',
+        type: 'string',
+        description: 'Nombre exacto o alias de la aplicación',
+        required: true,
+      },
+    ],
+    highImpact: true,
+  },
+  {
+    id: 'desktop.open_website',
+    name: 'open_website',
+    domain: ['desktop', 'web'],
+    source: 'desktop',
+    description:
+      'Abre un sitio HTTPS en el navegador visible del usuario. Admite aliases como drive, youtube o whatsapp',
+    params: [
+      {
+        name: 'target',
+        type: 'string',
+        description: 'Alias del sitio o URL https completa',
+        required: true,
+      },
+      { name: 'browser', type: 'string', description: 'Navegador opcional permitido' },
+      {
+        name: 'control',
+        type: 'string',
+        description: 'external (predeterminado, sesión personal) o managed (aislado y verificable)',
+      },
+    ],
+    highImpact: true,
+  },
+  {
+    id: 'desktop.play_media',
+    name: 'play_media',
+    domain: ['desktop', 'web', 'multimedia'],
+    source: 'desktop',
+    description:
+      'Busca un video en YouTube dentro del navegador visible administrado por Kaoru, pulsa reproducir y verifica el estado real',
+    params: [
+      {
+        name: 'query',
+        type: 'string',
+        description: 'Video o tema que se debe buscar',
+        required: true,
+      },
+      { name: 'service', type: 'string', description: 'Servicio permitido: youtube' },
+      {
+        name: 'control',
+        type: 'string',
+        description: 'managed (control verificable) o external (solo apertura)',
+      },
+      {
+        name: 'browser',
+        type: 'string',
+        description: 'Navegador permitido, solo para control external',
+      },
+    ],
+    highImpact: true,
+  },
+  {
+    id: 'desktop.snapshot',
+    name: 'desktop_snapshot',
+    domain: ['desktop', 'system'],
+    source: 'desktop',
+    description:
+      'Observa el árbol accesible del escritorio en Linux o Windows y devuelve referencias efímeras',
+    params: [
+      { name: 'application', type: 'string', description: 'Filtro por aplicación o ventana' },
+      { name: 'maxDepth', type: 'number', description: 'Profundidad máxima' },
+      { name: 'maxNodes', type: 'number', description: 'Máximo de elementos' },
+    ],
+    highImpact: true,
+  },
+  {
+    id: 'desktop.screenshot',
+    name: 'desktop_screenshot',
+    domain: ['desktop', 'system'],
+    source: 'desktop',
+    description: 'Captura una pantalla o ventana para interfaces sin árbol accesible',
+    params: [
+      { name: 'sourceId', type: 'string', description: 'ID exacto de la fuente' },
+      { name: 'sourceName', type: 'string', description: 'Nombre parcial de ventana' },
+      { name: 'width', type: 'number', description: 'Ancho máximo' },
+      { name: 'height', type: 'number', description: 'Alto máximo' },
+    ],
+    highImpact: true,
+  },
+  {
+    id: 'desktop.pointer_click',
+    name: 'pointer_click',
+    domain: ['desktop', 'system'],
+    source: 'desktop',
+    description: 'Clic visual ligado a una captura vigente; solo para controles sin accesibilidad',
+    params: [
+      { name: 'captureId', type: 'string', description: 'ID de captura', required: true },
+      { name: 'x', type: 'number', description: 'Coordenada X en la captura', required: true },
+      { name: 'y', type: 'number', description: 'Coordenada Y en la captura', required: true },
+    ],
+    highImpact: true,
+  },
+  {
+    id: 'desktop.window_list',
+    name: 'window_list',
+    domain: ['desktop', 'system'],
+    source: 'desktop',
+    description: 'Lista ventanas visibles mediante la API accesible nativa',
+    params: [{ name: 'application', type: 'string', description: 'Filtro opcional' }],
+    highImpact: true,
+  },
+  ...[
+    ['window_focus', 'Enfoca una ventana o control observado'],
+    ['ui_click', 'Invoca un botón o control observado'],
+    ['ui_type', 'Escribe en un campo observado'],
+    ['ui_press', 'Envía una tecla a un control observado'],
+    ['ui_select', 'Selecciona una opción observada'],
+    ['window_close', 'Cierra una ventana observada'],
+  ].map(([name, description]) => ({
+    id: `desktop.${name}`,
+    name,
+    domain: ['desktop', 'system'],
+    source: 'desktop',
+    description: `${description}; exige observationId/ref y admite una postcondición expected`,
+    params: [
+      {
+        name: 'observationId',
+        type: 'string',
+        description: 'ID de la última observación',
+        required: true,
+      },
+      { name: 'ref', type: 'string', description: 'Referencia ui-N observada', required: true },
+      { name: 'value', type: 'string', description: 'Texto para ui_type' },
+      { name: 'key', type: 'string', description: 'Tecla para ui_press' },
+      { name: 'expected', type: 'object', description: 'Postcondición observable' },
+    ],
+    highImpact: true,
+  })),
+  {
+    id: 'desktop.capabilities',
+    name: 'desktop_capabilities',
+    domain: ['desktop', 'system'],
+    source: 'desktop',
+    description: 'Informa capacidades disponibles sin ejecutar acciones',
+    params: [],
+    highImpact: true,
+  },
+  {
+    id: 'desktop.process_list',
+    name: 'process_list',
+    domain: ['desktop', 'system'],
+    source: 'desktop',
+    description: 'Lista PID y nombre de procesos sin argumentos ni entorno',
+    params: [
+      { name: 'query', type: 'string', description: 'Filtro opcional por nombre' },
+      { name: 'limit', type: 'number', description: 'Máximo de resultados' },
+    ],
+    highImpact: true,
+  },
+  {
+    id: 'desktop.process_stop',
+    name: 'process_stop',
+    domain: ['desktop', 'system'],
+    source: 'desktop',
+    description: 'Solicita terminar un PID previamente identificado',
+    params: [{ name: 'pid', type: 'number', description: 'PID exacto', required: true }],
+    highImpact: true,
+  },
+  {
+    id: 'desktop.camera_status',
+    name: 'camera_status',
+    domain: ['desktop', 'system'],
+    source: 'desktop',
+    description: 'Consulta permiso de cámara sin capturar video',
+    params: [],
+    highImpact: true,
+  },
+  {
+    id: 'desktop.open_camera',
+    name: 'open_camera',
+    domain: ['desktop', 'system'],
+    source: 'desktop',
+    description: 'Abre una aplicación de cámara conocida sin capturar video',
+    params: [],
     highImpact: true,
   },
   {
@@ -926,6 +1149,13 @@ class ToolRegistry {
       }));
   }
 
+  _getDesktopTools() {
+    return TOOL_SCHEMAS.filter((s) => s.source === 'desktop').map((s) => ({
+      ...s,
+      available: true,
+    }));
+  }
+
   _getLSPTools() {
     const lspAvailable = this._lspManager?.isRunning || false;
     return TOOL_SCHEMAS.filter((s) => s.source === 'lsp').map((s) => ({
@@ -977,12 +1207,13 @@ class ToolRegistry {
 
   getCatalog(domain = null) {
     const openclaw = this._getOpenClawTools();
+    const desktop = this._getDesktopTools();
     const lsp = this._getLSPTools();
     const git = this._getGitTools();
     const github = this._getGitHubTools();
     const mcp = this._getMCPTools();
     const plugin = this._getPluginTools();
-    let all = [...openclaw, ...lsp, ...git, ...github, ...mcp, ...plugin];
+    let all = [...openclaw, ...desktop, ...lsp, ...git, ...github, ...mcp, ...plugin];
 
     if (domain && domain.id) {
       all = all.filter((t) => t.domain.includes(domain.id));
@@ -992,11 +1223,13 @@ class ToolRegistry {
       tools: all,
       total: all.length,
       openclawAvailable: openclaw.some((t) => t.available),
+      desktopAvailable: desktop.some((t) => t.available),
       lspAvailable: lsp.some((t) => t.available),
       mcpAvailable: mcp.length > 0,
       pluginAvailable: plugin.length > 0,
       bySource: {
         openclaw: openclaw.length,
+        desktop: desktop.length,
         lsp: lsp.length,
         git: git.length,
         github: github.length,
@@ -1012,6 +1245,7 @@ class ToolRegistry {
 
   getToolById(id) {
     const all = this._getOpenClawTools()
+      .concat(this._getDesktopTools())
       .concat(this._getLSPTools())
       .concat(this._getGitTools())
       .concat(this._getGitHubTools())
@@ -1036,6 +1270,7 @@ class ToolRegistry {
     lines.push('');
 
     const openclawTools = catalog.tools.filter((t) => t.source === 'openclaw');
+    const desktopTools = catalog.tools.filter((t) => t.source === 'desktop');
     const lspTools = catalog.tools.filter((t) => t.source === 'lsp');
     const gitTools = catalog.tools.filter((t) => t.source === 'git');
     const githubTools = catalog.tools.filter((t) => t.source === 'github');
@@ -1048,6 +1283,16 @@ class ToolRegistry {
         let line = `  - ${t.name}`;
         if (t.description) line += `: ${t.description}`;
         if (!catalog.openclawAvailable) line += ' (servicio no disponible)';
+        lines.push(line);
+      }
+      lines.push('');
+    }
+
+    if (desktopTools.length > 0) {
+      lines.push('## Control visible del escritorio');
+      for (const t of desktopTools) {
+        let line = `  - ${t.name}`;
+        if (t.description) line += `: ${t.description}`;
         lines.push(line);
       }
       lines.push('');
@@ -1067,6 +1312,7 @@ class ToolRegistry {
     if (mcpTools.length > 0) {
       const usedByOthers =
         openclawTools.length +
+        desktopTools.length +
         lspTools.length +
         gitTools.length +
         githubTools.length +

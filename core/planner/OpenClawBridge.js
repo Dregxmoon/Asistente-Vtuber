@@ -38,6 +38,8 @@ const logger = require('../observability/Logger.js');
 
 const http = require('http');
 const BrowserBridge = require('./BrowserBridge.js');
+const { getDesktopControl, SITE_ALIASES, _normalize } = require('../desktop/DesktopControl.js');
+const { getDesktopAutomation } = require('../desktop/DesktopAutomation.js');
 
 // G.1: puerto del servidor de control configurable (OPENCLAW_PORT). El bridge
 // lo lee en cada uso para que funcione con el server en puertos alternos
@@ -70,6 +72,89 @@ function _getApiKey() {
 // Herramientas que se resuelven con el navegador propio del asistente,
 // no con el servidor HTTP de OpenClaw/mock.
 const BROWSER_TOOLS = new Set(['browser', 'web_search']);
+const DESKTOP_TOOLS = new Set([
+  'list_apps',
+  'launch_app',
+  'open_website',
+  'play_media',
+  'desktop_snapshot',
+  'desktop_screenshot',
+  'pointer_click',
+  'window_list',
+  'window_focus',
+  'ui_click',
+  'ui_type',
+  'ui_press',
+  'ui_select',
+  'window_close',
+  'desktop_capabilities',
+  'process_list',
+  'process_stop',
+  'camera_status',
+  'open_camera',
+]);
+
+const DESKTOP_ACTIONS = {
+  window_focus: 'focus',
+  ui_click: 'click',
+  ui_type: 'type',
+  ui_press: 'press',
+  ui_select: 'select',
+  window_close: 'close',
+};
+
+function _safeLogParams(tool, params) {
+  const safe = { ...params };
+  if (Object.prototype.hasOwnProperty.call(safe, 'value')) {
+    safe.valueLength = String(safe.value ?? '').length;
+    delete safe.value;
+  }
+  if (tool === 'play_media' || tool === 'web_search') {
+    safe.queryLength = String(safe.query ?? '').length;
+    delete safe.query;
+  }
+  for (const field of ['url', 'target']) {
+    if (typeof safe[field] !== 'string') continue;
+    try {
+      const parsed = new URL(safe[field]);
+      parsed.search = '';
+      parsed.hash = '';
+      safe[field] = parsed.href;
+    } catch (_) {}
+  }
+  return safe;
+}
+
+function _safeBrowserLogResult(result) {
+  if (!result || typeof result !== 'object') return result;
+  const { dataUrl: _discarded, ...safe } = result;
+  for (const field of ['url', 'previousUrl']) {
+    if (typeof safe[field] !== 'string') continue;
+    try {
+      const parsed = new URL(safe[field]);
+      parsed.search = '';
+      parsed.hash = '';
+      safe[field] = parsed.href;
+    } catch (_) {}
+  }
+  if (Array.isArray(safe.tabs)) {
+    safe.tabs = safe.tabs.map((tab) => _safeBrowserLogResult(tab));
+  }
+  return safe;
+}
+
+function _failureClass(error) {
+  const text = String(error || '').toLowerCase();
+  if (/captcha|verificaci[oó]n humana/.test(text)) return 'human_challenge';
+  if (/obsolet|expir|cambi[oó] o ya no existe/.test(text)) return 'stale_observation';
+  if (/timeout|agot[oó]/.test(text)) return 'timeout';
+  if (/aprobaci[oó]n|permiso|deneg/.test(text)) return 'permission';
+  if (/aplicaci[oó]n no encontrada|ejecutable no encontrado/.test(text)) return 'app_not_found';
+  if (/selector|elemento|localizador|control/.test(text)) return 'target_not_found';
+  if (/at-spi|ui automation|backend|runtime electron/.test(text)) return 'backend_unavailable';
+  if (/url bloqueada|destino no seguro|protocolo/.test(text)) return 'network_policy';
+  return 'execution_error';
+}
 
 // ── Tipos de herramientas y sus schemas (para las que sí van por HTTP) ────────
 
@@ -215,13 +300,17 @@ function getJSON(url, timeoutMs = 5000) {
 // ── OpenClawBridge ────────────────────────────────────────────────────────────
 
 class OpenClawBridge {
-  constructor() {
+  constructor(options = {}) {
     this._available = null;
     this._lastPing = 0;
     this._pingInterval = 60_000;
     this._actionLog = [];
     this._maxLog = 200;
     this._sandbox = null;
+    this._desktopControl = options.desktopControl || getDesktopControl();
+    this._desktopAutomation = options.desktopAutomation || getDesktopAutomation();
+    this._mediaResolver = options.mediaResolver || BrowserBridge.findFirstYouTubeVideo;
+    this._mediaPlayer = options.mediaPlayer || BrowserBridge.playYouTubeMedia;
   }
 
   // ── Disponibilidad ──────────────────────────────────────────────────────────
@@ -282,6 +371,133 @@ class OpenClawBridge {
   async execute(tool, params = {}, opts = {}) {
     const t0 = Date.now();
 
+    // Estas tools controlan el escritorio visible local y no dependen del
+    // proceso HTTP de OpenClaw. La aprobación ocurre antes, en AgentLoop.
+    if (DESKTOP_TOOLS.has(tool)) {
+      try {
+        let desktopResult;
+        if (tool === 'desktop_snapshot') {
+          desktopResult = await this._desktopAutomation.snapshot(params);
+        } else if (tool === 'desktop_screenshot') {
+          desktopResult = await this._desktopAutomation.screenshot(params);
+        } else if (tool === 'pointer_click') {
+          desktopResult = await this._desktopAutomation.pointerClick(params);
+        } else if (tool === 'window_list') {
+          desktopResult = await this._desktopAutomation.listWindows(params);
+        } else if (DESKTOP_ACTIONS[tool]) {
+          desktopResult = await this._desktopAutomation.execute(DESKTOP_ACTIONS[tool], params);
+        } else if (tool === 'open_website' && params.control === 'managed' && !params.browser) {
+          const rawTarget = String(params.target || '').trim();
+          const candidate = SITE_ALIASES[_normalize(rawTarget)] || rawTarget;
+          let parsed;
+          try {
+            parsed = new URL(candidate);
+          } catch (_) {
+            throw new Error('Usa un sitio conocido o una URL HTTPS completa');
+          }
+          if (parsed.protocol !== 'https:' || parsed.username || parsed.password) {
+            throw new Error('El navegador administrado solo admite URLs HTTPS sin credenciales');
+          }
+          const navigated = await BrowserBridge.executeBrowserAction({
+            action: 'navigate',
+            mode: 'managed',
+            url: parsed.href,
+          });
+          desktopResult = {
+            kind: 'website',
+            browser: 'kaoru-managed-chromium',
+            ...navigated.result,
+          };
+        } else if (tool === 'play_media') {
+          const service = String(params.service || 'youtube')
+            .trim()
+            .toLowerCase();
+          const query = String(params.query || '').trim();
+          if (service !== 'youtube')
+            throw new Error(`Servicio multimedia no permitido: ${service}`);
+          if (!query || query.length > 200)
+            throw new Error('play_media requiere una consulta válida');
+          if ([...query].some((character) => character.charCodeAt(0) < 32)) {
+            throw new Error('La consulta multimedia contiene caracteres no permitidos');
+          }
+          const control = String(params.control || 'managed').toLowerCase();
+          if (!['managed', 'external'].includes(control)) {
+            throw new Error(`Modo de control multimedia no permitido: ${control}`);
+          }
+          const playback =
+            control === 'managed'
+              ? await this._mediaPlayer(query)
+              : {
+                  kind: 'media',
+                  service,
+                  query,
+                  url: await this._mediaResolver(query),
+                  browser: params.browser || 'default',
+                  playing: false,
+                  verified: false,
+                };
+          const mediaUrl = new URL(playback.url);
+          if (
+            mediaUrl.protocol !== 'https:' ||
+            mediaUrl.hostname !== 'www.youtube.com' ||
+            mediaUrl.pathname !== '/watch' ||
+            !/^[A-Za-z0-9_-]{6,20}$/.test(mediaUrl.searchParams.get('v') || '')
+          ) {
+            throw new Error('El resolver multimedia devolvió un destino no permitido');
+          }
+          mediaUrl.searchParams.set('autoplay', '1');
+          if (control === 'external') {
+            const opened = await this._desktopControl.execute('open_website', {
+              target: mediaUrl.href,
+              browser: params.browser,
+            });
+            desktopResult = {
+              ...playback,
+              url: mediaUrl.href,
+              openedUrl: opened.url,
+              browser: opened.browser,
+              autoplayRequested: true,
+              requiresUserAction: true,
+            };
+          } else {
+            if (!playback.playing || !playback.verified) {
+              throw new Error(
+                'El navegador administrado quedó abierto, pero no pudo verificar la reproducción'
+              );
+            }
+            desktopResult = { ...playback, url: mediaUrl.href, autoplayRequested: true };
+          }
+        } else {
+          desktopResult = await this._desktopControl.execute(tool, params);
+          if (tool === 'launch_app' && desktopResult?.kind === 'application' && desktopResult.app) {
+            const windowEvidence = await this._desktopAutomation.waitForWindow({
+              application: desktopResult.app,
+              timeout: 8000,
+            });
+            desktopResult = {
+              ...desktopResult,
+              verified: windowEvidence.verified,
+              status: windowEvidence.verified ? 'completed' : 'spawned_unverified',
+              windowEvidence,
+            };
+          }
+        }
+        const elapsed = Date.now() - t0;
+        let logResult =
+          tool === 'desktop_snapshot' || tool === 'desktop_screenshot' || tool === 'window_list'
+            ? { kind: desktopResult.kind, nodeCount: desktopResult.nodes?.length || 0 }
+            : desktopResult;
+        if (tool === 'play_media' && logResult && typeof logResult === 'object') {
+          const { query: _privateQuery, ...safeMediaResult } = logResult;
+          logResult = safeMediaResult;
+        }
+        this._log({ tool, ok: true, result: logResult, elapsed });
+        return { ok: true, result: desktopResult, error: null, tool, elapsed };
+      } catch (error) {
+        return this._err(tool, error instanceof Error ? error.message : String(error), t0);
+      }
+    }
+
     // ── browser / web_search → BrowserBridge (Playwright real) ───────────────
     if (BROWSER_TOOLS.has(tool)) {
       try {
@@ -296,7 +512,13 @@ class OpenClawBridge {
             : await BrowserBridge.executeBrowserAction(params);
 
         const elapsed = Date.now() - t0;
-        this._log({ tool, params, ok: true, result: browserResult.result, elapsed });
+        this._log({
+          tool,
+          params: _safeLogParams(tool, params),
+          ok: true,
+          result: _safeBrowserLogResult(browserResult.result),
+          elapsed,
+        });
         logger.info(
           'OpenClawBridge',
           `[openclaw] ${tool} completado en ${elapsed}ms (BrowserBridge)`
@@ -350,8 +572,16 @@ class OpenClawBridge {
 
     if (res.status !== 200) {
       const errMsg = res.body?.error || res.body?.message || `HTTP ${res.status}`;
-      this._log({ tool, params, ok: false, error: errMsg, elapsed });
-      return { ok: false, result: null, error: errMsg, tool, elapsed };
+      const failureClass = _failureClass(errMsg);
+      this._log({
+        tool,
+        params: _safeLogParams(tool, params),
+        ok: false,
+        error: errMsg,
+        failureClass,
+        elapsed,
+      });
+      return { ok: false, result: null, error: errMsg, failureClass, tool, elapsed };
     }
 
     const result = res.body?.result ?? res.body;
@@ -376,7 +606,7 @@ class OpenClawBridge {
         }
       : null;
 
-    this._log({ tool, params, ok: true, result, elapsed });
+    this._log({ tool, params: _safeLogParams(tool, params), ok: true, result, elapsed });
     logger.info('OpenClawBridge', `[openclaw] ${tool} completado en ${elapsed}ms`);
 
     return { ok: true, result, meta, error: null, tool, elapsed };
@@ -420,9 +650,10 @@ class OpenClawBridge {
 
   _err(tool, error, t0) {
     const elapsed = Date.now() - t0;
-    this._log({ tool, ok: false, error, elapsed });
+    const failureClass = _failureClass(error);
+    this._log({ tool, ok: false, error, failureClass, elapsed });
     logger.warn('OpenClawBridge', `[openclaw] error en ${tool}: ${error}`);
-    return { ok: false, result: null, error, tool, elapsed };
+    return { ok: false, result: null, error, failureClass, tool, elapsed };
   }
 
   getActionLog(n = 20) {
@@ -434,7 +665,19 @@ class OpenClawBridge {
     const ok = this._actionLog.filter((e) => e.ok).length;
     const failed = total - ok;
     const tools = [...new Set(this._actionLog.map((e) => e.tool))];
-    return { total, ok, failed, tools, available: this._available };
+    const failures = {};
+    const byTool = {};
+    for (const entry of this._actionLog) {
+      const toolStats = byTool[entry.tool] || { total: 0, ok: 0, failed: 0, successRate: 0 };
+      toolStats.total++;
+      if (entry.ok) toolStats.ok++;
+      else toolStats.failed++;
+      toolStats.successRate = toolStats.total ? toolStats.ok / toolStats.total : 0;
+      byTool[entry.tool] = toolStats;
+      if (!entry.failureClass) continue;
+      failures[entry.failureClass] = (failures[entry.failureClass] || 0) + 1;
+    }
+    return { total, ok, failed, tools, failures, byTool, available: this._available };
   }
 }
 
@@ -444,4 +687,4 @@ function getOpenClawBridge() {
   return _instance;
 }
 
-module.exports = { OpenClawBridge, getOpenClawBridge, setApiKey };
+module.exports = { OpenClawBridge, getOpenClawBridge, setApiKey, _failureClass };

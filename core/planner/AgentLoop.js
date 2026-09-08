@@ -27,6 +27,11 @@ const {
 } = require('./subagent-report.js');
 const { getSubagentRegistry, _toolAllowed } = require('./SubagentRegistry.js');
 const { buildStepProgress } = require('./StepExecutionLedger.js');
+const { wrapUntrusted } = require('../grounding/untrustedContent.js');
+const {
+  capabilityForTool,
+  capabilityPermissionTool,
+} = require('../desktop/DesktopCapabilities.js');
 const {
   MutationJournal,
   isMutatingAction,
@@ -210,12 +215,100 @@ const MUTATION_TARGET_RE =
   /\b(archivo|carpeta|directorio|c[oó]digo|proyecto|sitio|p[aá]gina|landing|web|aplicaci[oó]n|app|interfaz|componente|funci[oó]n|configuraci[oó]n|file|folder|directory|code|project|site|page|application|component|function|config)\b/i;
 const EXPLANATION_REQUEST_RE =
   /^\s*(c[oó]mo|how\s+to|explica|expl[ií]came|ens[eé][ñn]ame|dime\s+c[oó]mo|qu[eé]\s+har[ií]as|what\s+would)\b/i;
+const OBSERVABLE_TASK_RE =
+  /\b(ejecuta|ejecutar|corre|correr|abre|abrir|ábreme|lanza|inicia|reproduce|reproducir|pon|poner|prueba|probar|verifica|verificar|analiza|analizar|investiga|investigar|revisa|revisar|busca|buscar|implementa|implementar|fix|run|open|play|test|verify|analy[sz]e|investigate|review)\b/i;
+const INTERACTIVE_ACTION_RE =
+  /(?:^|\s)(?:abre|abrir|ábreme|lanza|inicia|reproduce|reproducir|pon|poner|haz\s+clic|pulsa|presiona|escribe|selecciona|cierra|open|launch|play|click|press|type|select|close)(?=\s|$|[.,;:!?])/i;
+const UI_TOOLS = new Set([
+  'browser',
+  'list_apps',
+  'launch_app',
+  'open_website',
+  'play_media',
+  'desktop_snapshot',
+  'desktop_screenshot',
+  'pointer_click',
+  'window_list',
+  'window_focus',
+  'ui_click',
+  'ui_type',
+  'ui_press',
+  'ui_select',
+  'window_close',
+  'desktop_capabilities',
+  'process_list',
+  'process_stop',
+  'camera_status',
+  'open_camera',
+]);
+const UNTRUSTED_UI_TOOLS = new Set([
+  'desktop_snapshot',
+  'desktop_screenshot',
+  'window_list',
+  'window_focus',
+  'ui_click',
+  'ui_type',
+  'ui_press',
+  'ui_select',
+  'window_close',
+  'process_list',
+]);
+
+function _isVerifiedInteractiveResult(result) {
+  if (!result?.ok) return false;
+  if (result.tool === 'play_media') return result.result?.verified === true;
+  if (result.tool === 'launch_app' || result.tool === 'open_website') {
+    return result.result?.verified === true;
+  }
+  if (result.tool === 'browser') {
+    return result.result?.verified === true || result.result?.intentVerified === true;
+  }
+  if (UI_TOOLS.has(result.tool)) {
+    return result.result?.intentVerified === true;
+  }
+  return true;
+}
 
 /** La petición exige un cambio observable, no sólo una explicación. */
 function _expectsMutation(userMessage) {
   const text = String(userMessage || '').trim();
   if (!text || EXPLANATION_REQUEST_RE.test(text)) return false;
   return MUTATION_ACTION_RE.test(text) && MUTATION_TARGET_RE.test(text);
+}
+
+/** La petición exige al menos una herramienta o evidencia externa observable. */
+function _expectsObservableExecution(userMessage) {
+  const text = String(userMessage || '').trim();
+  if (!text || EXPLANATION_REQUEST_RE.test(text)) return false;
+  return OBSERVABLE_TASK_RE.test(text);
+}
+
+/** Contrato terminal uniforme para Core, IPC y consumidores internos. */
+function _buildExecutionSummary(result, plan) {
+  const cancelled = result?.cancelled === true;
+  const failed = Boolean(result?.error) || result?.verify?.status === 'failed';
+  const state = cancelled ? 'cancelled' : failed ? 'paused' : 'completed';
+  const stepStates = Array.isArray(result?.plan?.stepStates) ? result.plan.stepStates : [];
+  const pending = stepStates.find(
+    (step) => !['completed', 'skipped'].includes(String(step?.status || 'pending'))
+  );
+  const ordinal = Number(pending?.ordinal) || null;
+  return {
+    state,
+    resumable: state === 'paused' || state === 'cancelled',
+    reason: result?.error ? String(result.error) : cancelled ? 'cancelled' : null,
+    resumePoint:
+      ordinal && Array.isArray(plan?.steps)
+        ? { ordinal, description: String(plan.steps[ordinal - 1] || '') }
+        : null,
+    evidence: {
+      successfulTools: (result?.toolResults || []).filter((item) => item?.ok).length,
+      successfulMutations: (result?.toolResults || []).filter(_isSuccessfulMutation).length,
+      planDone: Number(result?.plan?.done) || 0,
+      planTotal: Number(result?.plan?.total) || 0,
+      verification: result?.verify?.status ? String(result.verify.status) : null,
+    },
+  };
 }
 
 /** Reconoce mutaciones exitosas aunque hayan pasado por MCP o exec. */
@@ -541,6 +634,31 @@ ACCIÓN: web_search | QUERY: cómo instalar node
 \`\`\`
 
 \`\`\`action
+ACCIÓN: launch_app | APLICACIÓN: firefox
+\`\`\`
+
+\`\`\`action
+ACCIÓN: open_website | SITIO: youtube | NAVEGADOR: firefox
+\`\`\`
+
+Para una petición compuesta de buscar y reproducir, usa una sola acción:
+\`\`\`action
+ACCIÓN: play_media | SERVICIO: youtube | QUERY: video de guitarra | CONTROL: managed
+\`\`\`
+
+Para controlar una aplicación nativa en Linux o Windows, primero usa
+\`desktop_snapshot\` (o \`window_list\`). Solo después usa la referencia \`ui-N\`
+y el \`observationId\` devueltos con window_focus/ui_click/ui_type/ui_press/
+ui_select/window_close. Declara una postcondición \`expected\` siempre que sea
+posible. Las referencias expiran y nunca debes inventarlas ni reutilizarlas
+después de que cambie la interfaz.
+
+Para controlar una web, primero usa \`browser\` con action=snapshot o tabs.
+Las acciones que cambian la página deben repetir sessionId, pageId y
+expectedOrigin exactamente como fueron observados. Después de cada acción,
+observa otra vez antes de decidir la siguiente.
+
+\`\`\`action
 ACCIÓN: mcp_call | SERVIDOR: filesystem | HERRAMIENTA: list_directory | PARAMS: {"path": "."}
 \`\`\`
 
@@ -714,6 +832,9 @@ class AgentLoop {
   async run(userMessage, systemPrompt, messages, opts = {}) {
     const checkpoint = this._checkpoint || new WorkspaceCheckpoint({ cwd: AP.PROJECT_CWD });
     this._activeCheckpoint = checkpoint;
+    // Debe existir antes de hooks y de _runInternal: el finally emite métricas
+    // incluso si una excepción ocurre antes de entrar al bucle.
+    this._metrics = new RunMetrics();
     const t0 = Date.now();
     let result;
     try {
@@ -727,11 +848,14 @@ class AgentLoop {
       // Ledger por paso: una tool exitosa deja evidencia, pero solo completa
       // el paso si esa evidencia es compatible o el verificador la confirma.
       if (this._plan && result) {
-        result.plan = buildStepProgress(
-          this._plan,
-          Array.isArray(result.toolResults) ? result.toolResults : [],
-          result.verify || null
-        );
+        result.plan = {
+          ...buildStepProgress(
+            this._plan,
+            Array.isArray(result.toolResults) ? result.toolResults : [],
+            result.verify || null
+          ),
+          fallback: this._plan.fallback === true,
+        };
         // Publica el ledger final después de aplicar la verificación. El último
         // evento emitido dentro del bucle puede preceder a esa verificación y
         // dejar el HUD visualmente incompleto aunque la tarea ya haya acabado.
@@ -741,6 +865,80 @@ class AgentLoop {
           } catch (_) {}
         }
       }
+      if (result && this._steeringApplied > 0) {
+        result.steering = { applied: this._steeringApplied };
+      }
+      // La ruta de producción exige una terminación demostrable: una respuesta
+      // textual no puede cerrar una tarea si el ledger todavía tiene pasos o si
+      // la verificación falló. Los tests/consumidores de AgentLoop pueden
+      // conservar el contrato laxo omitiendo strictCompletion.
+      if (opts.strictCompletion === true && result && !result.cancelled) {
+        const expectedMutation = _expectsMutation(userMessage);
+        const expectedObservableExecution = _expectsObservableExecution(userMessage);
+        const successfulMutation = (result.toolResults || []).some(_isSuccessfulMutation);
+        const successfulTool = (result.toolResults || []).some((item) => item?.ok);
+        // Un plan parcialmente atribuido no basta por sí solo para declarar
+        // fallo: un único verify global puede cubrir varias acciones. Sí es
+        // fallo cuando la intención exigía mutar y no existe ninguna mutación
+        // observable, que es el caso típico de la simulación textual.
+        const incompletePlan =
+          (expectedMutation && !successfulMutation) ||
+          (expectedObservableExecution && !successfulTool);
+        const failedVerification = result.verify?.status === 'failed';
+        if (!result.error && (incompletePlan || failedVerification)) {
+          const done = Number(result.plan?.done) || 0;
+          const total = Number(result.plan?.total) || 0;
+          const reason = failedVerification
+            ? 'la verificación del proyecto falló'
+            : `el plan quedó incompleto (${done}/${total} pasos)`;
+          result.error = failedVerification ? 'verification_failed' : 'plan_incomplete';
+          result.response =
+            `${String(result.response || '').trim()}\n\n[Estado de ejecución: INCOMPLETA — ${reason}. La tarea permanece activa y se reanudará desde el siguiente paso verificable.]`.trim();
+        }
+      }
+      if (
+        opts.strictCompletion === true &&
+        result &&
+        this._plan &&
+        (result.error || result.cancelled) &&
+        !String(result.response || '').includes('se reanudará desde el siguiente paso')
+      ) {
+        const done = Number(result.plan?.done) || 0;
+        const total = Number(result.plan?.total) || this._plan.steps.length;
+        result.response =
+          `${String(result.response || '').trim()}\n\n[Estado de ejecución: PAUSADA — ${done}/${total} pasos con evidencia. La tarea permanece activa y debe reanudarse desde el paso pendiente; no se simuló su finalización.]`.trim();
+      }
+      // Rollback transaccional opt-in. Solo se ejecuta si el usuario/config lo
+      // habilitó, la verificación falló y el checkpoint afirma que es
+      // reversible. La política no la decide el LLM.
+      if (
+        result?.verify?.status === 'failed' &&
+        opts.rollbackOnVerificationFailure === true &&
+        checkpoint
+      ) {
+        try {
+          await checkpoint.finalize();
+          const metadata = checkpoint.metadata();
+          if (metadata?.canRevert) {
+            const rollback = await checkpoint.revert(false);
+            result.rollback = { attempted: true, ...rollback };
+            if (rollback.ok) {
+              result.response =
+                `${String(result.response || '').trim()}\n\n[Rollback automático aplicado: los cambios de esta ejecución se revirtieron porque la verificación falló.]`.trim();
+            }
+          } else {
+            result.rollback = {
+              attempted: false,
+              ok: false,
+              reason: metadata?.reason || 'checkpoint_not_reversible',
+            };
+          }
+        } catch (e) {
+          result.rollback = { attempted: true, ok: false, error: String(e.message || e) };
+          logger.warn('AgentLoop', `[rollback] no se pudo revertir el run: ${e.message}`);
+        }
+      }
+      if (result) result.execution = _buildExecutionSummary(result, this._plan);
       if (opts.pluginManager?.runHook) {
         await opts.pluginManager.runHook('afterAgentRun', {
           result,
@@ -793,10 +991,10 @@ class AgentLoop {
     const onToken = typeof opts.onToken === 'function' ? opts.onToken : null;
     const signal = opts.signal || null;
     this._signal = signal;
+    this._steeringApplied = 0;
     // Instrumentación por-run: acumuladores que se emiten al terminar (ver
     // _emitRunMetrics en run()). Por-instancia: los subagentes son otro
     // AgentLoop, así sus métricas no contaminan las del run padre.
-    this._metrics = new RunMetrics();
     // Progreso de subagentes: si el padre lo suscribe, cada run anidado reporta
     // sus fases vía opts.onSubagentProgress (el padre lo re-emite con el nombre
     // del perfil).
@@ -954,12 +1152,10 @@ class AgentLoop {
     });
 
     // ── Fase de plan explícito (mejora de calidad) ─────────────────────────
-    // Para tareas complejas (smart + dificultad alta) se genera un plan de
-    // pasos ANTES de arrancar el bucle y se inyecta al prompt DESPUÉS del
-    // truncado (así nunca se corta). El loop ejecuta anclado a ese plan, la
-    // reflexión compara contra él, y el resultado expone el progreso. Si el
-    // modelo no entrega pasos parseables o la llamada falla, el run sigue sin
-    // plan: nunca bloquea la tarea.
+    // Toda tarea smart de la ruta de producción recibe un plan ANTES de
+    // arrancar el bucle. Si el modelo no entrega pasos parseables o la llamada
+    // falla, se usa un plan local conservador para no simular ejecución ni
+    // perder el punto de reanudación.
     const storedGoalPlan = Array.isArray(opts.currentGoalPlan) ? opts.currentGoalPlan : [];
     this._plan = storedGoalPlan.length
       ? {
@@ -993,13 +1189,27 @@ class AgentLoop {
     }
     if (this._plan) {
       agentPrompt += '\n\n' + this._plan.text;
+      if (typeof opts.onPlan === 'function') {
+        try {
+          const done = this._plan.stepStates.filter((step) => step.status === 'completed').length;
+          opts.onPlan({
+            kind: 'resumed',
+            goalId: this._currentGoalId,
+            steps: this._plan.steps,
+            criteria: this._plan.criteria,
+            stepStates: this._plan.stepStates,
+            done,
+            total: this._plan.steps.length,
+          });
+        } catch (_) {}
+      }
       logger.info(
         'AgentLoop',
         `[agent-loop] retomando plan persistente de ${this._plan.steps.length} pasos`
       );
     } else if (this._shouldPlan(userMessage, taskIntent, opts)) {
       try {
-        const plan = await this._buildPlan({
+        let plan = await this._buildPlan({
           userMessage,
           taskIntent,
           toolCatalog,
@@ -1008,6 +1218,10 @@ class AgentLoop {
           signal,
           repositorySnapshot,
         });
+        if (!plan) {
+          plan = this._buildFallbackPlan({ userMessage, taskIntent });
+          logger.warn('AgentLoop', '[agent-loop] proveedor sin plan válido; usando plan local');
+        }
         if (plan && plan.steps && plan.steps.length) {
           this._plan = plan;
           agentPrompt = agentPrompt + '\n\n' + plan.text;
@@ -1035,6 +1249,7 @@ class AgentLoop {
                 criteria: plan.criteria,
                 done: 0,
                 total: plan.steps.length,
+                fallback: plan.fallback === true,
               });
             } catch (_) {
               logger.debug('AgentLoop', 'emitión de progress falló');
@@ -1043,9 +1258,30 @@ class AgentLoop {
         }
       } catch (e) {
         if (e?.code === 'ABORTED' || e?.name === 'AbortError') {
+          this._plan = this._buildFallbackPlan({ userMessage, taskIntent });
+          if (opts.currentGoalId && this._graph?.createGoalPlan) {
+            this._graph.createGoalPlan(
+              Number(opts.currentGoalId),
+              this._plan.steps.map((description, index) => ({
+                description,
+                successCriteria: this._plan.criteria[index] ? [this._plan.criteria[index]] : [],
+              }))
+            );
+          }
           return this._makeAbortResponse(0, []);
         }
         logger.warn('AgentLoop', `[agent-loop] planificación falló: ${e.message}`);
+        this._plan = this._buildFallbackPlan({ userMessage, taskIntent });
+        agentPrompt += '\n\n' + this._plan.text;
+        if (opts.currentGoalId && this._graph?.createGoalPlan) {
+          this._graph.createGoalPlan(
+            Number(opts.currentGoalId),
+            this._plan.steps.map((description, index) => ({
+              description,
+              successCriteria: this._plan.criteria[index] ? [this._plan.criteria[index]] : [],
+            }))
+          );
+        }
       }
     }
     tools = _withPlanStepSchemas(tools, this._plan);
@@ -1072,6 +1308,7 @@ class AgentLoop {
     // después de sólo leer/listar o de una tool fallida. Es independiente de
     // selfCritique para que también proteja el modo fast.
     let mutationFollowThroughRounds = 0;
+    let observableFollowThroughRounds = 0;
     // Verificación de artefactos (web + sintaxis universal): rondas de
     // corrección cuando archivos mutados fallan validación al cierre.
     let webVerifyRounds = 0;
@@ -1118,6 +1355,42 @@ class AgentLoop {
           cancelled: true,
           error: 'cancelled',
         };
+      }
+      // Steering en caliente: las correcciones del usuario se consumen SOLO
+      // entre iteraciones, nunca en mitad de una tool. No conceden permisos ni
+      // reemplazan el plan durable; se agregan como restricciones/prioridades
+      // para la siguiente decisión del modelo.
+      if (typeof opts.consumeSteering === 'function') {
+        let steeringUpdates = [];
+        try {
+          const consumed = opts.consumeSteering();
+          steeringUpdates = Array.isArray(consumed) ? consumed : [];
+        } catch (e) {
+          logger.warn('AgentLoop', `[steering] no se pudo consumir la cola: ${e.message}`);
+        }
+        for (const update of steeringUpdates.slice(0, 20)) {
+          const text = String(update?.text || update || '')
+            .trim()
+            .slice(0, 4000);
+          if (!text) continue;
+          iterationHistory.push({
+            role: 'user',
+            content:
+              `[ACTUALIZACIÓN DEL USUARIO DURANTE LA EJECUCIÓN]\n${text}\n\n` +
+              'Integra esta prioridad o restricción en el plan activo. No la interpretes como aprobación de herramientas ni como permiso para omitir verificaciones.',
+          });
+          this._steeringApplied++;
+          if (typeof opts.onProgress === 'function') {
+            try {
+              opts.onProgress({
+                iteration: i + 1,
+                phase: 'steering',
+                status: 'applied',
+                count: this._steeringApplied,
+              });
+            } catch (_) {}
+          }
+        }
       }
       const _itStart = Date.now();
       const currentUserMsg = i === 0 ? userMessage : this._buildToolResultMessage(lastToolResult);
@@ -1241,9 +1514,25 @@ class AgentLoop {
         });
       }
 
+      // Las interfaces cambian después de cada acción. Ejecutar varias tools UI
+      // decididas sobre la misma captura usa estado obsoleto y produce clics
+      // incorrectos. El loop conserva una sola acción UI por iteración para que
+      // el modelo observe su resultado antes de decidir la siguiente.
+      const firstUiAction = actions.find((action) => UI_TOOLS.has(action.tool));
+      if (firstUiAction) actions = [firstUiAction];
+
       if (actions.length === 0) {
         const mutationExpected = !opts.reportMode && _expectsMutation(userMessage);
+        const observableExpected = !opts.reportMode && INTERACTIVE_ACTION_RE.test(userMessage);
         const mutationObserved = toolResults.some(_isSuccessfulMutation);
+        const mediaPlaybackExpected =
+          observableExpected && /\b(youtube|video|m[uú]sica|canci[oó]n)\b/i.test(userMessage);
+        const observableExecutionObserved = mediaPlaybackExpected
+          ? toolResults.some(
+              (result) =>
+                result?.ok && result?.tool === 'play_media' && result?.result?.verified === true
+            )
+          : toolResults.some(_isVerifiedInteractiveResult);
         const permissionStopped = toolResults.some(
           (result) =>
             !result?.ok &&
@@ -1267,6 +1556,27 @@ class AgentLoop {
           logger.warn(
             'AgentLoop',
             `[agent-loop] cambio solicitado sin mutación exitosa — replanteo ${mutationFollowThroughRounds}/${MUTATION_FOLLOW_THROUGH_MAX_ROUNDS}`
+          );
+          continue;
+        }
+        if (
+          observableExpected &&
+          !observableExecutionObserved &&
+          !permissionStopped &&
+          observableFollowThroughRounds < MUTATION_FOLLOW_THROUGH_MAX_ROUNDS &&
+          i + 1 < this.maxIterations
+        ) {
+          observableFollowThroughRounds++;
+          iterationHistory.push({
+            role: 'user',
+            content:
+              '[EJECUCIÓN PENDIENTE] La petición original exige una acción observable, pero todavía no ejecutaste ninguna herramienta correctamente. ' +
+              'No respondas con conversación genérica ni pidas repetir la solicitud: selecciona la herramienta adecuada del catálogo y ejecútala. ' +
+              'Para buscar y reproducir un video de YouTube usa play_media con control managed en una sola llamada. Abrir la portada o los resultados no completa la reproducción.',
+          });
+          logger.warn(
+            'AgentLoop',
+            `[agent-loop] acción observable sin tool exitosa — replanteo ${observableFollowThroughRounds}/${MUTATION_FOLLOW_THROUGH_MAX_ROUNDS}`
           );
           continue;
         }
@@ -1514,6 +1824,14 @@ class AgentLoop {
           continue;
         }
         if (permissionManager && typeof permissionManager.check === 'function') {
+          const desktopCapability = capabilityForTool(action.tool);
+          const capabilityPermission = desktopCapability
+            ? permissionManager.check({
+                tool: capabilityPermissionTool(desktopCapability),
+                path: '',
+                defaultAction: 'ask',
+              })
+            : null;
           const targetPath =
             action.params?.path || action.params?.filePath || action.params?.cwd || '';
           const permissionPath = targetPath
@@ -1525,6 +1843,10 @@ class AgentLoop {
             defaultAction: requiresApproval ? 'ask' : 'allow',
           });
           permissionAction = perm.action;
+          // El interruptor de capacidad es un kill-switch externo al LLM. Un
+          // `deny` de familia siempre gana; `ask`/`allow` no eliminan la
+          // aprobación específica de la herramienta.
+          if (capabilityPermission?.rule?.action === 'deny') permissionAction = 'deny';
           if (process.env.DEBUG && perm.rule) {
             logger.info(
               'AgentLoop',
@@ -3109,18 +3431,19 @@ class AgentLoop {
   /**
    * Plan explícito — ¿esta tarea merece planificar antes de actuar?
    * Fase de calidad: opencode/claude-code generan un plan antes de tocar nada
-   * para anclar el contexto y reducir la deriva. Se aplica solo a tareas
-   * complejas (modo smart + dificultad alta), nunca a charla rápida ni a
-   * subagentes (su run ya lo orquesta el padre).
+   * para anclar el contexto y reducir la deriva. La ruta Core marca
+   * `requirePlan` para todas las tareas smart; los usos directos conservan el
+   * umbral de dificultad anterior.
    * @param {string} userMessage
    * @param {{ domain?: string|null }|null} taskIntent
    * @param {object} opts
    * @returns {boolean}
    */
   _shouldPlan(userMessage, taskIntent, opts = {}) {
-    if (opts.planning !== true) return false;
     if (this._mode !== 'smart') return false;
     if (opts.reportMode) return false;
+    if (opts.requirePlan === true) return true;
+    if (opts.planning !== true) return false;
     const resumed = (opts.activeIntentions || []).find(
       (intention) => Number(intention.id) === Number(opts.currentGoalId)
     );
@@ -3136,8 +3459,8 @@ class AgentLoop {
   /**
    * Genera el plan de ejecución con UNA llamada LLM estructurada (no
    * streamiea al chat: es control interno, igual que reflexión/auto-crítica).
-   * Devuelve null si el modelo no entrega pasos parseables — el run sigue sin
-   * plan, nunca se bloquea por esto.
+   * Devuelve null si el modelo no entrega pasos parseables; el caller instala
+   * entonces el plan local de respaldo y deja la tarea reanudable.
    * @param {object} p
    * @param {string} p.userMessage
    * @param {{ domain?: string|null }|null} p.taskIntent
@@ -3267,6 +3590,50 @@ class AgentLoop {
       logger.warn('AgentLoop', `[agent-loop] planificación falló: ${e.message}`);
       return null;
     }
+  }
+
+  /**
+   * Fallback local cuando el proveedor no puede generar el plan. No inventa
+   * archivos ni afirma haber ejecutado nada: sólo deja un itinerario mínimo
+   * con criterios observables para que la tarea pueda reanudarse.
+   * @param {{userMessage:string,taskIntent?:object|null}} input
+   * @returns {{steps:string[],criteria:string[],text:string,fallback:true}}
+   */
+  _buildFallbackPlan({ userMessage, taskIntent = null }) {
+    const mutation = _expectsMutation(userMessage);
+    const domain = String(taskIntent?.domain || 'la tarea')
+      .replace(/[^\wáéíóúñ .-]/gi, '')
+      .trim();
+    const steps = mutation
+      ? [
+          `Inspeccionar el contexto real de ${domain} y localizar los archivos o entradas afectadas.`,
+          'Aplicar el cambio solicitado mediante una herramienta de edición autorizada.',
+          'Ejecutar la verificación disponible (sintaxis, tests, lint o comando del proyecto).',
+          'Revisar la evidencia y cerrar sólo si el cambio y su verificación son observables.',
+        ]
+      : [
+          `Inspeccionar el contexto real de ${domain} y reunir la evidencia necesaria.`,
+          'Ejecutar la acción o análisis solicitado con las herramientas disponibles.',
+          'Verificar el resultado y registrar cualquier bloqueo antes de cerrar.',
+        ];
+    const criteria = mutation
+      ? [
+          'Existe una ubicación real y un diagnóstico reproducible.',
+          'Una mutación autorizada devuelve ok:true y deja evidencia del archivo o recurso.',
+          'La verificación ejecutada devuelve resultado observable.',
+          'El ledger del plan y la verificación no contienen pasos pendientes.',
+        ]
+      : [
+          'La evidencia proviene de una lectura o herramienta real.',
+          'La acción solicitada devuelve un resultado observable.',
+          'El resultado queda verificado o se conserva como pendiente con motivo explícito.',
+        ];
+    return {
+      steps,
+      criteria,
+      fallback: true,
+      text: this._renderPlanSection(steps, criteria),
+    };
   }
 
   /**
@@ -3546,6 +3913,17 @@ class AgentLoop {
 
     const summary = this._summarizeResult(lastResult);
     if (lastResult.ok) {
+      const imageData = lastResult.result?.dataUrl;
+      if (
+        typeof imageData === 'string' &&
+        /^data:image\/(?:jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(imageData) &&
+        imageData.length <= 3_000_000
+      ) {
+        return [
+          { type: 'text', text: `[Resultado de herramienta "${lastResult.tool}"]:\n${summary}` },
+          { type: 'image_url', image_url: { url: imageData, detail: 'low' } },
+        ];
+      }
       return `[Resultado de herramienta "${lastResult.tool}"]:\n${summary}`;
     }
     return `[ERROR en herramienta "${lastResult.tool}"]: ${lastResult.error || 'desconocido'}\n\nContinúa con otra estrategia o avísame si no puedes completar la tarea.`;
@@ -3774,6 +4152,11 @@ class AgentLoop {
     }
 
     if (typeof raw === 'object') {
+      if (typeof raw.dataUrl === 'string' && raw.mimeType) {
+        const { dataUrl: _imageBytes, ...metadata } = raw;
+        const description = `${JSON.stringify(metadata, null, 2)}\n[Captura disponible para la capa visual; usa una observación accesible cuando exista.]`;
+        return UNTRUSTED_UI_TOOLS.has(result.tool) ? wrapUntrusted(description) : description;
+      }
       if (typeof raw.content === 'string' && Number.isFinite(raw.total_lines)) {
         return [
           `[${raw.path || 'archivo'} · líneas ${raw.start_line}-${raw.end_line} de ${raw.total_lines} · eof=${Boolean(raw.eof)}${raw.next_line ? ` · next_line=${raw.next_line}` : ''}]`,
@@ -3805,6 +4188,9 @@ class AgentLoop {
         return summary || `[Comando ejecutado, sin salida]`;
       }
       const str = JSON.stringify(raw, null, 2);
+      if (UNTRUSTED_UI_TOOLS.has(result.tool)) {
+        return wrapUntrusted(str.slice(0, RESULT_TRUNCATE_LIMIT));
+      }
       return str.length <= RESULT_TRUNCATE_LIMIT
         ? str
         : str.slice(0, RESULT_TRUNCATE_LIMIT) + `\n[... truncado: ${str.length} chars]`;
