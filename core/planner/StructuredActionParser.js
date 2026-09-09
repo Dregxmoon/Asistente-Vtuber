@@ -98,10 +98,13 @@ const ACTION_TO_TOOL = {
   pointer_click: 'pointer_click',
   window_list: 'window_list',
   window_focus: 'window_focus',
+  ui_get_state: 'ui_get_state',
+  ui_wait: 'ui_wait',
   ui_click: 'ui_click',
   ui_type: 'ui_type',
   ui_press: 'ui_press',
   ui_select: 'ui_select',
+  ui_scroll: 'ui_scroll',
   window_close: 'window_close',
   desktop_capabilities: 'desktop_capabilities',
   process_list: 'process_list',
@@ -171,12 +174,16 @@ function _buildDescription(action, fields) {
     case 'window_list':
       return `Listar ventanas: ${f.APLICACIÓN || f.APLICACION || f.APP || 'todas'}`;
     case 'window_focus':
+    case 'ui_get_state':
     case 'ui_click':
     case 'ui_type':
     case 'ui_press':
     case 'ui_select':
+    case 'ui_scroll':
     case 'window_close':
       return `${action}: ${f.REF || '(sin referencia)'}`;
+    case 'ui_wait':
+      return `Esperar condición UI: ${f.NOMBRE || f.NAME || f.ESTADO || f.STATE || '?'}`;
     case 'desktop_capabilities':
       return 'Consultar capacidades de escritorio';
     case 'process_list':
@@ -560,16 +567,32 @@ function _buildParams(action, fields, userGoal, projectCwd) {
       };
 
     case 'window_focus':
+    case 'ui_get_state':
     case 'ui_click':
     case 'ui_type':
     case 'ui_press':
     case 'ui_select':
+    case 'ui_scroll':
     case 'window_close':
       return {
         observationId: fields.OBSERVACION || fields.OBSERVATION_ID,
         ref: fields.REF,
         value: fields.VALOR || fields.VALUE,
         key: fields.TECLA || fields.KEY,
+        direction: fields.DIRECCION || fields.DIRECCIÓN || fields.DIRECTION,
+        amount: fields.CANTIDAD ? Number(fields.CANTIDAD) : undefined,
+      };
+
+    case 'ui_wait':
+      return {
+        application: fields.APLICACIÓN || fields.APLICACION || fields.APP,
+        timeout: fields.TIMEOUT ? Number(fields.TIMEOUT) : undefined,
+        expected: {
+          name: fields.NOMBRE || fields.NAME,
+          role: fields.ROL || fields.ROLE,
+          state: fields.ESTADO || fields.STATE,
+          absent: String(fields.AUSENTE || fields.ABSENT || '').toLowerCase() === 'true',
+        },
       };
 
     case 'process_list':

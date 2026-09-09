@@ -7,7 +7,7 @@ const { WindowsUIAutomationAdapter } = require('./adapters/WindowsUIAutomationAd
 
 const OBSERVATION_TTL_MS = 60_000;
 const MAX_OBSERVATIONS = 12;
-const MUTATING_ACTIONS = new Set(['focus', 'click', 'type', 'press', 'select', 'close']);
+const MUTATING_ACTIONS = new Set(['focus', 'click', 'type', 'press', 'select', 'scroll', 'close']);
 
 /** @typedef {{snapshot(input?: Record<string, unknown>): Promise<Record<string, any>>, execute(action: string, target: Record<string, unknown>, input?: Record<string, unknown>): Promise<Record<string, any>>, health(): Promise<Record<string, any>>, platform?: string}} AutomationAdapter */
 /** @typedef {{id: string, createdAt: number, application: string, nodes: Array<Record<string, any>>, refs: Map<string, Record<string, any>>}} Observation */
@@ -295,14 +295,64 @@ class DesktopAutomation {
     };
   }
 
-  /**
-   * @param {string} action
-   * @param {{observationId?: unknown, ref?: unknown, value?: unknown, key?: unknown, expected?: unknown}} input
-   */
-  async execute(action, input) {
-    if (!this._adapter) throw new Error(`Automatización no compatible con ${this._platform}`);
-    if (!MUTATING_ACTIONS.has(action))
-      throw new Error(`Acción de escritorio desconocida: ${action}`);
+  /** @param {{observationId?: unknown, ref?: unknown}} input */
+  getState(input) {
+    const { observation, ref, target } = this._resolveObservedTarget(input);
+    const node = observation.nodes.find((candidate) => candidate.ref === ref);
+    if (!node) throw new Error('La referencia ya no está disponible en esta observación');
+    return {
+      kind: 'ui_state',
+      platform: this._platform,
+      observationId: observation.id,
+      createdAt: observation.createdAt,
+      target: { ...target },
+      node: { ...node },
+      verified: true,
+    };
+  }
+
+  /** @param {{application?: unknown, expected?: unknown, timeout?: unknown}} input */
+  async waitFor(input) {
+    const application = _safeText(input.application, 120);
+    const expected =
+      input.expected && typeof input.expected === 'object' && !Array.isArray(input.expected)
+        ? /** @type {Record<string, unknown>} */ (input.expected)
+        : null;
+    if (!expected) throw new Error('ui_wait requiere una postcondición expected');
+    const timeout = Math.min(30_000, Math.max(250, Number(input.timeout) || 8000));
+    const deadline = this._now() + timeout;
+    let lastEvidence = '';
+    do {
+      try {
+        const verification = await this._verifyExpected(application, expected);
+        lastEvidence = verification.evidence;
+        if (verification.verified) {
+          return {
+            kind: 'ui_wait',
+            platform: this._platform,
+            verified: true,
+            status: 'completed',
+            evidence: verification.evidence,
+            observationId: this._latestObservationId,
+          };
+        }
+      } catch (error) {
+        lastEvidence = error instanceof Error ? error.message : String(error);
+      }
+      if (this._now() >= deadline) break;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    } while (this._now() < deadline);
+    return {
+      kind: 'ui_wait',
+      platform: this._platform,
+      verified: false,
+      status: 'timeout',
+      evidence: lastEvidence || 'La postcondición no apareció antes del timeout',
+    };
+  }
+
+  /** @param {{observationId?: unknown, ref?: unknown}} input */
+  _resolveObservedTarget(input) {
     const observationId = _safeText(input.observationId, 80);
     const ref = _safeText(input.ref, 80);
     const observation = this._observations.get(observationId);
@@ -315,6 +365,18 @@ class DesktopAutomation {
     }
     const target = observation.refs.get(ref);
     if (!target) throw new Error('Referencia UI inválida para esta observación');
+    return { observation, ref, target };
+  }
+
+  /**
+   * @param {string} action
+   * @param {{observationId?: unknown, ref?: unknown, value?: unknown, key?: unknown, direction?: unknown, amount?: unknown, expected?: unknown}} input
+   */
+  async execute(action, input) {
+    if (!this._adapter) throw new Error(`Automatización no compatible con ${this._platform}`);
+    if (!MUTATING_ACTIONS.has(action))
+      throw new Error(`Acción de escritorio desconocida: ${action}`);
+    const { observation, ref, target } = this._resolveObservedTarget(input);
 
     const value = action === 'type' ? String(input.value ?? '') : '';
     if (value.length > 4000) throw new Error('Texto demasiado largo');
@@ -322,7 +384,12 @@ class DesktopAutomation {
     if (action === 'press' && !/^[A-Za-z0-9+_{}()-]{1,40}$/.test(key)) {
       throw new Error('Tecla no permitida');
     }
-    const result = await this._adapter.execute(action, target, { value, key });
+    const direction = action === 'scroll' ? _safeText(input.direction, 10).toLowerCase() : '';
+    if (action === 'scroll' && !['up', 'down', 'left', 'right'].includes(direction)) {
+      throw new Error('Dirección de desplazamiento no permitida');
+    }
+    const amount = action === 'scroll' ? Math.min(10, Math.max(1, Number(input.amount) || 1)) : 0;
+    const result = await this._adapter.execute(action, target, { value, key, direction, amount });
     if (!result.ok) {
       const suffix = result.stale ? '; vuelve a observar antes de continuar' : '';
       throw new Error((_safeText(result.error, 500) || 'La acción fue rechazada') + suffix);

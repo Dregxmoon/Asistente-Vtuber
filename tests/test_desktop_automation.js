@@ -107,8 +107,24 @@ async function main() {
   );
   const observed = await automation.snapshot({ application: 'Demo' });
   assert(observed.nodes[0].ref === 'ui-1', 'asigna referencias efímeras a elementos observados');
-  const clicked = await automation.execute('click', {
+  const state = automation.getState({ observationId: observed.observationId, ref: 'ui-1' });
+  assert(
+    state.verified && state.node.name === 'Ejecutar',
+    'consulta el estado ligado a una observación vigente'
+  );
+  const scrolled = await automation.execute('scroll', {
     observationId: observed.observationId,
+    ref: 'ui-1',
+    direction: 'down',
+    amount: 2,
+  });
+  assert(
+    scrolled.executed && !scrolled.intentVerified,
+    'desplaza y exige una observación posterior'
+  );
+  const afterScroll = await automation.snapshot({ application: 'Demo' });
+  const clicked = await automation.execute('click', {
+    observationId: afterScroll.observationId,
     ref: 'ui-1',
     expected: { name: 'Completado', role: 'label' },
   });
@@ -116,10 +132,16 @@ async function main() {
     clicked.intentVerified && clicked.status === 'completed',
     'verifica la postcondición tras actuar'
   );
+  const waited = await automation.waitFor({
+    application: 'Demo',
+    expected: { name: 'Completado', role: 'label' },
+    timeout: 500,
+  });
+  assert(waited.verified && waited.status === 'completed', 'espera y verifica una condición UI');
   await expectReject(
     () =>
       automation.execute('click', {
-        observationId: observed.observationId,
+        observationId: afterScroll.observationId,
         ref: 'ui-1',
       }),
     /obsoleta/,

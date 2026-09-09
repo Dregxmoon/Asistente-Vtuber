@@ -202,6 +202,32 @@ try {
       Add-Type -AssemblyName System.Windows.Forms
       [System.Windows.Forms.SendKeys]::SendWait([string]$Request.input.key)
     }
+    'scroll' {
+      $Direction = [string]$Request.input.direction
+      $Amount = [Math]::Max(1, [Math]::Min(10, [int]$Request.input.amount))
+      $Pattern = $null
+      if ($Element.TryGetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern, [ref]$Pattern)) {
+        $Horizontal = [System.Windows.Automation.ScrollAmount]::NoAmount
+        $Vertical = [System.Windows.Automation.ScrollAmount]::NoAmount
+        switch ($Direction) {
+          'up' { $Vertical = [System.Windows.Automation.ScrollAmount]::LargeDecrement }
+          'down' { $Vertical = [System.Windows.Automation.ScrollAmount]::LargeIncrement }
+          'left' { $Horizontal = [System.Windows.Automation.ScrollAmount]::LargeDecrement }
+          'right' { $Horizontal = [System.Windows.Automation.ScrollAmount]::LargeIncrement }
+          default { throw 'Dirección de desplazamiento no permitida' }
+        }
+        for ($Index = 0; $Index -lt $Amount; $Index++) {
+          ([System.Windows.Automation.ScrollPattern]$Pattern).Scroll($Horizontal, $Vertical)
+        }
+      } else {
+        $Element.SetFocus()
+        Add-Type -AssemblyName System.Windows.Forms
+        $Key = if ($Direction -eq 'up') { '{PGUP}' } elseif ($Direction -eq 'down') { '{PGDN}' } elseif ($Direction -eq 'left') { '{LEFT}' } elseif ($Direction -eq 'right') { '{RIGHT}' } else { throw 'Dirección de desplazamiento no permitida' }
+        for ($Index = 0; $Index -lt $Amount; $Index++) {
+          [System.Windows.Forms.SendKeys]::SendWait($Key)
+        }
+      }
+    }
     'close' {
       $Pattern = $null
       if (-not $Element.TryGetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern, [ref]$Pattern)) {

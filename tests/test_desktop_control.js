@@ -251,10 +251,13 @@ async function testPipelineIntegration() {
     'pointer_click',
     'window_list',
     'window_focus',
+    'ui_get_state',
+    'ui_wait',
     'ui_click',
     'ui_type',
     'ui_press',
     'ui_select',
+    'ui_scroll',
     'window_close',
     'desktop_capabilities',
     'process_list',
@@ -315,6 +318,8 @@ async function testPipelineIntegration() {
         executed: true,
       }),
       listWindows: async () => ({ kind: 'window_list', observationId: 'obs-2', nodes: [] }),
+      getState: () => ({ kind: 'ui_state', verified: true }),
+      waitFor: async () => ({ kind: 'ui_wait', verified: true }),
       execute: async (action) => ({
         kind: 'desktop_action',
         action,
@@ -336,6 +341,10 @@ async function testPipelineIntegration() {
   assert(snapshot.ok && snapshot.result.observationId === 'obs-1', 'despacha observación nativa');
   const click = await bridge.execute('ui_click', { observationId: 'obs-1', ref: 'ui-1' });
   assert(click.ok && click.result.action === 'click', 'despacha acciones UI nativas');
+  const state = await bridge.execute('ui_get_state', { observationId: 'obs-1', ref: 'ui-1' });
+  assert(state.ok && state.result.verified, 'despacha consultas de estado UI');
+  const wait = await bridge.execute('ui_wait', { expected: { name: 'Listo' } });
+  assert(wait.ok && wait.result.verified, 'despacha esperas de postcondición UI');
   const media = await bridge.execute('play_media', { query: 'video de guitarra' });
   assert(media.ok && media.result.kind === 'media', 'play_media resuelve y abre el video');
   assert(media.result.autoplayRequested === true, 'play_media registra solicitud de autoplay');

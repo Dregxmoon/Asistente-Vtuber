@@ -82,10 +82,13 @@ const DESKTOP_TOOLS = new Set([
   'pointer_click',
   'window_list',
   'window_focus',
+  'ui_get_state',
+  'ui_wait',
   'ui_click',
   'ui_type',
   'ui_press',
   'ui_select',
+  'ui_scroll',
   'window_close',
   'desktop_capabilities',
   'process_list',
@@ -100,6 +103,7 @@ const DESKTOP_ACTIONS = {
   ui_type: 'type',
   ui_press: 'press',
   ui_select: 'select',
+  ui_scroll: 'scroll',
   window_close: 'close',
 };
 
@@ -384,6 +388,10 @@ class OpenClawBridge {
           desktopResult = await this._desktopAutomation.pointerClick(params);
         } else if (tool === 'window_list') {
           desktopResult = await this._desktopAutomation.listWindows(params);
+        } else if (tool === 'ui_get_state') {
+          desktopResult = this._desktopAutomation.getState(params);
+        } else if (tool === 'ui_wait') {
+          desktopResult = await this._desktopAutomation.waitFor(params);
         } else if (DESKTOP_ACTIONS[tool]) {
           desktopResult = await this._desktopAutomation.execute(DESKTOP_ACTIONS[tool], params);
         } else if (tool === 'open_website' && params.control === 'managed' && !params.browser) {
@@ -484,7 +492,10 @@ class OpenClawBridge {
         }
         const elapsed = Date.now() - t0;
         let logResult =
-          tool === 'desktop_snapshot' || tool === 'desktop_screenshot' || tool === 'window_list'
+          tool === 'desktop_snapshot' ||
+          tool === 'desktop_screenshot' ||
+          tool === 'window_list' ||
+          tool === 'ui_get_state'
             ? { kind: desktopResult.kind, nodeCount: desktopResult.nodes?.length || 0 }
             : desktopResult;
         if (tool === 'play_media' && logResult && typeof logResult === 'object') {

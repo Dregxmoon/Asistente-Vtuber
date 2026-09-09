@@ -42,6 +42,9 @@ const _sessionApprovals = new Set();
  * @property {string} [params.observationId]
  * @property {string} [params.ref]
  * @property {string} [params.application]
+ * @property {object} [params.expected]
+ * @property {string} [params.direction]
+ * @property {number} [params.amount]
  * @property {string} [params.dialogAction]
  * @property {string} [params.expectedUrl]
  * @property {string} [params.sourceId]
@@ -99,6 +102,19 @@ function approvalPattern(action) {
     const browser = String(params.browser || 'kaoru').toLowerCase();
     return `play_media:${control}:${browser}:${service}:${query}`;
   }
+  if (tool === 'ui_wait') {
+    const application = String(params.application || 'all')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .slice(0, 100);
+    const expectedFingerprint = crypto
+      .createHash('sha256')
+      .update(JSON.stringify(params.expected || {}))
+      .digest('hex')
+      .slice(0, 16);
+    return `ui_wait:${application}:${expectedFingerprint}`;
+  }
   if (tool === 'desktop_snapshot' || tool === 'desktop_screenshot' || tool === 'window_list') {
     const application = String(params.application || params.sourceId || params.sourceName || 'all')
       .trim()
@@ -126,12 +142,28 @@ function approvalPattern(action) {
     return tool;
   }
   if (
-    ['window_focus', 'ui_click', 'ui_type', 'ui_press', 'ui_select', 'window_close'].includes(tool)
+    [
+      'window_focus',
+      'ui_get_state',
+      'ui_click',
+      'ui_type',
+      'ui_press',
+      'ui_select',
+      'ui_scroll',
+      'window_close',
+    ].includes(tool)
   ) {
     if (!params.observationId || !params.ref) return null;
     const valueFingerprint = crypto
       .createHash('sha256')
-      .update(String(params.value || params.key || ''))
+      .update(
+        JSON.stringify({
+          value: params.value || '',
+          key: params.key || '',
+          direction: params.direction || '',
+          amount: Number(params.amount) || 0,
+        })
+      )
       .digest('hex')
       .slice(0, 16);
     return `${tool}:${params.observationId}:${params.ref}:${valueFingerprint}`;

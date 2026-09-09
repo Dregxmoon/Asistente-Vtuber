@@ -230,10 +230,13 @@ const UI_TOOLS = new Set([
   'pointer_click',
   'window_list',
   'window_focus',
+  'ui_get_state',
+  'ui_wait',
   'ui_click',
   'ui_type',
   'ui_press',
   'ui_select',
+  'ui_scroll',
   'window_close',
   'desktop_capabilities',
   'process_list',
@@ -246,16 +249,22 @@ const UNTRUSTED_UI_TOOLS = new Set([
   'desktop_screenshot',
   'window_list',
   'window_focus',
+  'ui_get_state',
+  'ui_wait',
   'ui_click',
   'ui_type',
   'ui_press',
   'ui_select',
+  'ui_scroll',
   'window_close',
   'process_list',
 ]);
 
 function _isVerifiedInteractiveResult(result) {
   if (!result?.ok) return false;
+  if (result.tool === 'ui_wait') {
+    return result.result?.verified === true;
+  }
   if (result.tool === 'play_media') return result.result?.verified === true;
   if (result.tool === 'launch_app' || result.tool === 'open_website') {
     return result.result?.verified === true;
@@ -648,8 +657,9 @@ ACCIÓN: play_media | SERVICIO: youtube | QUERY: video de guitarra | CONTROL: ma
 
 Para controlar una aplicación nativa en Linux o Windows, primero usa
 \`desktop_snapshot\` (o \`window_list\`). Solo después usa la referencia \`ui-N\`
-y el \`observationId\` devueltos con window_focus/ui_click/ui_type/ui_press/
-ui_select/window_close. Declara una postcondición \`expected\` siempre que sea
+y el \`observationId\` devueltos con window_focus/ui_get_state/ui_click/ui_type/ui_press/
+ui_select/ui_scroll/window_close. Usa \`ui_wait\` para esperar una postcondición y declara
+\`expected\` siempre que sea
 posible. Las referencias expiran y nunca debes inventarlas ni reutilizarlas
 después de que cambie la interfaz.
 

@@ -316,12 +316,47 @@ const TOOL_SCHEMAS = [
       required: [],
     },
   },
+  {
+    name: 'ui_get_state',
+    description: 'Consulta sin mutar el estado de una referencia de la observación más reciente.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        observationId: { type: 'string', description: 'ID de la última observación' },
+        ref: { type: 'string', description: 'Referencia ui-N de esa observación' },
+      },
+      required: ['observationId', 'ref'],
+    },
+  },
+  {
+    name: 'ui_wait',
+    description: 'Espera hasta que una postcondición sea observable y devuelve evidencia nueva.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        application: { type: 'string', description: 'Filtro opcional por aplicación' },
+        timeout: { type: 'number', description: 'Espera máxima en milisegundos, hasta 30000' },
+        expected: {
+          type: 'object',
+          description: 'Postcondición observable: name, role, state o absent',
+          properties: {
+            name: { type: 'string' },
+            role: { type: 'string' },
+            state: { type: 'string' },
+            absent: { type: 'boolean' },
+          },
+        },
+      },
+      required: ['expected'],
+    },
+  },
   ...[
     ['window_focus', 'Enfoca una ventana o control previamente observado.'],
     ['ui_click', 'Invoca un botón o control previamente observado.'],
     ['ui_type', 'Introduce texto en un campo editable previamente observado.'],
     ['ui_press', 'Envía una tecla permitida al elemento previamente observado.'],
     ['ui_select', 'Selecciona una opción o elemento previamente observado.'],
+    ['ui_scroll', 'Desplaza un control previamente observado.'],
     ['window_close', 'Cierra una ventana previamente observada.'],
   ].map(([name, description]) => ({
     name,
@@ -333,6 +368,12 @@ const TOOL_SCHEMAS = [
         ref: { type: 'string', description: 'Referencia ui-N de esa observación' },
         value: { type: 'string', description: 'Texto para ui_type' },
         key: { type: 'string', description: 'Tecla para ui_press' },
+        direction: {
+          type: 'string',
+          enum: ['up', 'down', 'left', 'right'],
+          description: 'Dirección para ui_scroll',
+        },
+        amount: { type: 'number', description: 'Cantidad de pasos para ui_scroll, de 1 a 10' },
         expected: {
           type: 'object',
           description: 'Postcondición observable: name, role, state o absent',

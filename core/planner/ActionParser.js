@@ -248,10 +248,13 @@ function isHighImpact(tool, params) {
     tool === 'pointer_click' ||
     tool === 'window_list' ||
     tool === 'window_focus' ||
+    tool === 'ui_get_state' ||
+    tool === 'ui_wait' ||
     tool === 'ui_click' ||
     tool === 'ui_type' ||
     tool === 'ui_press' ||
     tool === 'ui_select' ||
+    tool === 'ui_scroll' ||
     tool === 'window_close' ||
     tool === 'desktop_capabilities' ||
     tool === 'process_list' ||

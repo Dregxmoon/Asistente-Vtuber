@@ -325,8 +325,20 @@ def execute():
             editable.setTextContents(value)
         else:
             editable.set_text_contents(value)
-    elif action == "press":
+    elif action in ("press", "scroll"):
         key = str(action_input.get("key") or "")
+        repeat = 1
+        if action == "scroll":
+            direction = str(action_input.get("direction") or "").casefold()
+            key = {
+                "up": "Page_Up",
+                "down": "Page_Down",
+                "left": "Left",
+                "right": "Right",
+            }.get(direction, "")
+            repeat = max(1, min(10, int(action_input.get("amount") or 1)))
+            if not key:
+                return {"ok": False, "error": "Dirección de desplazamiento no permitida"}
         component = safe(
             lambda: node.queryComponent() if BACKEND == "pyatspi" else node.get_component(), None
         )
@@ -335,10 +347,11 @@ def execute():
                 component.grabFocus()
             else:
                 component.grab_focus()
-        if BACKEND == "pyatspi":
-            pyatspi.Registry.generateKeyboardEvent(0, key, pyatspi.KEY_STRING)
-        else:
-            Atspi.generate_keyboard_event(0, key, Atspi.KeySynthType.STRING)
+        for _ in range(repeat):
+            if BACKEND == "pyatspi":
+                pyatspi.Registry.generateKeyboardEvent(0, key, pyatspi.KEY_STRING)
+            else:
+                Atspi.generate_keyboard_event(0, key, Atspi.KeySynthType.STRING)
     else:
         return {"ok": False, "error": "Acción AT-SPI2 desconocida"}
 

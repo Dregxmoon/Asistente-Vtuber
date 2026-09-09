@@ -334,6 +334,39 @@ async function testObservableRequestCannotEndAsGenericChat() {
   );
 }
 
+async function testUiStateReadDoesNotSatisfyInteractiveRequest() {
+  console.log(C.bold('\n── Cumplimiento: consultar UI no equivale a actuar ─────────────'));
+  const { AgentLoop } = require('../core/planner/AgentLoop.js');
+  const mockLLM = createMockLLM([
+    '```action\nACCIÓN: ui_get_state | OBSERVACION: obs-1 | REF: ui-1\n```',
+    'El botón quedó pulsado.',
+    '```action\nACCIÓN: ui_click | OBSERVACION: obs-1 | REF: ui-1\n```',
+    'El botón quedó pulsado.',
+  ]);
+  const bridge = {
+    execute: async (tool) => ({
+      ok: true,
+      tool,
+      result:
+        tool === 'ui_get_state'
+          ? { kind: 'ui_state', verified: true }
+          : { kind: 'desktop_action', intentVerified: true },
+      error: null,
+      elapsed: 1,
+    }),
+  };
+  const loop = new AgentLoop({ maxIterations: 6, llm: mockLLM, bridge });
+  const result = await loop.run('haz clic en el botón observado', 'Eres un asistente.', [], {
+    onApprovalNeeded: async () => true,
+  });
+
+  assert(mockLLM.callCount() === 4, 'la lectura de estado no permite cerrar antes de actuar');
+  assert(
+    result.toolResults.some((item) => item.ok && item.tool === 'ui_click'),
+    'la acción interactiva se ejecutó realmente'
+  );
+}
+
 async function testMediaRequestRequiresSuccessfulPlaybackTool() {
   console.log(C.bold('\n── Cumplimiento: abrir YouTube no equivale a reproducir ────────'));
   const { AgentLoop } = require('../core/planner/AgentLoop.js');
@@ -2850,6 +2883,7 @@ async function main() {
   await testMutationRequestCannotStopAfterInspection();
   await testMutationExplanationDoesNotForceTools();
   await testObservableRequestCannotEndAsGenericChat();
+  await testUiStateReadDoesNotSatisfyInteractiveRequest();
   await testMediaRequestRequiresSuccessfulPlaybackTool();
   await testArtifactVerifyCorrection();
   await testAdaptsToRealResult();
