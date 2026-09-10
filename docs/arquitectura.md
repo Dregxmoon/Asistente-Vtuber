@@ -22,7 +22,7 @@ flowchart TD
         CHAT["src/chat.html<br/>processMessage()"]
         INPUT["Mensaje del usuario<br/>@archivos / comandos / chat"]
         BUBBLE["Bubble de propuesta<br/>+ botones Sí/No"]
-        MODEL["Modelo 3D + TTS<br/>(march 7th.model3.json)"]
+        MODEL["Modelo Live2D + TTS<br/>(march 7th.model3.json)"]
         COMMANDS["CommandRegistry<br/>/comandos"]
     end
 
@@ -43,10 +43,11 @@ flowchart TD
 
         subgraph CHAT_FLOW["Flujo conversacional (respuesta a mensaje)"]
             BUILD_CONTEXT["buildContext()<br/>• BehaviorModel.evaluate()<br/>• IntentDetector.detect()<br/>• TaskDetector.detect()<br/>• GroundingEngine<br/>• resolveToolset() (ToolResolver)<br/>• skills + MCP + OpenClaw catálogo<br/>• Modos: chat / plan / execute / agent"]
-            AGENT_LOOP["AgentLoop<br/>loop LLM → tool → resultado → LLM<br/>maxIterations 8–25"]
+            AGENT_LOOP["AgentLoop<br/>loop LLM → tool → resultado → LLM<br/>presupuesto acotado y adaptativo"]
+            REPO_INTEL["RepositoryIntelligence<br/>archivos · dependencias · impacto · tests"]
             LLM["LLMProvider<br/>complete() / completeWithTools()"]
             BUILD_CONTEXT --> LLM
-            RUN_AGENT["runAgent()<br/>buildContext(mode:agent)"] --> AGENT_LOOP --> LLM
+            RUN_AGENT["runAgent()<br/>buildContext(mode:agent)"] --> REPO_INTEL --> AGENT_LOOP --> LLM
         end
 
         subgraph PROACTIVE["Motor de proactividad (decisión determinista)"]
@@ -78,7 +79,8 @@ flowchart TD
         SYMB["SymbolIndex<br/>símbolos LSP (contexto de parche)"]
         LSP_MANAGER["LSPManager<br/>typescript-language-server"]
         LSP_W --> SYMB
-        LSP_W --> LSP_MANAGER
+    LSP_W --> LSP_MANAGER
+    SYMB --> REPO_INTEL
     end
 
     subgraph MEM["Memoria y estado"]
@@ -92,6 +94,8 @@ flowchart TD
     subgraph TOOLS["Herramientas de agente"]
         OPENCLAW["OpenClawBridge<br/>ejecutar comandos reales"]
         MCP["MCPManager<br/>servidores + catálogo"]
+        BROWSER["BrowserBridge<br/>personal + administrado"]
+        DESKTOP["DesktopAutomation<br/>accesibilidad + captura"]
         TASK["TaskDetector + ToolRegistry<br/>ToolResolver → toolset"]
     end
 
@@ -99,7 +103,7 @@ flowchart TD
     CHAT -->|"/comando"| COMMANDS
     COMMANDS -->|"resultado directo"| BUBBLE
     CHAT -->|"llamada LLM simple"| BUILD_CTX
-    CHAT -->|"OpenClaw disponible"| AGENT_RUN
+    CHAT -->|"modo con herramientas"| AGENT_RUN
     CHAT --> ADD_TURN
     PROPOSAL_DEC --> PROACTIVE_ENGINE
     INITIATIVE_FWD --> BUBBLE
@@ -124,6 +128,8 @@ flowchart TD
     LLM --> TOOLS
     OPENCLAW --> LLM
     MCP --> LLM
+    BROWSER --> LLM
+    DESKTOP --> LLM
     TASK --> BUILD_CONTEXT
 ```
 
@@ -179,6 +185,11 @@ flowchart LR
    del usuario (IPC `agent-approval-needed`); `allow` y `deny` se aplican directamente según política.
 4. La sesión se persiste incrementalmente (`SessionManager` + `StateUpdater`).
 
+Para tareas de código complejas, `RepositoryIntelligence` sustituye el antiguo árbol superficial de
+directorios. Su índice asíncrono aporta al plan rutas reales, dependencias locales, símbolos y scripts.
+Después de una mutación se invalida, calcula el radio de impacto y antepone pruebas focales solo si el
+repositorio expone un runner conocido. La verificación general configurada sigue siendo el sello final.
+
 ---
 
 ## 4. Principios de diseño
@@ -187,5 +198,15 @@ flowchart LR
 - **Determinista donde importa:** la decisión de hablar es trazable (score + reason code); el LLM solo redacta.
 - **Recuperación explícita:** las rutas de mutación integran checkpoint y verificación cuando
   corresponde; el rollback es una operación separada y puede ser parcial o encontrar conflictos.
-- **Local por defecto:** memoria, embeddings y telemetría residen en la máquina del usuario.
+- **Persistencia local, cómputo configurable:** memoria, embeddings y telemetría residen en la máquina; prompts, contexto seleccionado, resultados de herramientas y capturas pueden salir al proveedor LLM o integración elegida.
 - **Extensible:** MCP, skills y perfiles de señal se agregan sin tocar el núcleo.
+
+## 5. Límites de confianza y datos
+
+- El navegador personal solo recibe una URL al usar `open_website`; Kaoru no importa directamente sus cookies ni contraseñas. El navegador administrado mantiene un perfil separado para tareas verificables.
+- Las observaciones de escritorio se obtienen mediante AT-SPI2 (Linux) o UI Automation (Windows). El clic visual se liga a una captura efímera y requiere una nueva observación después de cada mutación.
+- Los interruptores de capacidad separan aplicaciones, navegador, pantalla, puntero, teclado, procesos y cámara. Desactivar una familia bloquea sus herramientas antes de ejecutarlas.
+- MCP y plugins amplían el límite de confianza: pueden procesar contexto de la tarea según su implementación y deben instalarse solo desde fuentes confiables.
+- Los resultados externos se delimitan como no confiables antes de entrar al prompt. Esta defensa reduce el riesgo de prompt injection, pero no lo elimina.
+
+La descripción completa de categorías, transferencias y retención está en el [aviso de privacidad](./web/privacy.html).

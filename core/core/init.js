@@ -23,6 +23,7 @@ const { UpcomingEventsWatcher } = require('../../infrastructure/sensors/Upcoming
 const { getEventBus } = require('../../infrastructure/event-bus/EventBus.js');
 const { LSPErrorWatcher } = require('../../infrastructure/sensors/LSPErrorWatcher.js');
 const { SymbolIndex } = require('../lsp/SymbolIndex.js');
+const { RepositoryIntelligence } = require('../lsp/RepositoryIntelligence.js');
 const { ProactiveEngine } = require('../behavior/ProactiveEngine.js');
 const { ProposalStore } = require('../behavior/ProposalStore.js');
 const { LearningEngine } = require('../learning/LearningEngine.js');
@@ -256,6 +257,11 @@ function init(app) {
   // índice de símbolos da contexto de función/clase al parche. Nunca rompe
   // el arranque: sin LSP o sin workspace solo trackea el foco del editor.
   state.symbolIndex = new SymbolIndex({ lsp: state.lspManager });
+  state.repositoryIntelligence = new RepositoryIntelligence({
+    workspace: () => state.activeWorkspace || process.cwd(),
+    getSymbols: (file) => state.symbolIndex.getSymbolsFor(file),
+    cachePath: app ? path.join(app.getPath('userData'), 'repository-intelligence.json') : null,
+  });
   state.lspErrorWatcher = new LSPErrorWatcher({
     lsp: state.lspManager,
     getWorkspace: () => state.activeWorkspace,

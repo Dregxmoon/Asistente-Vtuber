@@ -23,18 +23,22 @@ design, docs, chat, media, api, files, system, game).
 `getCurrentContext()` devuelve: `app`, `friendlyName`, `title`, `category`, `elapsed`, `elapsedFormatted`,
 `idleSecs`, `idleFormatted`, `isIdle`, `openWindows`, `openWindowsSummary`, `history`.
 
+Estas señales se recogen localmente, pero una selección del contexto puede incorporarse al prompt
+cuando Kaoru consulta el proveedor LLM configurado. “Local” describe la captura y persistencia, no
+una garantía de que ninguna señal salga del equipo durante una función de IA solicitada.
+
 ## Sensores de señales (camino proactivo)
 
 Cada sensor emite eventos por el `EventBus` que `ProactiveEngine` consume:
 
-| Sensor | Señal | Detecta |
-|---|---|---|
-| `GitWatcher` | `git:redflag` | `.env` sin ignorar, conflictos de merge, muchos cambios sin commitear, commits sin push, cambio de rama |
-| `SystemWatcher` | `system:warning` | Umbrales de CPU / RAM / disco / batería (re-emite mientras la condición persista) |
-| `TitleWatcher` | `os:error-title` | Títulos de ventana con señales de error (dedup) |
-| `ClipboardWatcher` | `clipboard:copied` | (opt-in) stacktraces o URLs copiados; texto normal ignorado |
-| `UpcomingEventsWatcher` | `memory:upcoming-event` | Recordatorios próximos desde memoria (nodos `recordar_*`), con resolución de horas ambiguas |
-| `LSPErrorWatcher` | `lsp:error` | Errores del editor (severidad 1) en el archivo enfocado, con `languageId`/`fileType` |
+| Sensor                  | Señal                   | Detecta                                                                                                 |
+| ----------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------- |
+| `GitWatcher`            | `git:redflag`           | `.env` sin ignorar, conflictos de merge, muchos cambios sin commitear, commits sin push, cambio de rama |
+| `SystemWatcher`         | `system:warning`        | Umbrales de CPU / RAM / disco / batería (re-emite mientras la condición persista)                       |
+| `TitleWatcher`          | `os:error-title`        | Títulos de ventana con señales de error (dedup)                                                         |
+| `ClipboardWatcher`      | `clipboard:copied`      | (opt-in) stacktraces o URLs copiados; texto normal ignorado                                             |
+| `UpcomingEventsWatcher` | `memory:upcoming-event` | Recordatorios próximos desde memoria (nodos `recordar_*`), con resolución de horas ambiguas             |
+| `LSPErrorWatcher`       | `lsp:error`             | Errores del editor (severidad 1) en el archivo enfocado, con `languageId`/`fileType`                    |
 
 ### `LSPErrorWatcher` en detalle
 
@@ -77,5 +81,4 @@ flowchart LR
 
 ## Verificación
 
-`test_signal_sensors` (49) — todos los watchers con ejecución hermetizada y/o repos git reales;
-`test_proactive` — integración señal → engine → propuesta. Ver `tests/README.md`.
+Ejecuta `test_signal_sensors` y `test_proactive`; ver `tests/README.md`.

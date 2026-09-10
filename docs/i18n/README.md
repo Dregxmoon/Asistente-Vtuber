@@ -24,3 +24,6 @@ Las portadas localizadas ofrecen una presentación, instalación, arquitectura y
 3. Conserva comandos, rutas, nombres de configuración y símbolos de código sin traducir.
 4. No copies cifras volátiles. Enlaza a CI o a comandos reproducibles.
 5. Si una traducción no puede verificarse, indícalo y enlaza a la versión española.
+6. El [aviso de privacidad](../web/privacy.html) y los [términos de uso](../web/terms.html) son
+   documentos públicos canónicos en español. Las portadas traducidas deben enlazarlos y no resumirlos
+   de forma que oculte transferencias a LLM, voz, navegador, Google, GitHub, MCP o plugins.

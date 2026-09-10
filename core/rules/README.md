@@ -12,6 +12,10 @@ Inyecta las reglas del proyecto (`.cursorrules`, `CLAUDE.md`, `AGENTS.md`) en el
 - `clearRulesCache()` — invalida el cache (por `(workspace, mtime)`); se llama al cambiar de
   workspace (`core/core/workspace.js`) y en tests.
 
+Las reglas pueden contener nombres, rutas o instrucciones privadas del proyecto. Como forman parte
+del system prompt, se envían al proveedor LLM activo; no guardes secretos en `AGENTS.md`,
+`CLAUDE.md` ni `.cursorrules`.
+
 ## Etiqueta
 
 ```

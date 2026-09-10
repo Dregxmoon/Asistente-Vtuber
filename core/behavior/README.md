@@ -175,19 +175,16 @@ resuelven eso **sin escribir en disco** y conectándolo al flujo del asistente:
   vía `cmdCtx.gestureEngine`.
 - `triggerMotion()` (overlay y chat) ahora solo reproduce del grupo `Idle`; así las motions de gesto
   (tipo `zhaoxiang`) solo aparecen vía test, emoción o marcador LLM y no al azar en cada click/intervalo.
+- El encuadre no interpola ni rota vistas de forma autónoma. Permanece en la vista elegida y solo se
+  expande de forma acotada durante un gesto que sobresalga del canvas; esto no altera la animación
+  suave definida por el propio modelo.
 - `core/commands/CommandRegistry.js`: comando `/gestos` (categoría `Modelo`).
 
 ---
 
 ## Verificación
 
-| Suite                          | Cobertura                                                       |
-| ------------------------------ | --------------------------------------------------------------- |
-| `test_proactive` (112)         | Contrato `_tryTrigger`, cooldowns, gates, patrones, curiosidad  |
-| `test_proposals` (40)          | Payload de propuesta, decisiones, feedback, slider de autonomía |
-| `test_proposals_executor` (69) | Executor: whitelist, preview, verificación, idempotencia        |
-| `test_persistent` (44)         | Persistencia de feedback y estado entre reinicios               |
-| `test_gate_integration` (34)   | Integración con el núcleo determinista + drenado de cola        |
-| `test_gesture_lexicon`         | Vocabulario, normalización, ruido, índices inversos             |
-| `test_gesture_heuristic`       | Scoring, dedupe de gestos, resolveAll, mappings                 |
-| `test_gesture_engine`          | Prioridades, cooldowns, revert, fallback, attach                |
+Las suites `test_proactive`, `test_proposals`, `test_proposals_executor`, `test_persistent`,
+`test_gate_integration`, `test_gesture_lexicon`, `test_gesture_heuristic` y
+`test_gesture_engine` cubren contratos, persistencia, gates, vocabulario, prioridades y reset.
+El runner y el total actual de aserciones están documentados en [`tests/README.md`](../../tests/README.md).

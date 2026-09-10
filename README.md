@@ -15,7 +15,7 @@
 
 **Español** · [日本語](./docs/i18n/ja/README.md) · [한국어](./docs/i18n/ko/README.md) · [English (US)](./docs/i18n/en-US/README.md) · [English (UK)](./docs/i18n/en-GB/README.md) · [Português](./docs/i18n/pt/README.md)
 
-[Inicio rápido](#6-inicio-rápido) · [Arquitectura](#2-arquitectura-del-sistema) · [Seguridad](#seguridad) · [Documentación](#8-documentación)
+[Inicio rápido](#6-inicio-rápido) · [Arquitectura](#2-arquitectura-del-sistema) · [Seguridad](#seguridad) · [Privacidad](./docs/web/privacy.html) · [Términos](./docs/web/terms.html) · [Documentación](#8-documentación)
 
 </div>
 
@@ -56,14 +56,14 @@ Los asistentes de escritorio tradicionales son **reactivos**: esperan a que el u
 | Segmento                   | Valor entregado                                                                                                                                                                                                             |
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Desarrolladores**        | Asistente de código proactivo: detecta errores LSP en el editor, propone parches con diff y verificación real, cuida la higiene del repo (`.env`, conflictos, commits) y ejecuta tareas vía MCP/OpenClaw con control total. |
-| **Usuarios de escritorio** | Compañero persistente con memoria: retoma hilos pendientes, recuerda lo que importa, ofrece ayuda contextual en el momento adecuado y respeta la privacidad (todo local).                                                   |
+| **Usuarios de escritorio** | Compañero persistente con memoria: retoma hilos pendientes, recuerda lo que importa y ofrece ayuda contextual con controles separados para aplicaciones, navegador, pantalla, puntero, teclado, procesos y cámara.          |
 | **Creadores y streamers**  | Overlay Live2D en tiempo real con voz sintetizada (Edge TTS), reconocimiento de voz offline (Vosk) y personalidad consistente.                                                                                              |
 
 ### Diferenciadores
 
 1. **Decisión auditable.** Las señales normalizadas de sensores pasan por un núcleo determinista (<code>DecisionCore</code>) con <em>reason codes</em>: su admisión puede rastrearse hasta puntuación, pesos y política. El LLM redacta el contenido una vez admitidas; los triggers heredados o no sensoriales se documentan por separado.
-2. **Privacidad por diseño.** Memoria, embeddings, telemetría y preferencias viven en la máquina del usuario (SQLite + modelos locales ONNX). No se sube nada por defecto.
-3. **Soberanía de proveedores.** Soporta Groq, Google Gemini y OpenAI con fallback automático y reintento exponencial. Sin vendor lock-in.
+2. **Datos locales con transferencias explícitas.** Memoria, embeddings, telemetría y preferencias se guardan localmente. El contenido necesario para responder se envía al proveedor LLM configurado; capturas, contexto del SO y resultados de herramientas pueden incluirse cuando la tarea lo requiere y el permiso lo permite.
+3. **Soberanía de proveedores.** El catálogo de proveedores se resuelve desde la implementación y admite fallback configurable, reintento exponencial y modelos locales cuando están disponibles.
 4. **Extensible por MCP.** Cliente Model Context Protocol propio: cualquier servidor de herramientas del ecosistema se conecta sin tocar el núcleo.
 5. **Autonomía calibrada por datos.** Un slider de autonomía (`observe | suggest | act`) más un modelo de receptividad que ajusta la frecuencia y el presupuesto según la respuesta real del usuario.
 
@@ -104,7 +104,7 @@ flowchart TD
     subgraph PERC["Percepción y acción"]
         SENSORS["Sensores<br/>SO · Git · LSP · título · eventos"]
         LLM["LLM Providers<br/>Groq / Gemini / OpenAI"]
-        TOOLS["OpenClaw · MCP · Browser"]
+        TOOLS["OpenClaw · MCP · Browser · Desktop"]
     end
 
     OVERLAY --> CHAT
@@ -171,6 +171,12 @@ los pesos de scoring del gate: el asistente aprende cuándo y cuánto proponer.
 
 Detección de errores del editor vía **LSP real** (typescript-language-server): sensor de errores, índice de símbolos, propuestas de parche con diff, verificación post-ejecución con el LSP y `node --check`, y rollback automático si el parche rompe el archivo.
 
+Antes de planificar, `RepositoryIntelligence` construye de forma asíncrona un mapa acotado de archivos
+y dependencias locales, identifica candidatos por la intención y los enriquece con símbolos LSP. Tras
+una mutación, el mismo índice calcula dependientes y pruebas relacionadas: en repositorios con
+`tests/run-all.sh`, esas suites focales corren antes de los sellos generales configurados. El caché
+persistido contiene metadatos estructurales, no contenido fuente, y se invalida al editar.
+
 </details>
 
 <a id="seguridad"></a>
@@ -185,14 +191,14 @@ El LLM no autoriza acciones. <code>ActionParser</code>, <code>PermissionManager<
 | **Sandbox de proceso** (`bwrap`)                | En Linux con `bubblewrap`, cada comando aprobado corre en namespaces propios de mount/pid/ipc/uts: filesystem read-only salvo workspace activo + `/tmp`, `.ssh`/`$HOME` fuera de alcance. Sin `bwrap`, degrada de forma transparente (nunca rompe el server).           | `GET /health` y el canal IPC `openclaw-status` reportan si está activo y, si no, por qué.                      |
 | **Verificación forzada post-mutación**          | Tras editar archivos: `typecheck → lint → test → build` (autodetectado de `package.json` o configurable), por el **mismo camino** que cualquier `exec` — hereda sandbox y entorno saneado. Sin comando configurado pero con JS tocado: `node --check` como piso mínimo. | Resultado (`passed`/`failed`/`skipped`) siempre visible en la respuesta — nunca un cierre silencioso.          |
 | **Checkpoint y revert**                         | `WorkspaceCheckpoint` captura una línea base antes de la primera mutación de una tarea (diff+estado con git; snapshot de archivos sin git).                                                                                                                             | `/revertir-tarea [id]` deshace solo lo que hizo el agente, preserva cambios previos sin commitear del usuario. |
-| **Límite de confianza (anti-prompt-injection)** | Contenido de terceros (`webfetch`/`websearch`, páginas navegadas, issues/PRs/comentarios de GitHub, resultados de servidores MCP) se delimita y se le neutralizan patrones clásicos de inyección antes de entrar al prompt.                                             | Aplica a web, GitHub y MCP por igual.                                                                          |
+| **Límite de confianza (anti-prompt-injection)** | Resultados de web, navegador, GitHub, MCP y observaciones de UI se marcan como contenido no confiable en sus rutas de entrada. Es una reducción de riesgo, no una garantía contra toda inyección.                                                                       | Los adaptadores y serializers conservan la procedencia antes de incorporarla al contexto.                      |
 
 </details>
 
 <details>
 <summary><strong>Multi-proveedor de LLM</strong></summary>
 
-Groq · Google Gemini · OpenAI con cadena de fallback, reintento exponencial con jitter, límite de fallas consecutivas por proveedor y modo de "rate-limit" con mensajes accionables.
+Proveedores configurables con cadena de fallback, reintento exponencial con jitter, límite de fallas consecutivas y mensajes accionables ante límites de uso. El catálogo efectivo de modelos vive en `core/llm/catalog.js`.
 
 </details>
 
@@ -206,7 +212,16 @@ Cliente MCP propio (stdio), reconexión automática con backoff, namespacing de 
 <details>
 <summary><strong>Automatización de navegador</strong></summary>
 
-`BrowserBridge` con Playwright headless: navegación, lectura de páginas, capturas y búsqueda web — separado del navegador personal del usuario.
+`open_website` abre por defecto el navegador personal/predeterminado, por lo que conserva sus sesiones, pero Kaoru solo solicita abrir la URL y no recibe acceso directo a sus cookies o contraseñas. Las tareas que necesitan inspeccionar DOM, buscar, hacer clic y verificar usan Chromium administrado por Playwright con un perfil separado. `play_media` usa ese flujo administrado.
+
+</details>
+
+<details>
+<summary><strong>Automatización de escritorio</strong></summary>
+
+El motor intenta primero accesibilidad semántica: AT-SPI2 en Linux y UI Automation en Windows. Para canvas, juegos o controles sin árbol accesible existe un fallback visual acotado: cada clic debe referirse a una captura vigente, expira a los 30 segundos, se consume una sola vez y exige observar de nuevo. macOS conserva herramientas generales de aplicaciones, procesos y cámara, pero no implementa todavía la misma paridad semántica de UI.
+
+Las familias de capacidad —aplicaciones, navegador, pantalla, puntero, teclado, procesos y cámara— pueden activarse o desactivarse por separado. “Cámara” significa consultar estado o abrir la aplicación de cámara; Kaoru no captura foto ni vídeo mediante esa herramienta.
 
 </details>
 
@@ -216,6 +231,11 @@ Cliente MCP propio (stdio), reconexión automática con backoff, namespacing de 
 `grep` (búsqueda regex por contenido), `glob` (patrones de archivos) y `subagent` (sub-agente anidado) se suman a la whitelist de `AgentLoop`: el asistente explora el proyecto sin volcar todo al contexto, con límites de resultados y profundidad.
 
 **Subagentes por perfil** (patrón opencode/Claude Code): la tool `subagent` acepta un `agent` para elegir perfil — `general` (default, herramientas completas), `explorador` (solo lectura: investiga el codebase sin tocar nada) e `investigador` (búsqueda web + lectura). Cada perfil puede declarar en markdown (`description`, `mode: smart|fast`, `temperature`, `max_iterations`, `read_only`, `tools_allow`/`tools_deny`) qué puede hacer; los perfiles se cargan de `.kaoru/subagents/*.md` (proyecto) y `~/.config/vtuber-overlay/subagents/` (global). Los perfiles `fast` usan el modelo barato del mismo provider, y el gate de herramientas bloquea en runtime cualquier tool fuera de lo permitido. El trabajo delegado se ve en el chat como un bloque colapsable `subagent: <perfil>`. Se apaga con `agent.subagent.enabled: false` en `config.json`.
+
+La investigación puede ejecutarse en paralelo únicamente con perfiles `read_only`. Las mutaciones se
+serializan en el workspace y comparten el checkpoint de la tarea. Kaoru no anuncia escritura paralela
+aislada porque todavía no integra worktrees independientes y fusión verificada; permitir varios
+escritores sobre el mismo árbol sería inseguro.
 
 </details>
 
@@ -259,7 +279,7 @@ Conversación persistente por sesión (hasta 40 turnos) con reanudación tras cr
 <details>
 <summary><strong>Tipado con JSDoc estricto</strong></summary>
 
-`npm run typecheck` valida los módulos marcados con `// @ts-check` (`tsconfig.json`, `strict` + `noImplicitAny` + `strictNullChecks`). El pipeline de contexto/grounding está tipado con 0 errores.
+`npm run typecheck` valida los módulos marcados con `// @ts-check` (`tsconfig.json`, `strict` + `noImplicitAny` + `strictNullChecks`). El resultado del comando y el job de CI son la fuente del estado actual; los módulos nuevos no deben aumentar la deuda de tipos existente.
 
 </details>
 
@@ -508,7 +528,7 @@ El asistente trabaja sobre un **workspace activo** — la carpeta/proyecto real 
 npm start
 ```
 
-También expone una **Control API** de diagnóstico en `http://localhost:3131` (token en el log de arranque): `/help`, `/stats`, `/telemetry/report`, `/debug/lsp-scan`.
+También expone una **Control API** de diagnóstico en `http://localhost:3131` con token efímero por sesión. El token se mantiene en memoria y no se imprime en los logs; los clientes locales autorizados lo reciben por el canal correspondiente. Incluye `/help`, `/stats`, `/telemetry/report` y `/debug/lsp-scan`.
 
 ### Probar
 
@@ -549,6 +569,9 @@ npm run coverage:check    # además valida umbrales (guard de regresión)
 | Agente de código profundo (LSP)             | ✅ Operativo                                                                                                                                                           |
 | Plugins y skills                            | ✅ Operativo                                                                                                                                                           |
 | Modelo de confianza del agente              | ✅ Operativo                                                                                                                                                           |
+| Automatización de escritorio                | ✅ Linux (AT-SPI2) · ✅ Windows (UI Automation) · ⚠️ macOS sin paridad de controles semánticos                                                                         |
+| Navegador personal + administrado           | ✅ Apertura en navegador predeterminado · ✅ sesión aislada Playwright para control verificable                                                                        |
+| Permisos por capacidad                      | ✅ Aplicaciones · navegador · pantalla · puntero · teclado · procesos · cámara                                                                                         |
 | Sandbox de proceso                          | ✅ Windows AppContainer · ✅ Linux <code>bwrap</code> cuando está disponible · ⚠️ macOS sin sandbox adicional de OpenClaw. El health check informa el estado efectivo. |
 
 El proyecto se desarrolla por fases y se entrega de forma incremental (ver el historial de `git log` para la estrategia completa y las siguientes entregas).
@@ -557,17 +580,20 @@ El proyecto se desarrolla por fases y se entrega de forma incremental (ver el hi
 
 ## 8. Documentación
 
-| Documento                                        | Contenido                              |
-| ------------------------------------------------ | -------------------------------------- |
-| [`docs/README.md`](./docs/README.md)             | Centro documental y selector de idioma |
-| [`docs/arquitectura.md`](./docs/arquitectura.md) | Diagrama de arquitectura detallado     |
-| [`core/`](./core/README.md)                      | Núcleo de inteligencia y orquestación  |
-| [`core/git/`](./core/git/README.md)              | Integración nativa con Git             |
-| [`core/github/`](./core/github/README.md)        | Cliente REST de GitHub y OAuth         |
-| [`infrastructure/`](./infrastructure/README.md)  | Capa de bajo nivel                     |
-| [`ipc/`](./ipc/README.md)                        | Capa IPC (renderer ↔ núcleo)           |
-| [`src/`](./src/README.md)                        | Interfaz de usuario                    |
-| [`tests/`](./tests/README.md)                    | Estrategia de pruebas                  |
+| Documento                                          | Contenido                                   |
+| -------------------------------------------------- | ------------------------------------------- |
+| [`docs/README.md`](./docs/README.md)               | Centro documental y selector de idioma      |
+| [`docs/arquitectura.md`](./docs/arquitectura.md)   | Diagrama de arquitectura detallado          |
+| [`docs/agente-codigo.md`](./docs/agente-codigo.md) | Flujo de ingeniería, verificación y límites |
+| [Aviso de privacidad](./docs/web/privacy.html)     | Datos, transferencias, retención y derechos |
+| [Términos de uso](./docs/web/terms.html)           | Condiciones, riesgos y terceros             |
+| [`core/`](./core/README.md)                        | Núcleo de inteligencia y orquestación       |
+| [`core/desktop/`](./core/desktop/README.md)        | Automatización y permisos de escritorio     |
+| [`core/github/`](./core/github/README.md)          | Cliente REST de GitHub y OAuth              |
+| [`infrastructure/`](./infrastructure/README.md)    | Capa de bajo nivel                          |
+| [`ipc/`](./ipc/README.md)                          | Capa IPC (renderer ↔ núcleo)                |
+| [`src/`](./src/README.md)                          | Interfaz de usuario                         |
+| [`tests/`](./tests/README.md)                      | Estrategia de pruebas                       |
 
 ---
 
@@ -579,8 +605,8 @@ La suite es **ejecutable e independiente por archivo** (<code>tests/</code>) y c
 
 Calidad de código:
 
-- `npm run lint` — ESLint (0 errores).
-- `npm run typecheck` — `tsc` sobre los módulos con `// @ts-check` (JSDoc estricto, 0 errores).
+- `npm run lint` — ESLint; el reporte del comando es la fuente del estado actual.
+- `npm run typecheck` — `tsc` sobre los módulos con `// @ts-check`; el reporte completo es la fuente del estado actual y los módulos nuevos no deben aumentar la deuda existente.
 - `npm run format:check` — Prettier.
 
 ### Pruebas
@@ -629,6 +655,6 @@ El overlay Live2D con el modelo por defecto (**March 7th**) sobre el escritorio,
 
 El código fuente se distribuye bajo licencia **MIT** — ver [`LICENSE`](./LICENSE).
 
-**Los assets del modelo Live2D de `models/March 7th/`** son propiedad de Cognosphere Pte. Ltd. / HoYoverse (personaje _March 7th_ de _Honkai: Star Rail_) y se usan aquí como contenido de fan sin fines comerciales. Es el único modelo que se distribuye con el repo; los modelos que el usuario importa quedan fuera del control de versiones. Cualquier reutilización de este proyecto debe proveer su propio modelo o excluir esa carpeta.
+**Los assets del modelo Live2D de `models/March 7th/`** son propiedad de Cognosphere Pte. Ltd. / HoYoverse (personaje _March 7th_ de _Honkai: Star Rail_). La licencia MIT del código no concede derechos sobre esos assets ni sobre otras marcas o personajes de terceros. Es el único modelo incluido en el repositorio; quien redistribuya el proyecto debe verificar que cuenta con autorización, sustituirlo por assets propios o excluir esa carpeta.
 
 Este proyecto es un trabajo de fan **no oficial**, sin afiliación con Cognosphere Pte. Ltd. ni con HoYoverse.

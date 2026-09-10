@@ -10,6 +10,7 @@ acoplarse a ninguna herramienta específica. La funcionalidad se amplía agregan
 Gestiona el ciclo de vida completo de los servidores MCP conectados vía `npx -y <paquete>` (stdio).
 
 **Responsabilidades:**
+
 - Conectar servidores por nombre (registro oficial) o configuración manual.
 - **Reconexión automática** con backoff exponencial si un servidor cae a mitad de sesión.
 - **Namespacing** de herramientas por servidor (`filesystem:list_directory`).
@@ -19,17 +20,17 @@ Gestiona el ciclo de vida completo de los servidores MCP conectados vía `npx -y
 
 **API pública:**
 
-| Función | Propósito |
-|---|---|
-| `init(servers)` | Inicializa servidores desde `config.json` |
-| `addServer(cfg)` | Agrega y conecta un nuevo servidor |
-| `removeServer(id)` | Desconecta y elimina un servidor |
-| `toggleServer(id, enabled)` | Activa/desactiva sin eliminar |
-| `listServers()` | Lista servidores con estado |
-| `listAllTools()` | Lista herramientas de todos los servidores |
-| `hasConnectedServers()` | ¿Hay algún servidor conectado? |
-| `searchRegistry(query)` | Busca en el registro oficial |
-| `disconnectAll()` | Desconecta todos |
+| Función                     | Propósito                                  |
+| --------------------------- | ------------------------------------------ |
+| `init(servers)`             | Inicializa servidores desde `config.json`  |
+| `addServer(cfg)`            | Agrega y conecta un nuevo servidor         |
+| `removeServer(id)`          | Desconecta y elimina un servidor           |
+| `toggleServer(id, enabled)` | Activa/desactiva sin eliminar              |
+| `listServers()`             | Lista servidores con estado                |
+| `listAllTools()`            | Lista herramientas de todos los servidores |
+| `hasConnectedServers()`     | ¿Hay algún servidor conectado?             |
+| `searchRegistry(query)`     | Busca en el registro oficial               |
+| `disconnectAll()`           | Desconecta todos                           |
 
 ---
 
@@ -41,6 +42,16 @@ Gestiona el ciclo de vida completo de los servidores MCP conectados vía `npx -y
 - En el `ToolResolver`, el dominio MCP excluye las herramientas OpenClaw superpuestas (precedencia
   Skill > MCP > OpenClaw), evitando herramientas duplicadas para la misma tarea.
 - La UI expone un modal de administración: biblioteca oficial + configuración JSON manual.
+
+## Privacidad y confianza
+
+Cada servidor MCP es un proceso de terceros con sus propias herramientas y destinos de red. Kaoru
+reduce el entorno heredado y permite guardar referencias a secretos en el llavero, pero no controla
+la política de privacidad ni el código de un paquete instalado con `npx`. Los argumentos enviados a
+una herramienta MCP pueden incluir contenido del usuario o del workspace; revisa paquete, versión,
+permisos y política del proveedor antes de conectarlo. El resultado se marca como contenido no
+confiable al volver al modelo, lo que mitiga inyección de prompt pero no revierte una acción ya
+ejecutada por el servidor.
 
 ```mermaid
 flowchart LR

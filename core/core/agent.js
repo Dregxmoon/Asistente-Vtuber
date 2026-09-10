@@ -340,6 +340,7 @@ async function runAgent(userMessage, opts = {}) {
     bridge: state.bridge,
     mode,
     lsp: state.lspManager,
+    repositoryIntelligence: state.repositoryIntelligence,
     graph: state.graph && !state.graph.usingFallback ? state.graph : null,
     checkpoint,
     telemetry: state.telemetry || null,

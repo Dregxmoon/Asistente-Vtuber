@@ -31,6 +31,11 @@ async function startMicRecording() {
     setAgentState('error', 'Micrófono no disponible (getUserMedia)');
     return false;
   }
+  // Barge-in explícito: pulsar el micrófono siempre gana sobre la voz de
+  // Kaoru. No activa escucha ambiental ni mantiene el dispositivo abierto.
+  if (typeof globalThis.interruptSpeech === 'function') {
+    globalThis.interruptSpeech('microphone');
+  }
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   _micStream = stream;
   const ctx = new AudioContext({ sampleRate: 16000 });
@@ -70,12 +75,13 @@ async function stopMicRecording() {
   _micCtx = null;
   _micStream = null;
 
-  const sampleLen = _micSamples.reduce((n, a) => n + a.length, 0);
+  const samples = _micSamples;
+  const sampleLen = samples.reduce((n, a) => n + a.length, 0);
   _micSamples = [];
   if (sampleLen < 1600) return null; // <100 ms de audio → ignorar (clic accidental)
   const merged = new Float32Array(sampleLen);
   let off = 0;
-  for (const a of _micSamples) {
+  for (const a of samples) {
     merged.set(a, off);
     off += a.length;
   }

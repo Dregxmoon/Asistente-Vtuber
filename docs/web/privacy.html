@@ -1,326 +1,441 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Aviso de Privacidad — Kaoru</title>
-<style>
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 760px; margin: 60px auto; padding: 0 20px; line-height: 1.65; color: #222; }
-  h1 { font-size: 1.8em; }
-  h2 { font-size: 1.25em; margin-top: 2em; border-bottom: 1px solid #eee; padding-bottom: 0.3em; }
-  h3 { font-size: 1.05em; margin-top: 1.2em; }
-  a { color: #2563eb; }
-  ul { padding-left: 1.2em; }
-  li { margin-bottom: 0.4em; }
-  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.95em; }
-  th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; vertical-align: top; }
-  th { background: #f5f5f5; }
-  .updated { color: #888; font-size: 0.9em; }
-  .badge { display: inline-block; background: #eef2ff; color: #4338ca; font-size: 0.8em; padding: 2px 8px; border-radius: 10px; margin-left: 6px; }
-  .note { background: #fffbeb; border-left: 4px solid #f59e0b; padding: 10px 14px; margin: 1em 0; font-size: 0.95em; }
-  .toc { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 20px; font-size: 0.92em; }
-  .toc a { display: block; margin: 3px 0; }
-</style>
-</head>
-<body>
-  <p><a href="index.html">← Volver a Kaoru</a></p>
-  <h1>Aviso de Privacidad de Kaoru</h1>
-  <p class="updated">Última actualización: septiembre de 2026</p>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Aviso de privacidad de Kaoru: datos locales, proveedores externos, automatización de escritorio, retención y derechos."
+    />
+    <title>Aviso de privacidad — Kaoru</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --ink: #18202b;
+        --muted: #5f6b7a;
+        --line: #d8dee8;
+        --panel: #f6f8fb;
+        --link: #3157c8;
+        --accent: #7557d8;
+        --warn: #fff7df;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --ink: #e7eaf0;
+          --muted: #aab3c2;
+          --line: #3b4350;
+          --panel: #202630;
+          --link: #9eb6ff;
+          --warn: #3a311b;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        max-width: 880px;
+        margin: 48px auto;
+        padding: 0 22px 64px;
+        font:
+          16px/1.65 system-ui,
+          -apple-system,
+          'Segoe UI',
+          sans-serif;
+        color: var(--ink);
+      }
+      h1 {
+        font-size: 2rem;
+        margin-bottom: 0.15rem;
+      }
+      h2 {
+        margin-top: 2.2rem;
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 0.35rem;
+      }
+      h3 {
+        margin-top: 1.45rem;
+      }
+      a {
+        color: var(--link);
+      }
+      nav a {
+        margin-right: 1rem;
+      }
+      .updated,
+      .muted {
+        color: var(--muted);
+      }
+      .toc,
+      .note {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 14px 18px;
+      }
+      .toc a {
+        display: block;
+        margin: 0.2rem 0;
+      }
+      .note {
+        border-left: 4px solid var(--accent);
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 1rem 0;
+        font-size: 0.94rem;
+      }
+      th,
+      td {
+        border: 1px solid var(--line);
+        padding: 9px 11px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        background: var(--panel);
+      }
+      code {
+        background: var(--panel);
+        padding: 0.1rem 0.3rem;
+        border-radius: 4px;
+      }
+      footer {
+        margin-top: 3rem;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <nav aria-label="Navegación principal">
+      <a href="index.html">Inicio</a><a href="terms.html">Términos de uso</a
+      ><a href="https://github.com/Dregxmoon/Kaoru-Agent">Código fuente</a>
+    </nav>
+    <h1>Aviso de privacidad de Kaoru</h1>
+    <p class="updated">Última actualización: 8 de septiembre de 2026</p>
+    <p>
+      Este aviso explica qué información puede tratar la aplicación de escritorio Kaoru, dónde se
+      guarda, cuándo puede salir del dispositivo y qué controles tiene el usuario. Se preparó con
+      referencia a la Ley Federal de Protección de Datos Personales en Posesión de los Particulares
+      (LFPDPPP) vigente en México. Describe la implementación actual; no sustituye una revisión
+      legal profesional para una distribución o actividad concreta.
+    </p>
 
-  <p>
-    Este Aviso de Privacidad se emite en cumplimiento de la Ley Federal de Protección de Datos Personales
-    en Posesión de los Particulares (LFPDPPP) de México, y describe además, en términos claros, todo lo
-    que Kaoru puede observar en tu equipo y todos los terceros a los que tu información puede llegar —
-    no solo lo relacionado con tu cuenta de Google.
-  </p>
+    <div class="note">
+      <strong>Resumen:</strong> Kaoru no opera un servidor central para almacenar conversaciones. La
+      memoria, los embeddings, preferencias y telemetría se guardan localmente. Sin embargo, Kaoru
+      no es necesariamente offline: los mensajes y el contexto seleccionado pueden enviarse al
+      proveedor de IA configurado; la voz sintetizada usa Microsoft; y las integraciones, sitios,
+      plugins o servidores MCP que actives pueden recibir datos necesarios para la tarea.
+    </div>
 
-  <nav class="toc">
-    <strong>Contenido</strong>
-    <a href="#responsable">1. Identidad y domicilio del responsable</a>
-    <a href="#datos">2. Qué datos trata Kaoru</a>
-    <a href="#ia">3. Modelos de lenguaje (IA) de terceros que procesan tus conversaciones</a>
-    <a href="#voz">4. Voz: reconocimiento local y síntesis en la nube</a>
-    <a href="#proactividad">5. Proactividad: cuándo Kaoru toma la iniciativa</a>
-    <a href="#almacenamiento">6. Dónde se almacenan tus datos</a>
-    <a href="#retencion">7. Retención y eliminación de datos</a>
-    <a href="#revocar">8. Cómo revocar el acceso a Google</a>
-    <a href="#arco">9. Derechos ARCO</a>
-    <a href="#responsable-uso">10. Uso responsable — solo para tu propio equipo</a>
-    <a href="#menores">11. Menores de edad</a>
-    <a href="#cambios">12. Cambios a este aviso</a>
-    <a href="#contacto">13. Contacto</a>
-  </nav>
+    <nav class="toc" aria-label="Contenido">
+      <strong>Contenido</strong>
+      <a href="#responsable">1. Responsable y contacto</a>
+      <a href="#datos">2. Datos y finalidades</a>
+      <a href="#transferencias">3. Transferencias y terceros</a>
+      <a href="#google">4. Google Workspace y Uso Limitado</a>
+      <a href="#desktop">5. Escritorio, navegador y permisos</a>
+      <a href="#seguridad">6. Almacenamiento y seguridad</a>
+      <a href="#retencion">7. Retención y eliminación</a>
+      <a href="#derechos">8. Derechos y revocación</a>
+      <a href="#menores">9. Uso autorizado y menores</a>
+      <a href="#cambios">10. Cambios</a>
+    </nav>
 
-  <h2 id="responsable">1. Identidad y domicilio del responsable</h2>
-  <p>
-    Kaoru es un proyecto independiente desarrollado por Dregxmoon, operando desde Tijuana, Baja California,
-    México. Para cualquier asunto relacionado con tus datos personales, contacto:
-    <a href="mailto:dregxmoon@gmail.com">dregxmoon@gmail.com</a>.
-  </p>
+    <h2 id="responsable">1. Responsable y contacto</h2>
+    <p>
+      Kaoru es un proyecto independiente desarrollado por Dregxmoon, operado desde Tijuana, Baja
+      California, México. Para solicitudes de privacidad o dudas sobre este aviso escribe a
+      <a href="mailto:dregxmoon@gmail.com">dregxmoon@gmail.com</a>. Dregxmoon no recibe una copia
+      automática de la base de datos local ni de las claves que configuras.
+    </p>
 
-  <h2 id="datos">2. Qué datos trata Kaoru</h2>
-  <p>Kaoru corre localmente en tu equipo, como una aplicación de escritorio. Divido los datos en tres grupos, según su origen.</p>
+    <h2 id="datos">2. Datos y finalidades</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Categoría</th>
+          <th>Ejemplos</th>
+          <th>Finalidad</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Conversación y archivos elegidos</td>
+          <td>Mensajes, adjuntos, fragmentos del workspace y resultados de herramientas</td>
+          <td>Responder, planear, ejecutar y verificar la tarea solicitada.</td>
+        </tr>
+        <tr>
+          <td>Memoria y sesiones</td>
+          <td>
+            Hechos declarados, preferencias, episodios, historial de conversación, intenciones y
+            creencias inferidas identificadas como tales
+          </td>
+          <td>Continuidad entre sesiones, recuperación semántica y personalización.</td>
+        </tr>
+        <tr>
+          <td>Contexto del sistema</td>
+          <td>
+            Aplicación o ventana activa, inactividad, uso de recursos, señales Git/LSP, títulos con
+            errores, recordatorios y portapapeles técnico cuando se activa
+          </td>
+          <td>
+            Dar contexto y decidir de forma determinista si una sugerencia proactiva es oportuna.
+          </td>
+        </tr>
+        <tr>
+          <td>Automatización</td>
+          <td>
+            Árbol de accesibilidad, ventanas, capturas de pantalla, coordenadas efímeras,
+            nombres/PID de procesos y resultado de acciones
+          </td>
+          <td>Controlar y verificar aplicaciones o interfaces cuando lo solicitas.</td>
+        </tr>
+        <tr>
+          <td>Integraciones</td>
+          <td>
+            Contenido de Google Workspace, GitHub, páginas web, servidores MCP o plugins habilitados
+          </td>
+          <td>Prestar la integración o herramienta elegida.</td>
+        </tr>
+        <tr>
+          <td>Diagnóstico local</td>
+          <td>Duración, herramienta, resultado, clase de fallo y logs técnicos</td>
+          <td>Depuración, seguridad, métricas locales y mejora del funcionamiento.</td>
+        </tr>
+        <tr>
+          <td>Credenciales</td>
+          <td>Claves API, tokens OAuth y configuración de proveedores</td>
+          <td>Autenticar directamente las conexiones que configuras.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Las funciones básicas necesarias son responder y mantener la sesión. Memoria persistente,
+      proactividad, sensores, voz, Google/GitHub, automatización, plugins y MCP son funciones que
+      eliges configurar o utilizar. Evita proporcionar datos sensibles que no sean necesarios para
+      tu tarea o información de terceros sin autorización.
+    </p>
 
-  <h3>2.1 Datos de tu cuenta de Google (solo si tú los conectas)</h3>
-  <p>
-    Kaoru <strong>no trae credenciales propias de Google</strong>. Para conectar tu cuenta, tú mismo creas un
-    proyecto en Google Cloud Console y tu propio cliente OAuth (te marcas a ti mismo como usuario de prueba).
-    Esto significa que Dregxmoon nunca recibe ni ve tus tokens de acceso a Google: la conexión ocurre directamente
-    entre tu equipo y los servidores de Google, usando las credenciales que tú generaste.
-  </p>
-  <p>Dependiendo de qué servicios actives en el asistente de conexión y si eliges el modo "solo lectura", Kaoru puede acceder a:</p>
-  <ul>
-    <li><strong>Google Calendar</strong> — tus eventos, para responder preguntas sobre tu agenda.</li>
-    <li><strong>Gmail</strong> — tus correos, para resumirlos o consultarlos cuando lo pidas.</li>
-    <li><strong>Google Drive</strong> — archivos que tú abres o compartes explícitamente con Kaoru.</li>
-    <li><strong>Google Docs</strong> — lectura/edición de documentos, si activas ese servicio.</li>
-    <li><strong>Google Sheets</strong> — lectura/edición de hojas de cálculo, si activas ese servicio.</li>
-    <li><strong>Google Tasks</strong> — tus listas de tareas, si activas ese servicio.</li>
-    <li><strong>Contactos (People API)</strong> — tu libreta de contactos, si activas ese servicio.</li>
-  </ul>
-  <div class="note">
-    <strong>Importante — lectura vs. escritura:</strong> tú eliges, al conectar tu cuenta, si Kaoru opera en modo
-    <strong>solo lectura</strong> o si le permites también <strong>escribir/modificar</strong> (por ejemplo, crear
-    eventos, enviar correos, editar documentos). Revisa esa opción con cuidado antes de conectar tu cuenta: cuantos
-    más servicios actives y menos restrictivo sea el modo, mayor es el alcance de lo que Kaoru puede leer o cambiar
-    en tu cuenta de Google.
-  </div>
-  <p>
-    <strong>Aviso de Uso Limitado de Google:</strong> el uso y la transferencia de información recibida de las APIs
-    de Google por parte de Kaoru se ajusta a la
-    <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener">Política de Datos de Usuario de los Servicios de API de Google</a>,
-    incluyendo los requisitos de Uso Limitado ("Limited Use"). En particular: los datos que obtiene de tu cuenta de
-    Google se usan únicamente para darte la funcionalidad del asistente que tú solicitas, no se venden, no se usan
-    para publicidad, y solo se comparten con los proveedores de modelos de lenguaje descritos en la sección 3 cuando
-    tú le pides a Kaoru una acción que requiere ese contenido (por ejemplo, "resume este correo").
-  </p>
+    <h2 id="transferencias">3. Transferencias y terceros</h2>
+    <p>
+      El proveedor LLM activo recibe el prompt necesario para responder. Puede contener mensajes,
+      memoria recuperada, contexto del sistema, contenido de archivos o servicios conectados,
+      resultados de herramientas y una captura JPEG/PNG cuando una tarea visual lo requiere. Kaoru
+      admite proveedores integrados y endpoints compatibles con OpenAI, incluidos endpoints locales;
+      el selector de la aplicación muestra el catálogo disponible en ese momento.
+    </p>
+    <ul>
+      <li>
+        <strong>Proveedor LLM elegido:</strong> procesa solicitudes conforme a su contrato, región,
+        retención y política. Revisa esos documentos antes de añadir una clave o endpoint.
+      </li>
+      <li>
+        <strong>Microsoft Edge TTS:</strong> recibe el texto que se convertirá en audio. Vosk
+        transcribe la entrada de voz localmente.
+      </li>
+      <li>
+        <strong>Google y GitHub:</strong> reciben llamadas directas desde el dispositivo si conectas
+        y usas esas cuentas.
+      </li>
+      <li>
+        <strong>Web y navegador:</strong> los sitios reciben solicitudes, dirección IP y datos que
+        introduzcas; sus cookies y políticas aplican.
+      </li>
+      <li>
+        <strong>MCP y plugins:</strong> son extensiones de terceros y pueden recibir contexto o
+        ejecutar código según su implementación. Instálalos únicamente si confías en su origen y
+        permisos.
+      </li>
+      <li>
+        <strong>Catálogo y actualizaciones:</strong> Kaoru puede consultar metadatos públicos de
+        modelos en models.dev y versiones en GitHub; esas consultas no necesitan incluir la
+        conversación.
+      </li>
+    </ul>
+    <p>
+      Dregxmoon no vende datos personales ni los usa para publicidad conductual. Cuando configuras
+      un servicio de terceros, la transmisión ocurre directamente desde tu equipo y también queda
+      sujeta a los términos y políticas de ese tercero.
+    </p>
+    <p>
+      Referencias de los servicios principales:
+      <a href="https://openai.com/policies/privacy-policy/">OpenAI</a>,
+      <a href="https://policies.google.com/privacy">Google</a>,
+      <a href="https://privacy.microsoft.com/privacystatement">Microsoft</a> y
+      <a
+        href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement"
+        >GitHub</a
+      >. Si conectas otro proveedor, revisa la política que muestre ese proveedor antes de usarlo.
+    </p>
 
-  <h3>2.2 Datos observados localmente en tu equipo (sensores) <span class="badge">no se envían a Google ni a nadie</span></h3>
-  <p>
-    Para poder ayudarte de forma proactiva, Kaoru puede observar señales de tu actividad en el equipo donde está
-    instalado. Son <strong>siete sensores en total</strong>, cada uno independiente y desactivable por separado:
-  </p>
+    <h2 id="google">4. Google Workspace y Uso Limitado</h2>
+    <p>
+      Google Workspace es opcional. El usuario crea o proporciona el cliente OAuth y elige servicios
+      y alcance: Calendar, Gmail, Drive, Docs, Sheets, Tasks o Contacts; solo lectura o escritura
+      cuando la integración lo admite. Autoriza el mínimo alcance necesario y revócalo cuando deje
+      de usarlo.
+    </p>
+    <div class="note">
+      <strong>Declaración de Uso Limitado:</strong> el uso y la transferencia de información
+      recibida de las APIs de Google por Kaoru se ajustan a la
+      <a href="https://developers.google.com/terms/api-services-user-data-policy"
+        >Política de Datos de Usuario de los Servicios de API de Google</a
+      >, incluidos sus requisitos de Limited Use. Se utiliza para proporcionar o mejorar la función
+      visible solicitada por el usuario; no se vende, no se usa para publicidad y no se transfiere a
+      personas para fines no relacionados. Puede enviarse al proveedor LLM elegido únicamente cuando
+      sea necesario para una acción solicitada por el usuario, como resumir un correo.
+    </div>
 
-  <table>
-    <tr><th>Sensor</th><th>Qué observa</th><th>Para qué</th><th>¿Se puede desactivar?</th></tr>
-    <tr><td>Sensor de sistema operativo</td><td>Aplicación y ventana activa, tiempo de inactividad, ventanas abiertas. Clasifica lo que usas por categoría (código, terminal, navegador, diseño, documentos, chat, medios, archivos, sistema, juegos)</td><td>Saber en qué estás trabajando para ofrecer ayuda relevante y no interrumpir en mal momento</td><td>Sí, en configuración de sensores</td></tr>
-    <tr><td>Git</td><td>Estado de tus repositorios: archivos <code>.env</code> sin ignorar, conflictos de fusión, muchos cambios sin commitear, commits sin subir, cambios de rama</td><td>Avisarte de riesgos comunes al programar</td><td>Sí</td></tr>
-    <tr><td>Editor de código (LSP)</td><td>Errores reportados por tu editor en el archivo que tienes enfocado</td><td>Proponerte correcciones</td><td>Sí</td></tr>
-    <tr><td>Sistema</td><td>Uso de CPU, RAM, disco y batería</td><td>Avisar sobre condiciones del sistema que podrían afectarte</td><td>Sí</td></tr>
-    <tr><td>Títulos de ventana</td><td>Títulos con señales de error (con filtro de duplicados)</td><td>Detectar errores visibles en pantalla</td><td>Sí</td></tr>
-    <tr><td>Eventos próximos</td><td>Recordatorios que tú mismo guardaste en la memoria de Kaoru (por ejemplo "recuérdame la junta del jueves")</td><td>Avisarte antes de que llegue la hora</td><td>Sí</td></tr>
-    <tr><td><strong>Portapapeles</strong></td><td>Fragmentos de código o URLs copiados (el texto normal se ignora)</td><td>Detectar fragmentos de código o URLs útiles</td><td><strong>Desactivado por defecto — requiere que tú lo actives explícitamente (opt-in)</strong></td></tr>
-  </table>
+    <h2 id="desktop">5. Escritorio, navegador y permisos</h2>
+    <p>
+      Las capacidades de aplicaciones, navegador, pantalla, puntero, teclado, procesos y cámara
+      tienen interruptores independientes. También se aplican reglas <code>allow</code>,
+      <code>ask</code> y <code>deny</code>; una aprobación reduce riesgo, pero no garantiza que una
+      acción produzca el resultado esperado.
+    </p>
+    <ul>
+      <li>
+        <strong>Accesibilidad:</strong> Kaoru lee controles mediante AT-SPI2 en Linux o UI
+        Automation en Windows. macOS no tiene todavía la misma paridad de control semántico.
+      </li>
+      <li>
+        <strong>Captura y clic visual:</strong> para canvas o juegos puede capturar la pantalla. La
+        coordenada queda ligada a esa imagen, expira a los 30 segundos, se usa una vez y exige otra
+        observación. La imagen puede enviarse al LLM visual activo.
+      </li>
+      <li>
+        <strong>Navegador personal:</strong> <code>open_website</code> pide al sistema abrir una URL
+        en tu navegador predeterminado, conservando tu sesión. Kaoru no importa directamente cookies
+        ni contraseñas de ese navegador.
+      </li>
+      <li>
+        <strong>Navegador administrado:</strong> búsquedas y flujos verificables usan un perfil
+        Chromium separado y persistente. Si inicias sesión allí, sus cookies quedan en el directorio
+        de datos de Kaoru hasta que lo elimines.
+      </li>
+      <li>
+        <strong>Procesos:</strong> puede listar nombre y PID y solicitar detener un proceso. Revisa
+        el destino: la postcondición de cierre puede no estar verificada.
+      </li>
+      <li>
+        <strong>Cámara:</strong> la herramienta actual consulta estado o abre la aplicación de
+        cámara; no toma fotos ni graba vídeo.
+      </li>
+    </ul>
 
-  <div class="note">
-    <strong>Aviso importante sobre el portapapeles y los títulos de ventana:</strong> estas dos señales, por su naturaleza,
-    podrían capturar accidentalmente información sensible que tú mismo copies o tengas visible (contraseñas, datos
-    financieros, información médica, mensajes de terceros). Kaoru no analiza intencionalmente ese contenido más allá
-    de detectar patrones técnicos (código, URLs, errores), pero como el dato pasa por el sistema, es tu responsabilidad
-    evaluar si quieres activar el sensor de portapapeles, y evitar copiar información sensible mientras esté activo.
-  </div>
+    <h2 id="seguridad">6. Almacenamiento y seguridad</h2>
+    <p>
+      Memoria, sesiones, telemetría y configuración se guardan en el directorio local
+      <code>userData</code> de Electron. Los embeddings se calculan localmente. Las claves se
+      guardan preferentemente en el almacén seguro del sistema (Keychain, Credential Manager o
+      Secret Service). Si no está disponible, la compatibilidad puede recurrir a <code>.env</code> o
+      <code>config.json</code> en texto legible por el usuario del sistema; protege los permisos del
+      dispositivo y no compartas esos archivos.
+    </p>
+    <p>
+      Kaoru usa aislamiento de renderer, validación IPC, controles de ruta, permisos y registros sin
+      secretos conocidos. Ningún control elimina por completo el riesgo de vulnerabilidades,
+      extensiones maliciosas, errores del modelo o acceso de otra persona al perfil del sistema
+      operativo.
+    </p>
 
-  <h3>2.3 Memoria: qué recuerda Kaoru de ti y cómo <span class="badge">se guarda solo en tu equipo</span></h3>
-  <p>
-    Kaoru mantiene un grafo de memoria a largo plazo en una base de datos local (SQLite, en tu propio equipo). No es
-    solo una lista de notas: distingue distintos tipos de memoria, cada uno con su propio propósito.
-  </p>
-  <table>
-    <tr><th>Tipo de memoria</th><th>Qué guarda</th></tr>
-    <tr><td>Hechos declarados</td><td>Lo que tú dices explícitamente: tu nombre, edad, ciudad, trabajo, gustos y preferencias.</td></tr>
-    <tr><td>Episodios</td><td>Resúmenes de tramos de tus conversaciones, generados por el proveedor de IA que configuraste (sección 3) cuando cierras una sesión de chat.</td></tr>
-    <tr><td>Creencias inferidas</td><td>Patrones que Kaoru detecta al revisar varias conversaciones antiguas en conjunto y le pide al modelo de IA que infiera (por ejemplo, un hábito que nunca dijiste directamente). Se marcan como "inferido", nunca se mezclan con lo que tú dijiste literalmente, y tú puedes <strong>aceptarlas o rechazarlas</strong>.</td></tr>
-    <tr><td>Historial de aplicaciones</td><td>Qué apps usaste, cuánto tiempo y en qué categoría, por día (se elimina automáticamente después de 30 días).</td></tr>
-    <tr><td>Memoria de trabajo</td><td>Notas de corto plazo que Kaoru usa mientras resuelve una tarea puntual y que expiran solas.</td></tr>
-    <tr><td>Observaciones de sensores</td><td>Lo que capturan los sensores de la sección 2.2 se guarda primero con una etiqueta de sensibilidad (pública / privada / sensible); una observación no se vuelve un "hecho" recordado a menos que haya evidencia clara de que debe serlo.</td></tr>
-  </table>
-  <ul>
-    <li><strong>Búsqueda por significado, 100% local:</strong> para encontrar recuerdos relevantes, Kaoru usa un
-      modelo de embeddings (<em>Xenova/all-MiniLM-L6-v2</em>) que corre en tu propio equipo, en un proceso aparte.
-      Esta búsqueda nunca sale de tu computadora.</li>
-    <li><strong>La extracción de hechos y episodios sí usa IA externa:</strong> al cerrar una sesión, un resumen de
-      esa conversación se envía al proveedor de IA que configuraste (Groq/Gemini/OpenAI/Anthropic/etc., ver sección 3)
-      para identificar qué vale la pena recordar — de la misma forma que cuando chateas normalmente con Kaoru.</li>
-    <li><strong>La memoria envejece:</strong> la información pierde relevancia con el tiempo (decaimiento automático)
-      y puede archivarse o resumirse en una "creencia consolidada" cuando ya no hace falta el detalle completo.</li>
-    <li><strong>Contradicciones:</strong> si dices algo que contradice un recuerdo anterior, Kaoru lo reemplaza,
-      archiva el dato viejo, lo acumula como historial, o — si no está seguro — guarda ambas versiones marcadas como
-      "en tensión" hasta que tú aclares cuál es correcta.</li>
-    <li><strong>Transparencia y control:</strong> puedes pedirle a Kaoru que te muestre de dónde viene un recuerdo
-      (qué conversación lo originó), aceptar o rechazar cualquier creencia inferida, y borrar cualquier recuerdo en
-      cualquier momento (ver sección 7, Retención y eliminación).</li>
-  </ul>
+    <h2 id="retencion">7. Retención y eliminación</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Dato local</th>
+          <th>Retención actual</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Historial de aplicaciones</td>
+          <td>Poda automática a 30 días.</td>
+        </tr>
+        <tr>
+          <td>Telemetría local</td>
+          <td>Hasta 90 días.</td>
+        </tr>
+        <tr>
+          <td>Logs</td>
+          <td>
+            Archivo activo y una rotación, hasta 5 MiB cada uno; la rotación es por tamaño, no por
+            días.
+          </td>
+        </tr>
+        <tr>
+          <td>Captura ligada al puntero</td>
+          <td>
+            Referencia en memoria de hasta 30 segundos o hasta el primer clic. Una copia enviada a
+            un proveedor se rige por la retención de ese proveedor.
+          </td>
+        </tr>
+        <tr>
+          <td>Memoria y sesiones</td>
+          <td>
+            Hasta que las borres o sean archivadas por las reglas de decaimiento. Archivar es
+            borrado lógico, no eliminación física inmediata.
+          </td>
+        </tr>
+        <tr>
+          <td>Perfil del navegador administrado y checkpoints</td>
+          <td>
+            Persisten en los datos locales hasta limpieza manual o por la función correspondiente.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Puedes pedir a Kaoru olvidar recuerdos, desconectar integraciones y eliminar los datos de la
+      aplicación desde el directorio de datos de tu sistema operativo. Desinstalar la aplicación
+      puede no borrar ese directorio. Haz una copia si necesitas conservar algo y cierra Kaoru antes
+      de borrar archivos. Las copias de seguridad del sistema y los proveedores externos tienen
+      ciclos propios.
+    </p>
 
-  <h3>2.4 Datos generados por la actividad del agente</h3>
-  <p>
-    Kaoru no solo observa: también puede <strong>actuar</strong> sobre tu equipo (editar archivos, ejecutar comandos,
-    operar Git) y, si lo conectas, sobre tu cuenta de GitHub (mediante su propio flujo de autorización OAuth). Estas
-    acciones generan datos adicionales, siempre almacenados localmente:
-  </p>
-  <ul>
-    <li><strong>GitHub (opcional):</strong> si conectas tu cuenta, Kaoru puede leer y crear issues/PRs u operar sobre tus repositorios según los permisos que autorices en GitHub.</li>
-    <li><strong>Navegador automatizado:</strong> Kaoru usa un navegador independiente (no tu navegador personal) para buscar y leer páginas web cuando se lo pides o cuando una tarea lo requiere. No tiene acceso a tus contraseñas guardadas ni sesiones iniciadas en tu navegador habitual, salvo que tú inicies sesión manualmente dentro de esa ventana automatizada.</li>
-    <li><strong>Puntos de control (checkpoints):</strong> antes de que el agente modifique archivos, Kaoru guarda una copia del estado previo para poder revertir cambios si algo sale mal. Estas copias se guardan localmente y se eliminan según la política de retención configurada.</li>
-  </ul>
-  <p>
-    El nivel de autonomía que elijas (Observar / Sugerir / Actuar) determina si estas acciones requieren tu confirmación
-    previa o pueden ejecutarse automáticamente bajo reglas de permiso que tú mismo configures. Consulta los
-    <a href="terms.html">Términos de Servicio</a> para el detalle de responsabilidades asociadas a cada nivel.
-  </p>
-  <p><strong>Finalidades necesarias</strong> (indispensables para que Kaoru funcione como asistente):</p>
-  <ul>
-    <li>Responder tus solicitudes usando el contexto que le compartes.</li>
-    <li>Recordar información relevante entre sesiones (memoria semántica local).</li>
-  </ul>
-  <p><strong>Finalidades voluntarias</strong> (requieren tu activación explícita, no son necesarias para el uso básico):</p>
-  <ul>
-    <li>Observación proactiva de sensores (Git, sistema, portapapeles, títulos de ventana) para que Kaoru te avise sin que se lo pidas.</li>
-    <li>Ejecución de acciones por el agente (editar archivos, ejecutar comandos, operar Git/GitHub, navegar la web) según el nivel de autonomía y reglas de permiso que configures.</li>
-    <li>Conexión con Google Calendar, Gmail, Drive, Docs, Sheets, Tasks o Contactos.</li>
-  </ul>
+    <h2 id="derechos">8. Derechos y revocación</h2>
+    <p>
+      Puedes solicitar acceso, rectificación, cancelación u oposición (derechos ARCO), limitar el
+      uso o revocar consentimiento escribiendo al correo de contacto. Incluye una descripción
+      suficiente de la solicitud; se podrá pedir información razonable para verificar identidad.
+      Como la mayor parte de los datos está en tu dispositivo, también puedes consultarla o
+      eliminarla localmente.
+    </p>
+    <p>
+      Revoca Google desde
+      <a href="https://myaccount.google.com/permissions">Permisos de tu cuenta de Google</a> y
+      GitHub desde la configuración de aplicaciones autorizadas de esa cuenta. Revocar impide
+      accesos futuros, pero no elimina automáticamente copias ya enviadas a un proveedor o incluidas
+      en respaldos.
+    </p>
 
-  <h2 id="ia">3. Modelos de lenguaje (IA) de terceros que procesan tus conversaciones</h2>
-  <p>
-    Kaoru no tiene un modelo de lenguaje propio: para generar respuestas usa un proveedor externo de IA que
-    <strong>tú configuras con tu propia clave de API</strong>. Trae integrados de fábrica:
-  </p>
-  <ul>
-    <li><strong>Groq</strong> (modelos Llama)</li>
-    <li><strong>Google Gemini</strong></li>
-    <li><strong>OpenAI</strong></li>
-    <li><strong>Anthropic</strong> (Claude)</li>
-    <li><strong>xAI</strong> (Grok)</li>
-    <li><strong>NVIDIA</strong> (NIM)</li>
-    <li><strong>Hugging Face</strong> (Inference API)</li>
-    <li><strong>DeepSeek</strong></li>
-  </ul>
-  <p>
-    Además, mediante el comando <code>/provider add</code> puedes conectar <strong>cualquier otro proveedor
-    compatible con la API de OpenAI</strong> — incluyendo un modelo que corras <strong>localmente en tu propio
-    equipo</strong> (por ejemplo con Ollama o LM Studio). Si usas un modelo local de esta forma, tus conversaciones
-    no salen de tu computadora en absoluto. Kaoru también puede consultar un catálogo remoto de modelos
-    (<a href="https://models.dev" target="_blank" rel="noopener">models.dev</a>) para ofrecerte más opciones al elegir
-    proveedor; esto solo consulta metadatos públicos de modelos, no envía tus conversaciones.
-  </p>
-  <p>
-    Cada mensaje que le escribes a Kaoru, junto con el contexto necesario para responderlo (por ejemplo, memoria
-    relevante de conversaciones anteriores, o contenido de un correo/evento que le pediste consultar), se envía al
-    proveedor que hayas configurado en ese momento, a través de tu propia clave de API. Ese proveedor procesa la
-    solicitud conforme a <strong>su propia</strong> política de privacidad — Dregxmoon no opera ni recibe copia de
-    esos modelos ni de tus conversaciones:
-  </p>
-  <ul>
-    <li><a href="https://groq.com/privacy-policy/" target="_blank" rel="noopener">Groq</a></li>
-    <li><a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google</a></li>
-    <li><a href="https://openai.com/policies/privacy-policy" target="_blank" rel="noopener">OpenAI</a></li>
-    <li><a href="https://www.anthropic.com/legal/privacy" target="_blank" rel="noopener">Anthropic</a></li>
-    <li><a href="https://x.ai/legal/privacy-policy" target="_blank" rel="noopener">xAI</a></li>
-    <li><a href="https://www.nvidia.com/en-us/about-nvidia/privacy-policy/" target="_blank" rel="noopener">NVIDIA</a></li>
-    <li><a href="https://huggingface.co/privacy" target="_blank" rel="noopener">Hugging Face</a></li>
-    <li><a href="https://deepseek.com/en/privacy-policy" target="_blank" rel="noopener">DeepSeek</a></li>
-  </ul>
-  <div class="note">
-    Si conectas un proveedor adicional con <code>/provider add</code> que no esté en esta lista, esa conexión y el
-    manejo de tus datos quedan sujetos a la política de privacidad de ese proveedor, no a la de Dregxmoon. Revísala
-    antes de conectar un proveedor externo que no reconozcas.
-  </div>
-  <p>
-    Tu clave de API se guarda cifrada en el almacén de credenciales de tu propio sistema operativo (Keychain en
-    macOS, Credential Manager en Windows, o Secret Service en Linux) — no se sube a ningún servidor de Dregxmoon.
-    Esta transferencia a un proveedor de IA solo ocurre cuando tú interactúas con Kaoru; no hay envío periódico
-    ni en segundo plano de tu información a estos proveedores.
-  </p>
+    <h2 id="menores">9. Uso autorizado y menores</h2>
+    <p>
+      Usa Kaoru solo en dispositivos, cuentas y espacios para los que tengas autorización. No lo
+      uses para vigilar a otras personas sin su conocimiento y consentimiento. Si el equipo
+      pertenece a una empresa o institución, respeta sus políticas. Kaoru está dirigido a mayores de
+      18 años o a la mayoría de edad aplicable; no busca recopilar deliberadamente datos de menores.
+    </p>
 
-  <h2 id="voz">4. Voz: reconocimiento local y síntesis en la nube</h2>
-  <ul>
-    <li><strong>Reconocimiento de voz (STT):</strong> se hace 100% localmente y sin conexión, usando el motor
-      Vosk. El audio de tu voz no sale de tu equipo para ser transcrito.</li>
-    <li><strong>Síntesis de voz (TTS) — que Kaoru te hable en voz alta:</strong> usa el servicio en la nube de
-      Microsoft Edge (edge-tts). El texto que Kaoru va a leerte en voz alta se envía a los servidores de
-      Microsoft para generar el audio correspondiente, sujeto a la
-      <a href="https://privacy.microsoft.com/es-mx/privacystatement" target="_blank" rel="noopener">Declaración de Privacidad de Microsoft</a>.
-      Esto ocurre únicamente cuando usas la salida de voz; si prefieres evitarlo, puedes usar Kaoru solo por texto.</li>
-  </ul>
+    <h2 id="cambios">10. Cambios</h2>
+    <p>
+      Este aviso se actualizará cuando cambien materialmente las capacidades, proveedores o
+      prácticas. La fecha superior identifica la versión vigente. Los cambios relevantes deben
+      comunicarse en el repositorio o en la aplicación antes o al entrar en vigor cuando sea
+      razonablemente posible.
+    </p>
 
-  <h2 id="proactividad">5. Proactividad: cuándo Kaoru toma la iniciativa</h2>
-  <p>
-    A diferencia de un chat normal, Kaoru puede <strong>hablarte primero</strong>, sin que tú escribas nada, basándose
-    en los sensores de la sección 2.2 y en tu memoria (sección 2.3). Ejemplos de lo que puede notar: llevas mucho
-    tiempo enfocado en el mismo proyecto, cambiaste de tarea muchas veces en pocos minutos, volviste de una pausa
-    larga, hay un error en tu editor, o se acerca un recordatorio que tú mismo guardaste.
-  </p>
-  <ul>
-    <li><strong>Un filtro determinista decide "cuándo", no la IA:</strong> cada señal pasa primero por reglas fijas
-      (¿estás en pleno flujo de trabajo?, ¿te interrumpió hace poco?, ¿cuántos avisos van hoy?) antes de pedirle al
-      modelo de lenguaje que redacte un mensaje. La IA solo participa para escribir el contenido, nunca para decidir
-      si interrumpirte.</li>
-    <li><strong>Consentimiento antes de actuar:</strong> si la iniciativa implica una acción real (no solo un mensaje),
-      Kaoru te la propone y espera tu confirmación, salvo que tú hayas configurado el nivel de autonomía "Actuar" con
-      una regla explícita que lo permita (ver <a href="terms.html">Términos de Servicio</a>).</li>
-    <li><strong>Aprende de tus respuestas:</strong> si sueles ignorar o rechazar cierto tipo de aviso, Kaoru espacia
-      ese tipo de interrupción con el tiempo; si los aceptas, los mantiene.</li>
-    <li><strong>Se puede apagar:</strong> puedes desactivar la proactividad por completo, o sensor por sensor, desde
-      la configuración de Kaoru.</li>
-  </ul>
-
-  <h2 id="almacenamiento">6. Dónde se almacenan tus datos</h2>
-  <p>
-    Todo lo descrito en la sección 2 —tokens de Google, memoria semántica, historial de actividad observada por los
-    sensores— se almacena <strong>localmente en tu propio equipo</strong> (base de datos SQLite local). Kaoru no
-    opera un servidor central que reciba o almacene tus datos personales. No hay transferencia de tus datos a
-    Dregxmoon. Las únicas transferencias a terceros son las que tú mismo autorizas y activas: (a) las llamadas a la
-    API de Google que conectes, (b) el mensaje enviado al proveedor de LLM que configures (sección 3), y (c) el
-    texto enviado al servicio de síntesis de voz de Microsoft si usas la voz hablada (sección 4).
-  </p>
-
-  <h2 id="retencion">7. Retención y eliminación de datos</h2>
-  <p>
-    La memoria semántica aplica un decaimiento automático: la información antigua pierde relevancia con el tiempo y
-    puede ser descartada. Puedes borrar manualmente los datos almacenados por Kaoru desde tu propio equipo en cualquier
-    momento (eliminando el archivo local de base de datos, o mediante el comando de borrado de memoria de la aplicación).
-    Los proveedores de IA de la sección 3 pueden retener temporalmente las solicitudes que les envíes de acuerdo con
-    su propia política; consulta esas políticas si necesitas detalles sobre su retención.
-  </p>
-
-  <h2 id="revocar">8. Cómo revocar el acceso a Google</h2>
-  <p>
-    Puedes revocar el acceso de Kaoru a tu cuenta de Google en cualquier momento desde
-    <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a>,
-    o eliminando el proyecto de Google Cloud que creaste para Kaoru.
-  </p>
-
-  <h2 id="arco">9. Derechos ARCO</h2>
-  <p>
-    Como titular de tus datos personales, tienes derecho a <strong>Acceder, Rectificar, Cancelar</strong> tus datos, y a
-    <strong>Oponerte</strong> a su tratamiento (derechos ARCO), conforme a la LFPDPPP. Como todos tus datos se almacenan
-    localmente en tu propio equipo, en la práctica ejerces estos derechos directamente (revisando, editando o borrando
-    los archivos locales de Kaoru, o usando los comandos de la aplicación). Si tienes dudas sobre cómo hacerlo, escribe a
-    <a href="mailto:dregxmoon@gmail.com">dregxmoon@gmail.com</a>.
-  </p>
-
-  <h2 id="responsable-uso">10. Uso responsable — solo para tu propio equipo</h2>
-  <p>
-    Kaoru está diseñado para que una persona observe su <strong>propia</strong> actividad en su <strong>propio</strong>
-    equipo. No debe instalarse en dispositivos ajenos o de terceros sin su consentimiento explícito, ni usarse para
-    monitorear a otras personas. Si usas Kaoru en un equipo proporcionado por tu empleador o institución, verifica que
-    esto no contravenga sus políticas internas de uso de equipo o monitoreo.
-  </p>
-
-  <h2 id="menores">11. Menores de edad</h2>
-  <p>
-    Kaoru no está dirigido a menores de 18 años y no está diseñado para recopilar intencionalmente datos de menores.
-    Si eres madre, padre o tutor y detectas que un menor bajo tu cargo ha configurado Kaoru con sus propias cuentas
-    de Google o claves de API de terceros, contáctanos para orientarte sobre cómo eliminar esa configuración.
-  </p>
-
-  <h2 id="cambios">12. Cambios a este aviso</h2>
-  <p>
-    Este aviso puede actualizarse conforme Kaoru agregue o modifique funciones (por ejemplo, nuevos proveedores de
-    IA o nuevos servicios de Google). Los cambios se reflejan en esta misma página; revisa la fecha de "Última
-    actualización" al inicio.
-  </p>
-
-  <h2 id="contacto">13. Contacto</h2>
-  <p>Preguntas sobre este aviso o el manejo de tus datos: <a href="mailto:dregxmoon@gmail.com">dregxmoon@gmail.com</a>.</p>
-</body>
+    <footer>
+      <p>Contacto: <a href="mailto:dregxmoon@gmail.com">dregxmoon@gmail.com</a></p>
+      <p>
+        Referencia normativa:
+        <a href="https://www.diputados.gob.mx/LeyesBiblio/pdf/LFPDPPP.pdf"
+          >LFPDPPP vigente publicada por la Cámara de Diputados</a
+        >.
+      </p>
+    </footer>
+  </body>
 </html>

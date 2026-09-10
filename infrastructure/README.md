@@ -7,12 +7,12 @@ almacenamiento vectorial y seguridad de credenciales.
 
 ## Módulos
 
-| Carpeta | Responsabilidad |
-|---|---|
-| [`sensors/`](./sensors/README.md) | Sensores de señales y percepción del SO (ventana activa, inactividad, git, LSP, sistema, clipboard, eventos) |
-| [`event-bus/`](./event-bus/README.md) | Bus de eventos interno pub/sub — único canal de comunicación entre módulos |
-| [`database/`](./database/README.md) | Inicialización de índices vectoriales (`sqlite-vec`) para intención y memoria |
-| [`keychain/`](./keychain/README.md) | Llavero del sistema operativo para credenciales seguras |
+| Carpeta                               | Responsabilidad                                                                                              |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| [`sensors/`](./sensors/README.md)     | Sensores de señales y percepción del SO (ventana activa, inactividad, git, LSP, sistema, clipboard, eventos) |
+| [`event-bus/`](./event-bus/README.md) | Bus de eventos interno pub/sub — único canal de comunicación entre módulos                                   |
+| [`database/`](./database/README.md)   | Inicialización de índices vectoriales (`sqlite-vec`) para intención y memoria                                |
+| [`keychain/`](./keychain/README.md)   | Custodia preferente en el llavero del SO y fallback local documentado                                        |
 
 ---
 

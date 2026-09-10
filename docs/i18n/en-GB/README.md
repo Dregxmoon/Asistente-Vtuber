@@ -64,7 +64,14 @@ Tests that touch <code>better-sqlite3</code> or <code>sqlite-vec</code> must run
 
 ## Documentation
 
+Memory, embeddings, preferences and telemetry are stored locally, but Kaoru is not necessarily
+offline: selected context may be sent to the configured LLM, speech service, website or integration.
+Desktop access is split into independently configurable application, browser, screen, pointer,
+keyboard, process and camera capabilities.
+
 - [Documentation centre](../../README.md)
+- [Privacy notice — Spanish](../../web/privacy.html)
+- [Terms of use — Spanish](../../web/terms.html)
 - [Architecture — Spanish](../../arquitectura.md)
 - [Core — Spanish](../../../core/README.md)
 - [IPC — Spanish](../../../ipc/README.md)

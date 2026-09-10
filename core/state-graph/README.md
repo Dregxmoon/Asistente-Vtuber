@@ -67,25 +67,25 @@ proyecto_principal`): un overwrite re-confirma el label y deja `verified_at=NULL
 
 ## API pública principal (fachada)
 
-| Función                                                                                                         | Propósito                                                      |
-| --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `init()` / `enableVectorSearch()`                                                                               | Abre la BD (o cae a RAM) y activa la tabla vectorial           |
-| `createNode(opts)` / `upsertNode(opts)`                                                                         | Guarda un nodo (upsert por tipo+label) y agenda su embedding   |
-| `updateNode(id, patch)` / `getNode(id)` / `forget(text)`                                                        | Actualiza / lee / archiva (soft-delete) nodos                  |
-| `queryNodes(opts)`                                                                                              | Búsqueda por texto (LIKE), toca recencia                       |
-| `queryNodesSemantic(text, opts)`                                                                                | Búsqueda vectorial ponderada por recencia                      |
-| `getWorldModel()`                                                                                               | Los 30 nodos de identidad por importancia (sin tocar recencia) |
-| `getRecentEpisodes(limit)` / `getLastSessions(limit)`                                                           | Episodios y sesiones recientes                                 |
-| `getTensions()`                                                                                                 | Contradicciones vivas (para la curiosidad del motor proactivo) |
-| `createRelation({source, target, type})`                                                                        | Relación semántica idempotente                                 |
-| `startSession()` / `endSession(id, opts)` / `updateSessionHistory(id, history)` / `findResumableSession(hours)` | Ciclo de vida de sesiones (con `history_json`)                 |
-| `saveAppHistory(...)` / `getTodayAppHistory()` / `getAppUsageSummary(days)` / `pruneAppHistory(days)`           | Historial de apps (poda 30 días)                               |
-| `applyDecay()`                                                                                                  | Decay + purga de vectores + consolidación + fact-reasoner + user-model (async) |
-| `runFactReasoner()`                                                                                             | Pasada de vigencia de hechos fijos (devuelve `{checked, stale}`)               |
+| Función                                                                                                         | Propósito                                                                                               |
+| --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `init()` / `enableVectorSearch()`                                                                               | Abre la BD (o cae a RAM) y activa la tabla vectorial                                                    |
+| `createNode(opts)` / `upsertNode(opts)`                                                                         | Guarda un nodo (upsert por tipo+label) y agenda su embedding                                            |
+| `updateNode(id, patch)` / `getNode(id)` / `forget(text)`                                                        | Actualiza / lee / archiva (soft-delete) nodos                                                           |
+| `queryNodes(opts)`                                                                                              | Búsqueda por texto (LIKE), toca recencia                                                                |
+| `queryNodesSemantic(text, opts)`                                                                                | Búsqueda vectorial ponderada por recencia                                                               |
+| `getWorldModel()`                                                                                               | Los 30 nodos de identidad por importancia (sin tocar recencia)                                          |
+| `getRecentEpisodes(limit)` / `getLastSessions(limit)`                                                           | Episodios y sesiones recientes                                                                          |
+| `getTensions()`                                                                                                 | Contradicciones vivas (para la curiosidad del motor proactivo)                                          |
+| `createRelation({source, target, type})`                                                                        | Relación semántica idempotente                                                                          |
+| `startSession()` / `endSession(id, opts)` / `updateSessionHistory(id, history)` / `findResumableSession(hours)` | Ciclo de vida de sesiones (con `history_json`)                                                          |
+| `saveAppHistory(...)` / `getTodayAppHistory()` / `getAppUsageSummary(days)` / `pruneAppHistory(days)`           | Historial de apps (poda 30 días)                                                                        |
+| `applyDecay()`                                                                                                  | Decay + purga de vectores + consolidación + fact-reasoner + user-model (async)                          |
+| `runFactReasoner()`                                                                                             | Pasada de vigencia de hechos fijos (devuelve `{checked, stale}`)                                        |
 | `runUserModel(opts)`                                                                                            | Pasada de inferencia del modelo de usuario (devuelve `{clusters, inferred, merged, rejected, skipped}`) |
-| `confirmInferred(nodeId, outcome)`                                                                              | Acepta (`confidence` → 0.9+) o rechaza (archiva) un nodo inferido             |
-| `createIntention(...)` / `listActiveIntentions()` / `completeIntention()` / `dropIntention()`                   | Pila de intenciones persistentes                               |
-| `getStats()` / `close()`                                                                                        | Estado (incluye `usingFallback`) y cierre                      |
+| `confirmInferred(nodeId, outcome)`                                                                              | Acepta (`confidence` → 0.9+) o rechaza (archiva) un nodo inferido                                       |
+| `createIntention(...)` / `listActiveIntentions()` / `completeIntention()` / `dropIntention()`                   | Pila de intenciones persistentes                                                                        |
+| `getStats()` / `close()`                                                                                        | Estado (incluye `usingFallback`) y cierre                                                               |
 
 ## `SessionManager.js` — ciclo de vida de sesión
 
@@ -96,6 +96,20 @@ proyecto_principal`): un overwrite re-confirma el label y deja `verified_at=NULL
   `summary: null`.
 - `restore(history, sessionId)` — soporte de checkpoints (CLI).
 - `getActiveIntentions()` — pila de intenciones para re-planeación al reanudar.
+
+Al retomar una ejecución, el plan visible se deriva de la intención activa más reciente y del run
+interrumpido; comenzar una tarea nueva limpia el HUD anterior para no presentar planes históricos
+como si fueran la tarea en curso.
+
+## Privacidad y ciclo de vida
+
+La base de datos y los embeddings residen en `userData` y no se transmiten por sí solos. Sí puede
+enviarse al proveedor LLM el subconjunto recuperado que forme parte del prompt. `app_history` se
+poda a 30 días; archivar un nodo por decaimiento o con `forget()` es un borrado lógico y no equivale
+a eliminar inmediatamente sus bytes de todos los respaldos o archivos de base de datos.
+
+Consulta el [aviso de privacidad](../../docs/web/privacy.html) para transferencias, retención y
+formas de ejercer acceso, corrección o eliminación.
 
 ## `StateUpdater.js` — extracción de memoria
 

@@ -1,13 +1,15 @@
 # Observabilidad (`core/observability/`)
 
-Logging centralizado y seguimiento de costos/tokens de LLM — con **nada de secrets**: las claves
-nunca se loguean.
+Logging centralizado y seguimiento de costos/tokens de LLM. Las rutas conocidas evitan registrar
+claves, pero un log puede contener nombres de herramientas, errores, rutas o metadatos operativos;
+debe tratarse como dato local potencialmente sensible.
 
 ## `Logger.js`
 
 Singleton por defecto (`log`) + clase `Logger` con niveles `debug < info < warn < error`,
 prefijos de scope opcionales, `setLevel`/`setQuiet` y transporte de archivo **rotativo** best-effort
-(`attachFile`). Es el logger que usa el resto del núcleo.
+(`attachFile`). En la aplicación se escribe `logs/assistant.log` bajo `userData`, con una copia
+rotada `.1`; cada archivo tiene un máximo predeterminado de 5 MiB.
 
 ## `UsageTracker.js`
 

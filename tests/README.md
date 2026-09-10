@@ -67,23 +67,8 @@ npm test     # = bash tests/run-all.sh
 > la persistencia real no se verifica. Las suites de memoria, estado, sensores y motor proactivo
 > **deben** correr con el Node de Electron (`ELECTRON_RUN_AS_NODE=1`).
 
-### Regresión completa (línea base)
-
-| Área                                           | Suite                     | Tests |
-| ---------------------------------------------- | ------------------------- | ----- |
-| Núcleo de decisión (Fase F-1)                  | `test_decision_core`      | 55    |
-| Normalización de señales (F-2)                 | `test_signal_normalizer`  | 52    |
-| Gate de contexto (F-3)                         | `test_context_gate`       | 46    |
-| Integración gate + engine (F-4)                | `test_gate_integration`   | 34    |
-| SLOs por tipo (F-5)                            | `test_slo`                | 25    |
-| Motor proactivo v2 (mixins + gate)             | `test_proactive`          | 112   |
-| Feedback persistente / presupuesto / `/olvida` | `test_persistent`         | 44    |
-| Propuestas + consentimiento (Fase A)           | `test_proposals`          | 40    |
-| Executor proactivo (Fase B)                    | `test_proposals_executor` | 69    |
-| E2E sensor → propuesta → mutación real         | `test_proposals_e2e`      | —     |
-| Sensores de señales                            | `test_signal_sensors`     | 49    |
-| Errores LSP + parches (Fase D)                 | `test_lsp_errors`         | 64    |
-| Telemetría local (Fase E)                      | `test_telemetry`          | 47    |
+La salida de `npm test` es la fuente de verdad para el número de suites y assertions. Este documento
+mantiene el mapa por contratos, sin copiar cifras que cambian cada vez que se agrega cobertura.
 
 ## 2. Mapa de suites
 
@@ -104,6 +89,13 @@ npm test     # = bash tests/run-all.sh
 | `test_request_queue`             | Cola de requests del proveedor LLM                                                                                                     |
 | `test_openclaw_bridge_timing`    | Timing y robustez del puente OpenClaw                                                                                                  |
 | `test_openclaw_server_auth`      | Autenticación del servidor de control                                                                                                  |
+| `test_agent_run_controller`      | Estado de runs, steering, cancelación y reanudación                                                                                    |
+| `test_desktop_control`           | Aplicaciones, navegador personal, procesos, cámara y catálogo de permisos                                                              |
+| `test_desktop_automation`        | AT-SPI/UIA, observaciones efímeras, captura ligada a coordenadas y postcondiciones                                                     |
+| `test_browser_bridge`            | Sesiones aisladas, política de red y reproducción verificada de YouTube                                                                |
+| `test_multimodal_tool_result`    | Transporte de capturas a proveedores con visión                                                                                        |
+| `test_repository_intelligence`   | Índice estructural, dependencias, símbolos, impacto y selección focal de pruebas                                                       |
+| `test_chat_voice`                | Conservación de PCM en ASR e interrupción explícita de TTS al abrir el micrófono                                                       |
 | `test_integration_stress`        | Estrés del flujo integrado                                                                                                             |
 
 ### Git y GitHub (nativos, §10)

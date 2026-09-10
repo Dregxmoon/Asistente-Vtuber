@@ -12,14 +12,9 @@ LLM a través de aquí.
 fast/smart, contexto, herramientas, visión, coste y roles. El catálogo remoto (`models.dev`) lo
 enriquece en runtime (configurable con `remoteCatalog.enabled`).
 
-| Proveedor     | Tipo            | fast (chat)            | smart (tareas)            |
-| ------------- | --------------- | ---------------------- | ------------------------- |
-| Groq          | tier free + API | `llama-3.1-8b-instant` | `llama-3.3-70b-versatile` |
-| Google Gemini | tier free + API | `gemini-2.5-flash`     | `gemini-2.5-flash`        |
-| OpenAI        | API             | `gpt-4o-mini`          | `gpt-4o`                  |
-
-> Nota: `gemini-2.5-flash` puede devolver 404 en cuentas nuevas (Google lo deprecó para nuevos
-> usuarios). Si el fallback de tool-calling a Gemini falla, cambiá el default a `gemini-2.0-flash`.
+`catalog.js`, el catálogo remoto opcional y el selector de la aplicación son la fuente actual para
+proveedores, modelos y defaults; el README evita fijar nombres que pueden retirarse. Los proveedores
+personalizados compatibles con OpenAI pueden apuntar a servicios remotos o locales.
 
 **API pública:**
 
@@ -49,8 +44,16 @@ enriquece en runtime (configurable con `remoteCatalog.enabled`).
   razonamiento con tokens aparte y respuestas limpias (tabla `CHAT_TEMPLATE_KWARGS_PROVIDERS`).
 - **Manejo de rate-limit** con mensajes accionables ("vuelve a intentar en ~X min o cambia de proveedor con `/model`").
 - **Normalización de respuestas** por proveedor (OpenAI y Gemini unificados a `{content, toolCalls}`).
+- **Resultados visuales:** una captura JPEG/PNG de herramienta puede viajar como contenido
+  multimodal a OpenAI-compatible, Anthropic o Gemini cuando el modelo lo admite. El puente local de
+  Codex CLI omite la imagen y conserva sólo el texto.
 - Claves leídas de `config.json` o `LLM_KEY_*` del `.env`; el llavero del SO (`infrastructure/keychain/`)
   es la fuente preferida.
+
+Las conversaciones, memoria recuperada, contexto de sistema y resultados de herramientas incluidos
+en el prompt se envían al proveedor activo. Su retención, ubicación de procesamiento y uso posterior
+dependen de la cuenta y política de ese proveedor; Kaoru no debe describirse como completamente
+offline salvo cuando se configura un endpoint local y se desactivan las demás funciones de red.
 
 ```mermaid
 flowchart LR
@@ -73,5 +76,5 @@ se rompa aunque el pipeline principal falle.
 
 ## Verificación
 
-Cobertura en `test_tool_calling` (schemas, normalización y **reintento 413→smart** — Test 6), `test_prompt_composer`
-(formatos por proveedor) y las suites de integración (`test_agent_loop`, `test_gate_integration`).
+Cobertura en `test_tool_calling`, `test_multimodal_tool_result`, `test_provider_models` y las suites
+de integración `test_agent_loop` y `test_gate_integration`.

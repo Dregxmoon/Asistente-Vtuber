@@ -15,6 +15,11 @@ Aislamiento de ejecución: el `index.js` del plugin corre en un contexto `vm` de
 **mediado** — whitelist de builtins + un `fs` restringido al directorio del plugin (anti
 path-traversal). Es una capa de contención, no una frontera criptográfica.
 
+Un plugin instalado puede registrar herramientas y hooks que reciben contexto del run. La firma
+comprueba procedencia e integridad del paquete, no que su comportamiento sea privado o seguro. Sólo
+deben instalarse plugins confiables y con el mínimo acceso necesario; sus conexiones externas y su
+tratamiento de datos quedan sujetos a la documentación del autor del plugin.
+
 ## `PluginMarketplace.js`
 
 Marketplace local **firmado**: `PluginSigner` crea claves Ed25519, firma paquetes (manifiesto menos

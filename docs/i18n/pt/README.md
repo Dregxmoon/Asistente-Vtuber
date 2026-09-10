@@ -64,7 +64,14 @@ Os testes que usam <code>better-sqlite3</code> ou <code>sqlite-vec</code> devem 
 
 ## Documentação
 
+Memória, embeddings, preferências e telemetria são armazenados localmente, mas o Kaoru não é
+necessariamente offline: o contexto selecionado pode ser enviado ao LLM configurado, ao serviço de
+voz, a um site ou a uma integração. O acesso ao desktop é separado em permissões configuráveis para
+aplicativos, navegador, tela, ponteiro, teclado, processos e câmera.
+
 - [Central de documentação](../../README.md)
+- [Aviso de privacidade — espanhol](../../web/privacy.html)
+- [Termos de uso — espanhol](../../web/terms.html)
 - [Arquitetura — espanhol](../../arquitectura.md)
 - [Core — espanhol](../../../core/README.md)
 - [IPC — espanhol](../../../ipc/README.md)

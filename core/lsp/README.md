@@ -10,6 +10,7 @@ código real**: errores del editor, símbolos del proyecto y verificación de pa
 Cliente LSP sobre `typescript-language-server` (stdio).
 
 **Responsabilidades:**
+
 - Arrancar el servidor de lenguaje del workspace con idioma auto-detectado (`detectLanguageForWorkspace`).
 - Declarar la capability `publishDiagnostics` (sin esto el servidor no envía errores).
 - Mantener archivos abiertos (`didOpen` / `didChange` / `didClose`).
@@ -23,6 +24,22 @@ Cliente LSP sobre `typescript-language-server` (stdio).
 - Aplana el árbol de símbolos (children recursivos, `kindName` real, línea).
 - Cache con TTL de 60 s e `invalidate(file)` — no vuelve a molestar al servidor innecesariamente.
 - Nunca lanza: si el LSP no está disponible, devuelve vacío.
+
+## `RepositoryIntelligence.js`
+
+Índice estructural asíncrono que conecta la planificación con la verificación:
+
+- Recorre el workspace sin seguir enlaces simbólicos ni entrar en dependencias, builds o cachés.
+- Omite nombres de archivos de credenciales conocidos y nunca persiste contenido fuente.
+- Resuelve dependencias locales CommonJS/ESM y calcula dependientes transitivos.
+- Enriquece los archivos candidatos con símbolos del `SymbolIndex` cuando el LSP está disponible.
+- Persiste en `userData` un caché acotado de metadatos; una mutación del agente lo invalida.
+- Infiere pruebas relacionadas. Solo genera un comando focal cuando reconoce explícitamente
+  `tests/run-all.sh`; para runners desconocidos conserva la verificación general sin inventar flags.
+
+`Core.runAgent` entrega la misma instancia a `AgentLoop`: el mapa entra al plan antes de actuar y el
+radio de impacto vuelve a consultarse después de editar. Por tanto, no es un índice decorativo ni un
+servicio paralelo desconectado.
 
 ---
 
@@ -44,6 +61,9 @@ flowchart LR
     X -->|"sintaxis"| N["node --check"]
     N -->|"inválido"| RB["rollback automático"]
     LSP -->|"símbolos"| SY["SymbolIndex<br/>(TTL 60s)"]
+    SY --> RI["RepositoryIntelligence<br/>dependencias + impacto"]
+    RI --> PLAN["AgentLoop<br/>plan + pruebas focales"]
 ```
 
-Verificación: `test_lsp_errors` (64 tests) y `test_lsp` — ver `tests/README.md`.
+Verificación: `test_lsp_errors`, `test_lsp` y `test_repository_intelligence` — ver
+`tests/README.md`.

@@ -20,6 +20,7 @@ const { RunMetrics } = require('./run-metrics.js');
 const { getMoodEngine } = require('../identity/MoodEngine.js');
 const { runVerifyPlan, buildVerifyFailureNotice } = require('./verify-runner.js');
 const { estimateDifficulty } = require('../learning/difficulty.js');
+const { RepositoryIntelligence } = require('../lsp/RepositoryIntelligence.js');
 const {
   collectEditedFiles,
   analyzeSubagentReport,
@@ -771,6 +772,19 @@ class AgentLoop {
     this._toolRegistry = getToolRegistry();
     this._llm = opts.llm || null;
     this._lsp = opts.lsp || null;
+    this._repositoryIntelligence =
+      opts.repositoryIntelligence ||
+      new RepositoryIntelligence({
+        workspace: () => AP.PROJECT_CWD || process.cwd(),
+        getSymbols: async (file) => {
+          if (!this._lsp?.getDocumentSymbols) return [];
+          try {
+            return await this._lsp.getDocumentSymbols(file);
+          } catch (_) {
+            return [];
+          }
+        },
+      });
     this._git = opts.git || getGitManager();
     this._github = opts.github || getGitHubManager();
     this._graph = opts.graph || null;
@@ -2096,6 +2110,11 @@ class AgentLoop {
         // viejo. Solo se invalida ante éxito; un fallo no cambia el estado.
         if (result && result.ok) {
           mutationJournal.record(result, action);
+          if (isMutatingAction(action)) {
+            this._repositoryIntelligence?.invalidate?.(
+              extractMutationPaths(action, AP.PROJECT_CWD || process.cwd())
+            );
+          }
           // Verificación de artefactos: rastrear TODOS los archivos mutados.
           // Caso exec: los LLMs suelen crear archivos con redirecciones
           // (`echo '{...}' > config.json`) — se detectan por patrón.
@@ -2402,7 +2421,39 @@ class AgentLoop {
    * @returns {Promise<{status: string, reason?: string, command?: string, attempts?: number, exitCode?: number|null, signal?: string|null, stderr?: string, elapsedMs?: number}>}
    */
   async _runVerify(plan, toolResults) {
-    return runVerifyPlan(plan, {
+    let effectivePlan = plan ? { ...plan } : {};
+    let impact = null;
+    try {
+      const changedFiles = [];
+      for (const result of toolResults || []) {
+        if (!isSuccessfulMutationResult(result)) continue;
+        changedFiles.push(
+          ...extractMutationPaths(
+            result._action || { tool: result.tool, params: result.params || {} },
+            AP.PROJECT_CWD || process.cwd()
+          )
+        );
+      }
+      if (changedFiles.length && this._repositoryIntelligence?.analyzeFiles) {
+        impact = await this._repositoryIntelligence.analyzeFiles(changedFiles);
+        const focused = Array.isArray(impact?.commands) ? impact.commands : [];
+        const configured = Array.isArray(effectivePlan.commands)
+          ? effectivePlan.commands
+          : effectivePlan.command
+            ? [effectivePlan.command]
+            : [];
+        const commands = [...new Set([...focused, ...configured])];
+        if (commands.length) {
+          effectivePlan = { ...effectivePlan, command: commands[0], commands };
+        }
+      }
+    } catch (error) {
+      logger.warn(
+        'AgentLoop',
+        `[repository-intelligence] selección focal degradada: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+    const result = await runVerifyPlan(effectivePlan, {
       bridge: this._bridge,
       isSmart: this._mode === 'smart',
       toolResults,
@@ -2410,6 +2461,16 @@ class AgentLoop {
       mutationPredicate: isSuccessfulMutationResult,
       signal: this._signal,
     });
+    if (impact) {
+      result.impact = {
+        changedFiles: impact.seeds,
+        relatedTests: impact.tests,
+        dependents: impact.dependents,
+        risk: impact.risk,
+        rationale: impact.rationale,
+      };
+    }
+    return result;
   }
 
   /**
@@ -3482,55 +3543,37 @@ class AgentLoop {
    */
   async _buildRepositorySnapshot(userMessage) {
     const cwd = AP.PROJECT_CWD || process.cwd();
-    const ignored = new Set(['.git', 'node_modules', 'dist', 'build', 'coverage', '.cache']);
-    const files = [];
-    const visit = (dir, depth) => {
-      if (depth > 2 || files.length >= 160) return;
-      let entries = [];
-      try {
-        entries = fs
-          .readdirSync(dir, { withFileTypes: true })
-          .sort((a, b) => a.name.localeCompare(b.name));
-      } catch (_) {
-        return;
-      }
-      for (const entry of entries) {
-        if (files.length >= 160 || ignored.has(entry.name)) break;
-        const absolute = path.join(dir, entry.name);
-        const relative = path.relative(cwd, absolute);
-        files.push(entry.isDirectory() ? `${relative}/` : relative);
-        if (entry.isDirectory()) visit(absolute, depth + 1);
-      }
-    };
-    visit(cwd, 0);
-
-    let scripts = [];
     try {
-      const pkg = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf-8'));
-      scripts = Object.keys(pkg.scripts || {}).slice(0, 30);
+      return await this._repositoryIntelligence.buildPlanningContext(userMessage, {
+        maxChars: 9000,
+      });
+    } catch (error) {
+      logger.warn(
+        'AgentLoop',
+        `[repository-intelligence] reconocimiento degradado: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+
+    // Fallback mínimo: no bloquea el main process ni intenta inferir impacto.
+    let entries = [];
+    try {
+      entries = (await fs.promises.readdir(cwd, { withFileTypes: true }))
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .slice(0, 80)
+        .map((entry) => (entry.isDirectory() ? `${entry.name}/` : entry.name));
     } catch (_) {}
     let gitSummary = '';
     try {
       const status = await this._git?.status?.(cwd);
       if (status) gitSummary = JSON.stringify(status).slice(0, 1800);
     } catch (_) {}
-    const keywords = [
-      ...new Set(
-        String(userMessage || '')
-          .toLowerCase()
-          .match(/[a-záéíóúñ_][\wáéíóúñ.-]{3,}/g) || []
-      ),
-    ]
-      .filter((word) => !/^(para|como|todo|esta|este|that|with|from|tarea|proyecto)$/.test(word))
-      .slice(0, 20);
     return [
       '# RECONOCIMIENTO DEL REPOSITORIO',
       `Raíz: ${cwd}`,
-      `Términos de la tarea: ${keywords.join(', ') || '(ninguno)'}`,
-      `Scripts disponibles: ${scripts.join(', ') || '(no detectados)'}`,
+      'Modo degradado: el índice estructural no estuvo disponible.',
       gitSummary ? `Estado Git: ${gitSummary}` : 'Estado Git: no disponible',
-      'Árbol parcial (profundidad 2):',
-      files.map((file) => `- ${file}`).join('\n') || '- (vacío)',
+      'Entradas de la raíz:',
+      entries.map((file) => `- ${file}`).join('\n') || '- (vacío)',
       '',
       'El plan debe basarse en estas rutas reales. Si falta detalle, el primer paso debe inspeccionar símbolos o archivos relevantes antes de editar.',
     ]

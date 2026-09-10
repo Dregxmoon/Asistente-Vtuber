@@ -52,13 +52,14 @@ Responsable del ciclo de vida completo de la aplicación:
 | [`config/`](./config/README.md)               | Carga/validación de `config.json` (mitxed schema)                                                     |
 | [`core/`](./core/README.md)                   | Orquestación interna: init, agente, contexto, sesiones, misc, state                                   |
 | [`decision/`](./decision/README.md)           | Núcleo determinista de decisión proactiva (Fase F)                                                    |
+| [`desktop/`](./desktop/README.md)             | Aplicaciones, accesibilidad, pantalla, puntero, teclado, procesos y cámara                            |
 | [`git/`](./git/README.md)                     | Wrapper nativo de Git (tools `git_*`, higiene del repo)                                               |
 | [`github/`](./github/README.md)               | Cliente REST de GitHub (issues, PRs, OAuth device flow)                                               |
 | [`grounding/`](./grounding/README.md)         | Pipeline de contexto: intención, memoria, serializadores                                              |
 | [`identity/`](./identity/README.md)           | Personalidad del asistente                                                                            |
 | [`learning/`](./learning/README.md)           | Aprendizaje que cierra el círculo: pesos de proactividad + outcomes de tareas                         |
 | [`llm/`](./llm/README.md)                     | Abstracción multi-proveedor de LLM                                                                    |
-| [`lsp/`](./lsp/README.md)                     | Cliente LSP e índice de símbolos para el agente de código                                             |
+| [`lsp/`](./lsp/README.md)                     | LSP e inteligencia de repositorio: símbolos, dependencias, impacto y pruebas                          |
 | [`mcp/`](./mcp/README.md)                     | Cliente Model Context Protocol                                                                        |
 | [`observability/`](./observability/README.md) | `Logger` centralizado y `UsageTracker` (tokens/costos LLM)                                            |
 | [`planner/`](./planner/README.md)             | Agente: parsing, bucle de ejecución y bridges                                                         |
@@ -104,5 +105,6 @@ flowchart LR
     SENSORS --> DECISION
 ```
 
-Cada módulo se comunica con el resto exclusivamente a través del `EventBus`
-(`infrastructure/event-bus/`) o de la API pública de `Core` — no hay dependencias cruzadas directas.
+El `EventBus` transporta señales y la fachada de `Core` concentra las operaciones públicas. Algunos
+módulos de ejecución mantienen dependencias directas y acotadas —por ejemplo `AgentLoop` con los
+bridges de herramientas—, por lo que no debe asumirse aislamiento entre todos los módulos internos.

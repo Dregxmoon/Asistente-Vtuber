@@ -35,6 +35,7 @@ const state = {
   proactiveExecutor: null,
   lspErrorWatcher: null,
   symbolIndex: null,
+  repositoryIntelligence: null,
   telemetry: null,
   activeWorkspace: null,
   activeModel3Path: null, // ruta del model3.json activo (lo sincroniza window-model-handlers)

@@ -16,12 +16,15 @@ coincide con el dominio de la skill. Extiende las capacidades del asistente sin 
 - **`replaces_domains`:** una skill puede declarar que reemplaza herramientas genéricas de un dominio
   (respetado por `ToolResolver` en la precedencia Skill > MCP > OpenClaw).
 
+El contenido de una skill seleccionada entra al prompt y puede enviarse al proveedor LLM. Una skill
+es código/instrucción de confianza: no debe incluir secretos y debe revisarse antes de instalarla.
+
 ## Skills del proyecto
 
-| Skill | Dominio | Uso |
-|---|---|---|
-| `code-review` | code | Revisión estructurada de cambios |
-| `git-workflow` | git | Flujo de trabajo git seguro |
+| Skill              | Dominio | Uso                                |
+| ------------------ | ------- | ---------------------------------- |
+| `code-review`      | code    | Revisión estructurada de cambios   |
+| `git-workflow`     | git     | Flujo de trabajo git seguro        |
 | `testing-patterns` | testing | Patrones de pruebas y verificación |
 
 ```mermaid

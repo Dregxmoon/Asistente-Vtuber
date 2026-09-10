@@ -1,74 +1,698 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kaoru — Asistente personal con IA</title>
-<style>
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 760px; margin: 60px auto; padding: 0 20px; line-height: 1.65; color: #222; }
-  h1 { font-size: 2.1em; margin-bottom: 0.2em; }
-  h2 { font-size: 1.25em; margin-top: 2em; border-bottom: 1px solid #eee; padding-bottom: 0.3em; }
-  .tagline { color: #666; margin-top: 0; font-size: 1.05em; }
-  nav.links a { margin-right: 20px; color: #2563eb; text-decoration: none; }
-  nav.links a:hover { text-decoration: underline; }
-  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.95em; }
-  th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; vertical-align: top; }
-  th { background: #f5f5f5; }
-  ul { padding-left: 1.2em; }
-  li { margin-bottom: 0.4em; }
-  a { color: #2563eb; }
-  .badge { display: inline-block; background: #eef2ff; color: #4338ca; font-size: 0.8em; padding: 2px 8px; border-radius: 10px; margin-left: 6px; }
-  footer { margin-top: 60px; font-size: 0.85em; color: #888; }
-</style>
-</head>
-<body>
-  <h1>Kaoru</h1>
-  <p class="tagline">Un asistente personal de escritorio con voz, memoria e integración opcional con Google Workspace.</p>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Kaoru es un asistente y agente de código de escritorio con Live2D, memoria local, herramientas, verificación y permisos explícitos."
+    />
+    <title>Kaoru — Agente de código con compañera Live2D</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #090b12;
+        --panel: rgba(20, 23, 37, 0.82);
+        --panel-strong: #171a29;
+        --ink: #f8f7ff;
+        --muted: #aaa9bd;
+        --line: rgba(255, 255, 255, 0.1);
+        --violet: #9d7bff;
+        --pink: #ff7eb6;
+        --cyan: #65e8ff;
+        --green: #7cf7b1;
+        --shadow: 0 30px 90px rgba(0, 0, 0, 0.42);
+      }
 
-  <nav class="links">
-    <a href="privacy.html">Aviso de Privacidad</a>
-    <a href="terms.html">Términos de Servicio</a>
-    <a href="https://github.com/Dregxmoon/Kaoru-Agent">Código en GitHub</a>
-  </nav>
+      * {
+        box-sizing: border-box;
+      }
 
-  <h2>¿Qué es Kaoru?</h2>
-  <p>
-    Kaoru es una aplicación de escritorio (Windows, macOS, Linux) que actúa como asistente personal: responde por
-    voz y texto, recuerda contexto entre conversaciones, y puede actuar como <strong>agente</strong> sobre tu propio
-    equipo — editar archivos, ejecutar comandos, trabajar con Git/GitHub — siempre bajo el nivel de autonomía y las
-    reglas de permiso que tú configures (Observar / Sugerir / Actuar).
-  </p>
+      html {
+        scroll-behavior: smooth;
+      }
 
-  <h2>Cómo funciona por dentro</h2>
-  <table>
-    <tr><th>Componente</th><th>Cómo funciona</th></tr>
-    <tr><td><strong>Conversación (LLM)</strong></td><td>Tú eliges y conectas con tu propia clave de API. Trae integrados <strong>Groq, Google Gemini, OpenAI, Anthropic, xAI, NVIDIA, Hugging Face y DeepSeek</strong>, con reintento y cambio automático entre ellos si uno falla. Con el comando <code>/provider add</code> puedes sumar cualquier otro proveedor compatible con la API de OpenAI, incluyendo un <strong>modelo local</strong> en tu propio equipo (Ollama, LM Studio, etc.).</td></tr>
-    <tr><td><strong>Reconocimiento de voz (STT)</strong></td><td>100% local y sin conexión, con el motor <strong>Vosk</strong>. Tu voz no sale de tu equipo para ser transcrita.</td></tr>
-    <tr><td><strong>Síntesis de voz (TTS)</strong></td><td>Usa el servicio en la nube de <strong>Microsoft Edge</strong> (edge-tts) para generar el audio de lo que Kaoru te dice.</td></tr>
-    <tr><td><strong>Memoria</strong></td><td>Grafo de memoria local (hechos, episodios de conversación, creencias inferidas con tu aprobación) en una base de datos SQLite en tu equipo, con búsqueda por significado 100% local y decaimiento automático de lo antiguo.</td></tr>
-    <tr><td><strong>Proactividad</strong></td><td>Kaoru puede tomar la iniciativa y hablarte primero según patrones que detecta (foco prolongado, errores de código, recordatorios próximos, etc.), siempre con un filtro determinista de "buen momento" y pidiendo tu confirmación antes de ejecutar cualquier acción real.</td></tr>
-    <tr><td><strong>Google Workspace (opcional)</strong></td><td>Tú conectas tu propia cuenta con tu propio proyecto de Google Cloud. Puedes elegir qué servicios activar (Calendar, Gmail, Drive, Docs, Sheets, Tasks, Contactos) y si el acceso es solo lectura o también escritura.</td></tr>
-    <tr><td><strong>Credenciales</strong></td><td>Tus claves de API y tokens se guardan cifrados en el almacén de credenciales de tu sistema operativo (Keychain / Credential Manager / Secret Service), nunca en un servidor de Dregxmoon.</td></tr>
-  </table>
-  <p>
-    Kaoru no opera ningún servidor central que reciba tus datos: todo corre en tu equipo, salvo las conexiones que tú
-    mismo autorizas hacia Google, tu proveedor de IA, o el servicio de voz. El detalle completo de qué se comparte y
-    con quién está en el <a href="privacy.html">Aviso de Privacidad</a>.
-  </p>
+      body {
+        margin: 0;
+        min-width: 320px;
+        background:
+          radial-gradient(circle at 18% 10%, rgba(157, 123, 255, 0.17), transparent 30rem),
+          radial-gradient(circle at 85% 25%, rgba(101, 232, 255, 0.1), transparent 28rem), var(--bg);
+        color: var(--ink);
+        font:
+          16px/1.65 Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
+      }
 
-  <h2>Modo agente</h2>
-  <p>
-    Además de responder, Kaoru puede tomar acciones concretas cuando se lo permites: editar y crear archivos,
-    ejecutar comandos de terminal, trabajar con repositorios Git y GitHub, y navegar la web con un navegador
-    automatizado independiente. Tú controlas cuánta autonomía le das, desde solo observar hasta actuar
-    automáticamente bajo reglas que tú mismo defines. Ver detalle en los <a href="terms.html">Términos de Servicio</a>.
-  </p>
+      a {
+        color: inherit;
+      }
 
-  <h2>Contacto</h2>
-  <p>Para dudas sobre privacidad, términos, o el manejo de datos: <a href="mailto:dregxmoon@gmail.com">dregxmoon@gmail.com</a></p>
+      .shell {
+        width: min(1160px, calc(100% - 40px));
+        margin: 0 auto;
+      }
 
-  <footer>
-    Kaoru — proyecto independiente. Repositorio en <a href="https://github.com/Dregxmoon/Kaoru-Agent">GitHub</a>.
-  </footer>
-</body>
+      header {
+        position: sticky;
+        z-index: 10;
+        top: 0;
+        border-bottom: 1px solid var(--line);
+        background: rgba(9, 11, 18, 0.76);
+        backdrop-filter: blur(20px);
+      }
+
+      nav {
+        min-height: 70px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        font-weight: 850;
+        letter-spacing: -0.02em;
+        text-decoration: none;
+      }
+
+      .brand-mark {
+        width: 34px;
+        height: 34px;
+        display: grid;
+        place-items: center;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 12px;
+        background: linear-gradient(135deg, var(--violet), var(--pink));
+        box-shadow: 0 9px 30px rgba(157, 123, 255, 0.35);
+      }
+
+      .nav-links {
+        display: flex;
+        align-items: center;
+        gap: 22px;
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .nav-links a {
+        text-decoration: none;
+      }
+
+      .nav-links a:hover {
+        color: var(--ink);
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 46px;
+        padding: 0 20px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--panel-strong);
+        color: var(--ink);
+        font-weight: 750;
+        text-decoration: none;
+        transition:
+          transform 160ms ease,
+          border-color 160ms ease;
+      }
+
+      .button:hover {
+        transform: translateY(-2px);
+        border-color: rgba(255, 255, 255, 0.3);
+      }
+
+      .button.primary {
+        border: 0;
+        background: linear-gradient(135deg, var(--violet), var(--pink));
+        box-shadow: 0 14px 40px rgba(157, 123, 255, 0.3);
+      }
+
+      .hero {
+        min-height: 760px;
+        display: grid;
+        grid-template-columns: 1.08fr 0.92fr;
+        align-items: center;
+        gap: 64px;
+        padding: 90px 0 70px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        padding: 7px 12px;
+        border: 1px solid rgba(124, 247, 177, 0.25);
+        border-radius: 999px;
+        background: rgba(124, 247, 177, 0.07);
+        color: var(--green);
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow::before {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: currentColor;
+        content: '';
+        box-shadow: 0 0 15px currentColor;
+      }
+
+      h1 {
+        max-width: 760px;
+        margin: 24px 0;
+        font-size: clamp(3.35rem, 7vw, 6.7rem);
+        line-height: 0.95;
+        letter-spacing: -0.065em;
+      }
+
+      .gradient-text {
+        background: linear-gradient(100deg, var(--cyan), var(--violet) 48%, var(--pink));
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+
+      .hero-copy {
+        max-width: 650px;
+        color: var(--muted);
+        font-size: clamp(1.05rem, 2vw, 1.24rem);
+      }
+
+      .hero-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 32px;
+      }
+
+      .hero-note {
+        margin-top: 20px;
+        color: #858397;
+        font-size: 0.83rem;
+      }
+
+      .portrait {
+        position: relative;
+        min-height: 600px;
+        display: grid;
+        align-items: end;
+        justify-items: center;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 38px;
+        background:
+          linear-gradient(180deg, rgba(157, 123, 255, 0.14), transparent 40%),
+          linear-gradient(145deg, #19172a, #0d101a 70%);
+        box-shadow: var(--shadow);
+      }
+
+      .portrait::before {
+        position: absolute;
+        inset: 10% 8% auto;
+        height: 55%;
+        border-radius: 50%;
+        background: rgba(157, 123, 255, 0.24);
+        filter: blur(70px);
+        content: '';
+      }
+
+      .portrait img {
+        position: relative;
+        z-index: 1;
+        width: min(100%, 500px);
+        max-height: 590px;
+        object-fit: contain;
+        object-position: bottom;
+        filter: drop-shadow(0 30px 34px rgba(0, 0, 0, 0.48));
+      }
+
+      .status-card {
+        position: absolute;
+        z-index: 2;
+        right: 20px;
+        bottom: 20px;
+        left: 20px;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        padding: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.13);
+        border-radius: 19px;
+        background: rgba(9, 11, 18, 0.72);
+        backdrop-filter: blur(18px);
+      }
+
+      .status-card div {
+        text-align: center;
+      }
+
+      .status-card strong {
+        display: block;
+        font-size: 0.88rem;
+      }
+
+      .status-card span {
+        color: var(--muted);
+        font-size: 0.7rem;
+      }
+
+      section {
+        padding: 90px 0;
+      }
+
+      .section-heading {
+        max-width: 760px;
+        margin-bottom: 40px;
+      }
+
+      h2 {
+        margin: 0 0 14px;
+        font-size: clamp(2.2rem, 4.5vw, 4rem);
+        line-height: 1.05;
+        letter-spacing: -0.045em;
+      }
+
+      .section-heading p,
+      .muted {
+        color: var(--muted);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+      }
+
+      .card {
+        min-height: 250px;
+        padding: 28px;
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        background: var(--panel);
+        box-shadow: inset 0 1px rgba(255, 255, 255, 0.035);
+      }
+
+      .card-icon {
+        width: 43px;
+        height: 43px;
+        display: grid;
+        place-items: center;
+        margin-bottom: 28px;
+        border-radius: 13px;
+        background: rgba(157, 123, 255, 0.13);
+        color: var(--violet);
+        font-weight: 900;
+      }
+
+      .card:nth-child(2n) .card-icon {
+        background: rgba(101, 232, 255, 0.1);
+        color: var(--cyan);
+      }
+
+      .card:nth-child(3n) .card-icon {
+        background: rgba(255, 126, 182, 0.1);
+        color: var(--pink);
+      }
+
+      .card h3 {
+        margin: 0 0 10px;
+        font-size: 1.22rem;
+      }
+
+      .card p {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      .workflow {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 10px;
+        counter-reset: flow;
+      }
+
+      .workflow div {
+        position: relative;
+        padding: 22px 18px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.025);
+        counter-increment: flow;
+      }
+
+      .workflow div::before {
+        display: block;
+        margin-bottom: 20px;
+        color: var(--violet);
+        font-weight: 900;
+        content: '0' counter(flow);
+      }
+
+      .workflow strong {
+        display: block;
+        margin-bottom: 6px;
+      }
+
+      .workflow span {
+        color: var(--muted);
+        font-size: 0.86rem;
+      }
+
+      .safety {
+        display: grid;
+        grid-template-columns: 0.9fr 1.1fr;
+        gap: 42px;
+        align-items: start;
+        padding: 42px;
+        border: 1px solid rgba(124, 247, 177, 0.18);
+        border-radius: 30px;
+        background: linear-gradient(135deg, rgba(124, 247, 177, 0.07), var(--panel));
+      }
+
+      .checks {
+        display: grid;
+        gap: 12px;
+      }
+
+      .checks div {
+        padding: 15px 17px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(0, 0, 0, 0.13);
+      }
+
+      .checks strong {
+        color: var(--green);
+      }
+
+      .cta {
+        padding: 60px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 34px;
+        background:
+          radial-gradient(circle at 80% 20%, rgba(255, 126, 182, 0.2), transparent 23rem),
+          radial-gradient(circle at 10% 80%, rgba(101, 232, 255, 0.14), transparent 25rem),
+          var(--panel-strong);
+        text-align: center;
+        box-shadow: var(--shadow);
+      }
+
+      .cta p {
+        max-width: 670px;
+        margin: 0 auto 28px;
+        color: var(--muted);
+      }
+
+      footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 24px;
+        padding: 55px 0 70px;
+        color: var(--muted);
+        font-size: 0.86rem;
+      }
+
+      footer div:last-child {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 18px;
+      }
+
+      @media (max-width: 900px) {
+        .hero,
+        .safety {
+          grid-template-columns: 1fr;
+        }
+
+        .hero {
+          padding-top: 60px;
+        }
+
+        .portrait {
+          min-height: 520px;
+        }
+
+        .grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+
+        .workflow {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+
+      @media (max-width: 620px) {
+        .shell {
+          width: min(100% - 26px, 1160px);
+        }
+
+        .nav-links a:not(.button) {
+          display: none;
+        }
+
+        h1 {
+          font-size: clamp(3.1rem, 17vw, 5rem);
+        }
+
+        .portrait {
+          min-height: 430px;
+        }
+
+        .grid,
+        .workflow {
+          grid-template-columns: 1fr;
+        }
+
+        section {
+          padding: 65px 0;
+        }
+
+        .safety,
+        .cta {
+          padding: 27px;
+        }
+
+        footer {
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <nav class="shell" aria-label="Navegación principal">
+        <a class="brand" href="#inicio"><span class="brand-mark">K</span> Kaoru</a>
+        <div class="nav-links">
+          <a href="#capacidades">Capacidades</a>
+          <a href="#seguridad">Seguridad</a>
+          <a href="privacy.html">Privacidad</a>
+          <a class="button" href="https://github.com/Dregxmoon/Kaoru-Agent">Ver en GitHub</a>
+        </div>
+      </nav>
+    </header>
+
+    <main id="inicio">
+      <div class="shell hero">
+        <div>
+          <span class="eyebrow">Código abierto · trabaja en tu escritorio</span>
+          <h1>Tu agente de código.<br /><span class="gradient-text">Con monita incluida.</span></h1>
+          <p class="hero-copy">
+            Kaoru entiende tu repositorio, planifica, usa herramientas reales, edita, prueba y
+            conserva evidencia. Además vive en tu escritorio como una compañera Live2D con memoria,
+            voz y bastante más personalidad que otra caja de texto gris.
+          </p>
+          <div class="hero-actions">
+            <a class="button primary" href="https://github.com/Dregxmoon/Kaoru-Agent"
+              >Explorar el proyecto</a
+            >
+            <a
+              class="button"
+              href="https://github.com/Dregxmoon/Kaoru-Agent/blob/produccion/docs/arquitectura.md"
+              >Ver arquitectura</a
+            >
+          </div>
+          <p class="hero-note">
+            Sin palabra de activación ni escucha ambiental: el micrófono se abre únicamente cuando
+            tú lo solicitas.
+          </p>
+        </div>
+
+        <div class="portrait" aria-label="Kaoru, compañera Live2D del agente">
+          <img
+            src="https://raw.githubusercontent.com/Dregxmoon/Kaoru-Agent/produccion/screenshots/02-overlay-character.png"
+            alt="Avatar Live2D de Kaoru"
+          />
+          <div class="status-card" aria-label="Estado de capacidades">
+            <div><strong>Plan</strong><span>con criterios</span></div>
+            <div><strong>Tools</strong><span>con permisos</span></div>
+            <div><strong>Tests</strong><span>con evidencia</span></div>
+          </div>
+        </div>
+      </div>
+
+      <section id="capacidades">
+        <div class="shell">
+          <div class="section-heading">
+            <span class="eyebrow">Un sistema conectado</span>
+            <h2>No colecciona módulos.<br />Cierra ciclos de trabajo.</h2>
+            <p>
+              El agente enlaza inteligencia del repositorio, LSP, memoria, Git, navegador y
+              escritorio dentro del mismo plan verificable.
+            </p>
+          </div>
+          <div class="grid">
+            <article class="card">
+              <span class="card-icon">&lt;/&gt;</span>
+              <h3>Comprende antes de editar</h3>
+              <p>
+                Indexa archivos y dependencias locales, consulta símbolos LSP y calcula el radio de
+                impacto para orientar el plan.
+              </p>
+            </article>
+            <article class="card">
+              <span class="card-icon">✓</span>
+              <h3>Verifica lo que afirma</h3>
+              <p>
+                Ejecuta pruebas relacionadas primero y después los sellos generales del proyecto. Si
+                algo falla, repara o deja la tarea pendiente.
+              </p>
+            </article>
+            <article class="card">
+              <span class="card-icon">↻</span>
+              <h3>Retoma trabajos largos</h3>
+              <p>
+                Objetivos, planes, evidencias y puntos de reanudación sobreviven a interrupciones.
+                Un gobernador puede sugerir o reintentar según tu política.
+              </p>
+            </article>
+            <article class="card">
+              <span class="card-icon">⌘</span>
+              <h3>Opera herramientas reales</h3>
+              <p>
+                Terminal aislable, archivos, Git, GitHub, LSP, MCP, plugins y navegador forman un
+                catálogo gobernado fuera del modelo.
+              </p>
+            </article>
+            <article class="card">
+              <span class="card-icon">◉</span>
+              <h3>Ve y usa el escritorio</h3>
+              <p>
+                Accesibilidad semántica en Linux y Windows, capturas multimodales y clic visual
+                ligado a una observación vigente.
+              </p>
+            </article>
+            <article class="card">
+              <span class="card-icon">♪</span>
+              <h3>Habla, escucha y se deja interrumpir</h3>
+              <p>
+                ASR local bajo acción explícita, TTS y barge-in: al pulsar el micrófono, Kaoru calla
+                y te escucha sin quedarse vigilando el ambiente.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="shell">
+          <div class="section-heading">
+            <span class="eyebrow">Del pedido a la evidencia</span>
+            <h2>Un flujo que sabe cuándo no terminó.</h2>
+          </div>
+          <div class="workflow">
+            <div>
+              <strong>Reconocer</strong><span>Repo, estado Git, símbolos y dependencias.</span>
+            </div>
+            <div>
+              <strong>Planificar</strong><span>Pasos durables con criterios observables.</span>
+            </div>
+            <div>
+              <strong>Autorizar</strong><span>Política y consentimiento fuera del LLM.</span>
+            </div>
+            <div>
+              <strong>Ejecutar</strong><span>Herramientas reales con progreso visible.</span>
+            </div>
+            <div>
+              <strong>Verificar</strong><span>Tests, diagnósticos, evidencia o pausa honesta.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="seguridad">
+        <div class="shell safety">
+          <div>
+            <span class="eyebrow">Autonomía con frenos</span>
+            <h2>El modelo propone. Kaoru gobierna.</h2>
+            <p class="muted">
+              Ser autónomo no significa actuar a escondidas. Las decisiones de permiso, los límites
+              del workspace y el consentimiento viven fuera de la salida del modelo.
+            </p>
+          </div>
+          <div class="checks">
+            <div>
+              <strong>Permisos granulares.</strong> Reglas allow, ask o deny por herramienta.
+            </div>
+            <div>
+              <strong>Checkpoint.</strong> Línea base antes de mutar y reversión cuando aplica.
+            </div>
+            <div>
+              <strong>Contenido no confiable.</strong> Web, GitHub, MCP y UI conservan procedencia.
+            </div>
+            <div>
+              <strong>Proactividad calibrada.</strong> Sugiere según contexto; no se autoautoriza.
+            </div>
+            <div>
+              <strong>Privacidad visible.</strong> Sin escucha ambiental ni captura silenciosa.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="shell cta">
+          <span class="eyebrow">Kaoru Agent</span>
+          <h2>
+            Ingeniería seria.<br /><span class="gradient-text">Compañera anime opcional.</span>
+          </h2>
+          <p>
+            El código es abierto. El avatar puede cambiarse. Las capacidades dependen del sistema,
+            proveedor y permisos configurados; cuando una comprobación no es posible, Kaoru debe
+            decirlo en lugar de fingir éxito.
+          </p>
+          <a class="button primary" href="https://github.com/Dregxmoon/Kaoru-Agent"
+            >Abrir repositorio</a
+          >
+        </div>
+      </section>
+    </main>
+
+    <footer class="shell">
+      <div>
+        Kaoru es un proyecto independiente y no está afiliado ni respaldado por HoYoverse.<br />
+        Revisión pública: 9 de septiembre de 2026.
+      </div>
+      <div>
+        <a href="privacy.html">Privacidad</a>
+        <a href="terms.html">Términos</a>
+        <a href="mailto:dregxmoon@gmail.com">Contacto</a>
+      </div>
+    </footer>
+  </body>
 </html>

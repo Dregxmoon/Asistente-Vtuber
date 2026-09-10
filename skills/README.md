@@ -10,3 +10,7 @@ Conocimiento especializado inyectado contextualmente al agente, cargado por el s
 | `testing-patterns/` | Patrones de tests del proyecto: estructura `tests/test_<nombre>.js`, helpers, assertions, mocking y reglas de CI                                                   |
 
 Los `SKILL.md` siguen el mismo formato que los skills del usuario (ver `core/skills/README.md`).
+
+Cuando una skill coincide con una tarea, sus instrucciones forman parte del contexto enviado al LLM.
+No almacenes claves, tokens, datos personales innecesarios ni contenido de terceros sin permiso en
+estos archivos. Consulta el [aviso de privacidad](../docs/web/privacy.html).

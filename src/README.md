@@ -18,8 +18,10 @@ Ventana overlay que renderiza el modelo Cubism usando **Pixi.js + live2d-display
   límites reales del mesh (`coreModel.getDrawableVertexPositions`), no del canvas del modelo, para que
   cualquier modelo importado entre en pantalla. El borde inferior de la ventana es el "piso": en `full`
   los pies tocan el piso, en `half` la cintura, en `head` el cuello — la cabeza siempre arriba. Así un
-  modelo pequeño queda anclado abajo (no flota en el medio). Solo rota entre las vistas que estén
-  activas (`views-changed`); con una sola vista el modelo queda fijo.
+  modelo pequeño queda anclado abajo (no flota en el medio). No hay desplazamiento suavizado ni
+  rotación autónoma de encuadre: la vista elegida permanece fija. Las motions y expresiones del
+  propio modelo conservan su suavidad, y los gestos pueden ampliar temporalmente su encuadre para
+  no recortarse al sobresalir ligeramente del canvas.
 
 ## `chat.html` — ventana de chat
 
@@ -33,32 +35,33 @@ Interfaz completa de conversación con el asistente.
 | Messages              | Burbujas con **streaming markdown incremental**, preview HTML en frame `sandbox`, chips de archivos, divisores de sesión, toast de **copiar al seleccionar** |
 | Input area            | Texto con autocompletado de `/comando` y de `@archivo` (filtra mientras escribes), adjuntar, STT, enviar                                                     |
 | Model panel           | Canvas Live2D integrado (vistas full / half / head) con **gestos LLM-driven** (`(gesto: x)`)                                                                 |
-| Settings modal        | Configuración de API keys (Groq, Gemini, OpenAI)                                                                                                             |
+| Settings modal        | Proveedor/modelo, credenciales y permisos por capacidad: aplicaciones, navegador, pantalla, puntero, teclado, procesos y cámara                              |
 | MCP modal             | Administración de servidores MCP (biblioteca + JSON manual)                                                                                                  |
 | Propuestas proactivas | Burbujas de iniciativa con botones aceptar / descartar + resultado de ejecución                                                                              |
 
 **Eventos IPC principales:**
 
-| Evento                                     | Propósito                                                                                         |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------- |
-| `init-theme`                               | Tema inicial (dark/sakura)                                                                        |
-| `chat-message`                             | Mensaje entrante desde el main process                                                            |
-| `memory-status`                            | Estado del banner de memoria                                                                      |
-| `openclaw-status`                          | Disponibilidad de OpenClaw                                                                        |
-| `initiative`                               | Mensaje iniciado proactivamente por el asistente                                                  |
-| `initiative-decision`                      | Respuesta del usuario a una propuesta                                                             |
-| `agent-approval-needed` / `agent-progress` | Aprobaciones y progreso del bucle agente                                                          |
-| `agent-approval-expired`                   | La aprobación expiró (timeout): el card se marca como expirado y la acción NO se ejecutó          |
-| `plan-*`                                   | Eventos del plan de ejecución                                                                     |
-| `stt-*`                                    | Eventos de reconocimiento de voz                                                                  |
-| `telemetry-report`                         | Reporte `/telemetria`                                                                             |
-| `model-changed`                            | Cambio de modelo Live2D (recarga del canvas)                                                      |
-| `views-changed`                            | Cambio del modo de vista del modelo (`full`/`half`/`head`/`random`, del comando `/modelo-vistas`) |
-| `resumed-session`                          | Sesión anterior retomada en silencio (repuebla el historial sin mensaje de sistema)               |
-| `workspace-changed`                        | Cambio del workspace activo (actualiza UI y resetea la caché de archivos)                         |
+| Evento                                     | Propósito                                                                                                     |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `init-theme`                               | Tema inicial (dark/sakura)                                                                                    |
+| `chat-message`                             | Mensaje entrante desde el main process                                                                        |
+| `memory-status`                            | Estado del banner de memoria                                                                                  |
+| `openclaw-status`                          | Disponibilidad de OpenClaw                                                                                    |
+| `initiative`                               | Mensaje iniciado proactivamente por el asistente                                                              |
+| `initiative-decision`                      | Respuesta del usuario a una propuesta                                                                         |
+| `agent-approval-needed` / `agent-progress` | Aprobaciones y progreso del bucle agente                                                                      |
+| `agent-approval-expired`                   | La aprobación expiró (timeout): el card se marca como expirado y la acción NO se ejecutó                      |
+| `plan-*`                                   | Eventos del plan actual; un run nuevo limpia planes anteriores y “continúa” retoma el último run interrumpido |
+| `stt-*`                                    | Eventos de reconocimiento de voz                                                                              |
+| `telemetry-report`                         | Reporte `/telemetria`                                                                                         |
+| `model-changed`                            | Cambio de modelo Live2D (recarga del canvas)                                                                  |
+| `views-changed`                            | Cambio del modo de vista del modelo (`full`/`half`/`head`/`random`, del comando `/modelo-vistas`)             |
+| `resumed-session`                          | Sesión anterior retomada en silencio (repuebla el historial sin mensaje de sistema)                           |
+| `workspace-changed`                        | Cambio del workspace activo (actualiza UI y resetea la caché de archivos)                                     |
 
-**Tecnologías:** HTML + CSS (variables, temas, animaciones) + Vanilla JS con `require()` de Electron
-(`marked`, `DOMPurify`, Pixi.js, Live2D). TTS por streaming: spawn de `tts_stream.py` (edge-tts) y
+**Tecnologías:** HTML + CSS (variables, temas, animaciones) + JavaScript de renderer aislado; las
+dependencias permitidas (`marked`, `DOMPurify`, Pixi.js, Live2D) se exponen por loaders/preloads
+acotados. TTS por streaming: spawn de `tts_stream.py` (edge-tts) y
 reproducción con Web Audio API sin archivos temporales; `cleanForTTS` limpia el texto hablado
 (Markdown/emoji/código/comandos).
 
@@ -96,3 +99,6 @@ flowchart LR
 
 Cobertura del contrato IPC en `test_commands`, `test_server_security` y las suites E2E
 (`tests/e2e/test_chat_to_agent_loop.js`). Ver `tests/README.md`.
+
+Los mensajes y el contexto visible se pueden enviar al proveedor LLM configurado. La política
+completa está en el [aviso de privacidad](../docs/web/privacy.html).

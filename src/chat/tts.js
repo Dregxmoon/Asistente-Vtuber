@@ -14,9 +14,13 @@ function _loadMuted() {
 }
 
 let _ttsMuted = _loadMuted();
+let _activeSpeechAudio = null;
+let _finishSpeechPlayback = null;
+let _speechGeneration = 0;
 
 function setTtsMuted(value) {
   _ttsMuted = !!value;
+  if (_ttsMuted) interruptSpeech('muted');
   try {
     localStorage.setItem(_TTS_MUTED_KEY, _ttsMuted ? '1' : '0');
   } catch {
@@ -31,6 +35,26 @@ function isTtsMuted() {
 function getAudioCtx() {
   if (!audioCtx || audioCtx.state === 'closed') audioCtx = new AudioContext();
   return audioCtx;
+}
+
+// Cancela únicamente reproducción local. No concede permisos, no cancela el
+// AgentLoop y no abre el micrófono. El contador invalida cualquier TTS que aún
+// estuviera generándose por IPC cuando el usuario decidió interrumpirlo.
+function interruptSpeech(_reason = 'user') {
+  _speechGeneration++;
+  if (_activeSpeechAudio) {
+    try {
+      _activeSpeechAudio.pause();
+      _activeSpeechAudio.currentTime = 0;
+    } catch {}
+    _activeSpeechAudio = null;
+  }
+  try {
+    speechSynthesis.cancel();
+  } catch {}
+  isSpeaking = false;
+  if (_finishSpeechPlayback) _finishSpeechPlayback();
+  if (getAgentState() === 'speaking') setAgentState('idle', 'Listo');
 }
 // Limpia el texto para TTS: deja SOLO el mensaje hablado de Kaoru. Elimina
 // bloques de código (fences), código inline, HTML crudo, líneas de actividad
@@ -98,6 +122,7 @@ function cleanForTTS(text) {
 async function speak(text) {
   if (_ttsMuted) return;
   if (isSpeaking) return;
+  const generation = ++_speechGeneration;
   isSpeaking = true;
   setAgentState('speaking', 'Hablando');
   const spokenText = cleanForTTS(text);
@@ -107,6 +132,7 @@ async function speak(text) {
     const pythonBin = await getPythonBin();
     if (!pythonBin) throw new Error('No se encontró un intérprete de Python — TTS no disponible');
     const u8 = await assistant.ttsStream({ pythonBin, text: spokenText });
+    if (generation !== _speechGeneration) return;
     // NO usar WebAudio decodeAudioData: en Chromium 28 el decoder nativo
     // (AsyncAudioDecoder → AudioBuffer::AudioBuffer(AudioBus*)) crashea con
     // SEGV ante MP3 inválido/corto (exitCode 139, tumba el renderer). Se
@@ -114,22 +140,37 @@ async function speak(text) {
     const blob = new Blob([u8], { type: 'audio/mpeg' });
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
+    _activeSpeechAudio = audio;
     await new Promise((resolve) => {
-      audio.onended = resolve;
-      audio.onerror = resolve;
-      audio.play().catch(resolve);
+      const finish = () => {
+        if (_finishSpeechPlayback === finish) _finishSpeechPlayback = null;
+        resolve();
+      };
+      _finishSpeechPlayback = finish;
+      audio.onended = finish;
+      audio.onerror = finish;
+      audio.play().catch(finish);
     });
+    if (_activeSpeechAudio === audio) _activeSpeechAudio = null;
     URL.revokeObjectURL(url);
   } catch {
+    if (generation !== _speechGeneration) return;
     const utt = new SpeechSynthesisUtterance(spokenText);
     utt.lang = 'ja-JP';
     utt.pitch = 1.3;
     utt.rate = 1.05;
     await new Promise((r) => {
-      utt.onended = r;
+      const finish = () => {
+        if (_finishSpeechPlayback === finish) _finishSpeechPlayback = null;
+        r();
+      };
+      _finishSpeechPlayback = finish;
+      utt.onend = finish;
+      utt.onerror = finish;
       speechSynthesis.speak(utt);
     });
   }
+  if (generation !== _speechGeneration) return;
   isSpeaking = false;
   // Solo volver a "listo" si nadie más cambió el estado mientras hablaba.
   if (getAgentState() === 'speaking') setAgentState('idle', 'Listo');
