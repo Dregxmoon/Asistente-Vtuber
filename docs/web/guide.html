@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Configuración, tareas y criterios de revisión para utilizar Kaoru en tu equipo o en un proyecto de cliente."
+    />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f8f8f7" />
+    <title>Guía de uso — Kaoru</title>
+    <link rel="alternate" hreflang="es" href="./guide.html" />
+    <link rel="alternate" hreflang="en" href="./en/guide.html" />
+    <link rel="alternate" hreflang="ja" href="./ja/guide.html" />
+    <link rel="alternate" hreflang="x-default" href="./guide.html" />
+    <link rel="stylesheet" href="./assets/styles.css" />
+    <script src="./assets/main.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Ir al contenido</a>
+    <header class="nav">
+      <div class="nav-inner">
+        <a class="nav-logo" href="index.html" aria-label="Kaoru"
+          ><span class="logo-mark" aria-hidden="true">k.</span>Kaoru</a
+        >
+        <nav class="nav-links" id="site-navigation" aria-label="Inicio">
+          <a href="index.html#features">Capacidades</a><a href="index.html#workflow">Cómo trabaja</a
+          ><a href="index.html#security">Seguridad</a
+          ><a href="guide.html" aria-current="page">Guía de uso</a>
+        </nav>
+        <div class="nav-actions">
+          <button
+            class="theme-btn"
+            id="theme-toggle"
+            type="button"
+            aria-label="Cambiar tema"
+            aria-pressed="false"
+          >
+            <span aria-hidden="true">◐</span></button
+          ><button
+            class="theme-btn menu-toggle"
+            type="button"
+            aria-label="Abrir navegación"
+            aria-controls="site-navigation"
+            aria-expanded="false"
+          >
+            <span aria-hidden="true">☰</span></button
+          ><a class="btn-dark nav-github" href="https://github.com/Dregxmoon/Kaoru-Agent"
+            >GitHub <span aria-hidden="true">↗</span></a
+          >
+        </div>
+      </div>
+      <nav class="language-bar" aria-label="Idioma">
+        <a href="./guide.html" lang="es" hreflang="es" aria-current="page">Español</a
+        ><a href="./en/guide.html" lang="en" hreflang="en">English</a
+        ><a href="./ja/guide.html" lang="ja" hreflang="ja">日本語</a>
+      </nav>
+    </header>
+    <main id="main">
+      <header class="page-heading container">
+        <span class="eyebrow">KAORU / Guía de uso</span>
+        <h1>Guía de uso</h1>
+        <p>
+          Configuración, tareas y criterios de revisión para utilizar Kaoru en tu equipo o en un
+          proyecto de cliente.
+        </p>
+      </header>
+      <div class="container document-layout">
+        <aside class="toc">
+          <nav aria-label="En esta página">
+            <strong>En esta página</strong><a href="#install">Instalación y primer arranque</a
+            ><a href="#provider">Proveedor, modelo y coste</a
+            ><a href="#workspace">Workspace y reglas</a><a href="#task">Una primera tarea útil</a
+            ><a href="#verification">Pruebas y finalización</a
+            ><a href="#desktop">Voz, navegador y sistema operativo</a
+            ><a href="#connections">Integraciones y trabajo en equipo</a
+            ><a href="#recovery">Continuidad y recuperación</a
+            ><a href="#delivery">Antes de entregar a un cliente</a>
+          </nav>
+        </aside>
+        <article class="prose">
+          <section id="install">
+            <h2>1. Instalación y primer arranque</h2>
+            <p>
+              Necesitas Git, Node.js ≥ 18 y npm ≥ 9 para instalar desde el código. Los módulos
+              nativos se reconstruyen para Electron; según el sistema puedes necesitar herramientas
+              de compilación. Consulta la documentación de instalación si falla una dependencia.
+            </p>
+            <div class="code-block">
+              <div class="code-heading">
+                <span>Git / npm</span
+                ><button
+                  type="button"
+                  class="copy-button"
+                  data-copy="install-commands"
+                  data-copied="Copiado"
+                  data-error="Selecciona y copia el bloque de comandos."
+                >
+                  Copiar comandos
+                </button>
+              </div>
+              <pre><code id="install-commands">git clone https://github.com/Dregxmoon/Kaoru-Agent.git
+cd Kaoru-Agent
+npm install
+npm run rebuild
+npx electron .</code></pre>
+            </div>
+            <p class="copy-status" role="status" aria-live="polite"></p>
+            <p>
+              Ejecuta estos comandos dentro de tu entorno de desarrollo. Después consulta la
+              referencia del repositorio para la configuración inicial, voz y dependencias
+              específicas de tu sistema.
+            </p>
+            <p class="inline-links">
+              <a href="https://github.com/Dregxmoon/Kaoru-Agent/blob/produccion/README.md"
+                >Instrucciones completas de instalación ↗</a
+              ><a href="https://github.com/Dregxmoon/Kaoru-Agent/releases"
+                >Consultar versiones publicadas ↗</a
+              >
+            </p>
+          </section>
+          <section id="provider">
+            <h2>2. Proveedor, modelo y coste</h2>
+            <p>
+              Elige el proveedor y el modelo en la configuración de Kaoru. Usa una clave autorizada
+              o un endpoint compatible. Revisa la política de datos, las cuotas y el coste de tu
+              proveedor; el software abierto no incluye consumo de APIs. Un modelo local no
+              desconecta automáticamente TTS, navegación ni integraciones.
+            </p>
+          </section>
+          <section id="workspace">
+            <h2>3. Workspace y reglas</h2>
+            <p>
+              Selecciona la carpeta del proyecto desde la barra del chat. Prepara sus dependencias y
+              reglas: Kaoru puede incorporar AGENTS.md, CLAUDE.md o .cursorrules. Evita incluir
+              archivos ajenos a la tarea. Las reglas del proyecto orientan el trabajo; los permisos
+              de ejecución se resuelven por separado.
+            </p>
+          </section>
+          <section id="task">
+            <h2>4. Una primera tarea útil</h2>
+            <p>
+              Prueba con: “Analiza cómo se valida este formulario, identifica los archivos
+              implicados y propón las pruebas; todavía no edites”. Después autoriza un cambio
+              concreto con un resultado observable. Revisa el plan, la actividad y el diff, y
+              cancela la generación si necesitas detener el trabajo.
+            </p>
+          </section>
+          <section id="verification">
+            <h2>5. Pruebas y finalización</h2>
+            <p>
+              Configura los comandos del proyecto. En smart, la verificación posterior a mutaciones
+              reconocidas puede ejecutar scripts de calidad y un control de sintaxis JS de respaldo.
+              La selección focal automática reconoce tests/run-all.sh; otros runners requieren
+              configuración. Las búsquedas de impacto son aproximadas y no sustituyen las pruebas de
+              integración.
+            </p>
+          </section>
+          <section id="desktop">
+            <h2>6. Voz, navegador y sistema operativo</h2>
+            <p>
+              La voz requiere Python y los componentes de ASR/TTS configurados. El micrófono se abre
+              por acción explícita; pulsarlo interrumpe la voz de Kaoru. Abrir una URL utiliza el
+              navegador predeterminado; las tareas que inspeccionan páginas usan un Chromium
+              administrado con un perfil separado. Linux usa AT-SPI2 y Windows UI Automation para
+              accesibilidad; macOS tiene cobertura parcial.
+            </p>
+          </section>
+          <section id="connections">
+            <h2>7. Integraciones y trabajo en equipo</h2>
+            <p>
+              Conecta únicamente cuentas autorizadas. En GitHub y Google elige los alcances
+              necesarios y revoca accesos que ya no uses. Revisa el origen y los permisos de MCP y
+              plugins. Empieza con un repositorio de prueba antes de usar datos de clientes y
+              acuerda qué contexto puede salir del equipo.
+            </p>
+          </section>
+          <section id="recovery">
+            <h2>8. Continuidad y recuperación</h2>
+            <p>
+              La memoria y los objetivos durables necesitan el almacenamiento local operativo.
+              Guarda respaldos antes de operaciones importantes. Un checkpoint no revierte
+              automáticamente acciones en servicios externos. Los subagentes de lectura pueden
+              investigar en paralelo; los que modifican el workspace se ejecutan de forma serial.
+            </p>
+          </section>
+          <section id="delivery">
+            <h2>9. Antes de entregar a un cliente</h2>
+            <p>
+              Comprueba el resultado funcional, el diff, las pruebas y las limitaciones informadas.
+              Documenta proveedor, permisos y tratamiento de datos para esa instalación. Si
+              distribuyes Kaoru comercialmente, usa un avatar propio o con derechos adecuados: los
+              assets de March 7th no están cubiertos por MIT. No se ofrece aquí un compromiso
+              contractual de soporte ni un SLA.
+            </p>
+          </section>
+          <p class="note">
+            <a href="privacy.html">Privacidad</a> · <a href="terms.html">Términos y licencia</a>
+          </p>
+        </article>
+      </div>
+    </main>
+    <footer>
+      <div class="container footer-top">
+        <a class="nav-logo" href="index.html"
+          ><span class="logo-mark" aria-hidden="true">k.</span>Kaoru</a
+        >
+        <nav aria-label="Términos y licencia">
+          <a href="index.html">Inicio</a><a href="guide.html" aria-current="page">Guía de uso</a
+          ><a href="privacy.html">Privacidad</a><a href="terms.html">Términos y licencia</a
+          ><a href="mailto:dregxmoon@gmail.com">dregxmoon@gmail.com</a>
+        </nav>
+      </div>
+      <div class="container footer-bottom">
+        <p>Kaoru · Código bajo licencia MIT</p>
+        <p>
+          Los modelos y personajes de terceros mantienen sus propios derechos. Proyecto
+          independiente, sin afiliación con HoYoverse.
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

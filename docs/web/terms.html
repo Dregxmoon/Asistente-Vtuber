@@ -1,243 +1,240 @@
 <!doctype html>
 <html lang="es">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      name="description"
-      content="Términos de uso de Kaoru, asistente de escritorio con IA y automatización bajo permisos."
-    />
-    <title>Términos de uso — Kaoru</title>
-    <style>
-      :root {
-        color-scheme: light dark;
-        --ink: #18202b;
-        --muted: #5f6b7a;
-        --line: #d8dee8;
-        --panel: #f6f8fb;
-        --link: #3157c8;
-        --accent: #7557d8;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --ink: #e7eaf0;
-          --muted: #aab3c2;
-          --line: #3b4350;
-          --panel: #202630;
-          --link: #9eb6ff;
-        }
-      }
-      * {
-        box-sizing: border-box;
-      }
-      body {
-        max-width: 880px;
-        margin: 48px auto;
-        padding: 0 22px 64px;
-        font:
-          16px/1.65 system-ui,
-          -apple-system,
-          'Segoe UI',
-          sans-serif;
-        color: var(--ink);
-      }
-      h1 {
-        font-size: 2rem;
-        margin-bottom: 0.15rem;
-      }
-      h2 {
-        margin-top: 2.2rem;
-        border-bottom: 1px solid var(--line);
-        padding-bottom: 0.35rem;
-      }
-      a {
-        color: var(--link);
-      }
-      nav a {
-        margin-right: 1rem;
-      }
-      .updated {
-        color: var(--muted);
-      }
-      .toc,
-      .note {
-        background: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: 10px;
-        padding: 14px 18px;
-      }
-      .toc a {
-        display: block;
-        margin: 0.2rem 0;
-      }
-      .note {
-        border-left: 4px solid var(--accent);
-      }
-      code {
-        background: var(--panel);
-        padding: 0.1rem 0.3rem;
-        border-radius: 4px;
-      }
-      footer {
-        margin-top: 3rem;
-        color: var(--muted);
-        font-size: 0.9rem;
-      }
-    </style>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Información sobre el uso de Kaoru y sus componentes." />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f8f8f7" />
+    <title>Términos y licencia — Kaoru</title>
+    <link rel="alternate" hreflang="es" href="./terms.html" />
+    <link rel="alternate" hreflang="en" href="./en/terms.html" />
+    <link rel="alternate" hreflang="ja" href="./ja/terms.html" />
+    <link rel="alternate" hreflang="x-default" href="./terms.html" />
+    <link rel="stylesheet" href="./assets/styles.css" />
+    <script src="./assets/main.js"></script>
   </head>
   <body>
-    <nav aria-label="Navegación principal">
-      <a href="index.html">Inicio</a><a href="privacy.html">Privacidad</a
-      ><a href="https://github.com/Dregxmoon/Kaoru-Agent">Código fuente</a>
-    </nav>
-    <h1>Términos de uso de Kaoru</h1>
-    <p class="updated">Última actualización: 8 de septiembre de 2026</p>
+    <a class="skip-link" href="#main">Ir al contenido</a>
+    <header class="nav">
+      <div class="nav-inner">
+        <a class="nav-logo" href="index.html" aria-label="Kaoru"
+          ><span class="logo-mark" aria-hidden="true">k.</span>Kaoru</a
+        >
+        <nav class="nav-links" id="site-navigation" aria-label="Inicio">
+          <a href="index.html#features">Capacidades</a><a href="index.html#workflow">Cómo trabaja</a
+          ><a href="index.html#security">Seguridad</a><a href="guide.html">Guía de uso</a>
+        </nav>
+        <div class="nav-actions">
+          <button
+            class="theme-btn"
+            id="theme-toggle"
+            type="button"
+            aria-label="Cambiar tema"
+            aria-pressed="false"
+          >
+            <span aria-hidden="true">◐</span></button
+          ><button
+            class="theme-btn menu-toggle"
+            type="button"
+            aria-label="Abrir navegación"
+            aria-controls="site-navigation"
+            aria-expanded="false"
+          >
+            <span aria-hidden="true">☰</span></button
+          ><a class="btn-dark nav-github" href="https://github.com/Dregxmoon/Kaoru-Agent"
+            >GitHub <span aria-hidden="true">↗</span></a
+          >
+        </div>
+      </div>
+      <nav class="language-bar" aria-label="Idioma">
+        <a href="./terms.html" lang="es" hreflang="es" aria-current="page">Español</a
+        ><a href="./en/terms.html" lang="en" hreflang="en">English</a
+        ><a href="./ja/terms.html" lang="ja" hreflang="ja">日本語</a>
+      </nav>
+    </header>
+    <main id="main">
+      <header class="page-heading container">
+        <span class="eyebrow">KAORU / Términos y licencia</span>
+        <h1>Términos y licencia</h1>
+      </header>
+      <div class="container document-layout">
+        <aside class="toc">
+          <nav aria-label="En esta página">
+            <strong>En esta página</strong><a href="#aceptacion">1. Aceptación y alcance</a
+            ><a href="#servicio">2. Qué ofrece Kaoru</a
+            ><a href="#permisos">3. Automatización, permisos y riesgos</a
+            ><a href="#ia">4. Inteligencia artificial</a
+            ><a href="#cuentas">5. Cuentas, credenciales y terceros</a
+            ><a href="#uso">6. Uso permitido</a
+            ><a href="#licencia">7. Código, assets y propiedad intelectual</a
+            ><a href="#garantias">8. Garantías y responsabilidad</a
+            ><a href="#edad">9. Edad y jurisdicción</a><a href="#cambios">10. Cambios y contacto</a>
+          </nav>
+        </aside>
+        <article class="prose legal">
+          <p class="updated">Última actualización: 8 de septiembre de 2026</p>
 
-    <nav class="toc" aria-label="Contenido">
-      <strong>Contenido</strong>
-      <a href="#aceptacion">1. Aceptación y alcance</a>
-      <a href="#servicio">2. Qué ofrece Kaoru</a>
-      <a href="#permisos">3. Automatización, permisos y riesgos</a>
-      <a href="#ia">4. Inteligencia artificial</a>
-      <a href="#cuentas">5. Cuentas, credenciales y terceros</a>
-      <a href="#uso">6. Uso permitido</a>
-      <a href="#licencia">7. Código, assets y propiedad intelectual</a>
-      <a href="#garantias">8. Garantías y responsabilidad</a>
-      <a href="#edad">9. Edad y jurisdicción</a>
-      <a href="#cambios">10. Cambios y contacto</a>
-    </nav>
+          <h2 id="aceptacion">1. Aceptación y alcance</h2>
+          <p>
+            Al instalar o usar Kaoru aceptas estos términos y el
+            <a href="privacy.html">Aviso de privacidad</a>. Si no estás de acuerdo, no uses la
+            aplicación. Estos términos cubren el software del proyecto; los proveedores, sitios,
+            modelos, plugins, servicios conectados y assets de terceros mantienen sus propias
+            condiciones.
+          </p>
 
-    <h2 id="aceptacion">1. Aceptación y alcance</h2>
-    <p>
-      Al instalar o usar Kaoru aceptas estos términos y el
-      <a href="privacy.html">Aviso de privacidad</a>. Si no estás de acuerdo, no uses la aplicación.
-      Estos términos cubren el software del proyecto; los proveedores, sitios, modelos, plugins,
-      servicios conectados y assets de terceros mantienen sus propias condiciones.
-    </p>
+          <h2 id="servicio">2. Qué ofrece Kaoru</h2>
+          <p>
+            Kaoru es una aplicación de escritorio de uso personal con chat, memoria, voz,
+            proactividad y herramientas. Puede leer o modificar archivos, ejecutar comandos, usar
+            Git/GitHub, abrir sitios, controlar interfaces accesibles, realizar clics visuales
+            vinculados a capturas, enviar teclado, listar o detener procesos y abrir aplicaciones.
+            La capacidad “cámara” actual consulta estado o abre la aplicación correspondiente; no
+            graba ni toma fotografías.
+          </p>
+          <p>
+            <code>open_website</code> utiliza normalmente tu navegador predeterminado y su sesión
+            existente, aunque Kaoru solo solicita abrir la URL. Los flujos que requieren
+            inspeccionar DOM, buscar, hacer clic y verificar se ejecutan en un perfil Chromium
+            administrado y separado.
+          </p>
 
-    <h2 id="servicio">2. Qué ofrece Kaoru</h2>
-    <p>
-      Kaoru es una aplicación de escritorio de uso personal con chat, memoria, voz, proactividad y
-      herramientas. Puede leer o modificar archivos, ejecutar comandos, usar Git/GitHub, abrir
-      sitios, controlar interfaces accesibles, realizar clics visuales vinculados a capturas, enviar
-      teclado, listar o detener procesos y abrir aplicaciones. La capacidad “cámara” actual consulta
-      estado o abre la aplicación correspondiente; no graba ni toma fotografías.
-    </p>
-    <p>
-      <code>open_website</code> utiliza normalmente tu navegador predeterminado y su sesión
-      existente, aunque Kaoru solo solicita abrir la URL. Los flujos que requieren inspeccionar DOM,
-      buscar, hacer clic y verificar se ejecutan en un perfil Chromium administrado y separado.
-    </p>
+          <h2 id="permisos">3. Automatización, permisos y riesgos</h2>
+          <p>
+            Kaoru aplica reglas <code>allow</code>, <code>ask</code> y <code>deny</code>,
+            aprobaciones de sesión, límites de ruta y, según la acción, checkpoints y verificación.
+            También permite desactivar por separado aplicaciones, navegador, pantalla, puntero,
+            teclado, procesos y cámara. Eres responsable de revisar esa configuración y las
+            solicitudes de aprobación.
+          </p>
+          <div class="note">
+            Una aprobación autoriza el intento, no garantiza la intención ni el resultado. Una
+            coordenada puede apuntar al lugar equivocado si la pantalla cambia; un comando puede
+            borrar datos; detener un proceso puede perder trabajo; y una acción en Google, GitHub u
+            otro sitio puede ser difícil de revertir. Conserva respaldos y verifica las operaciones
+            importantes.
+          </div>
+          <p>
+            El modo de autonomía no amplía por sí solo los permisos del sistema. Incluso en modo
+            “Actuar”, solo deben ejecutarse automáticamente las acciones cubiertas por una regla
+            explícita. Los mecanismos de sandbox, validación, detección de prompt injection y
+            rollback reducen riesgos, pero no los eliminan.
+          </p>
 
-    <h2 id="permisos">3. Automatización, permisos y riesgos</h2>
-    <p>
-      Kaoru aplica reglas <code>allow</code>, <code>ask</code> y <code>deny</code>, aprobaciones de
-      sesión, límites de ruta y, según la acción, checkpoints y verificación. También permite
-      desactivar por separado aplicaciones, navegador, pantalla, puntero, teclado, procesos y
-      cámara. Eres responsable de revisar esa configuración y las solicitudes de aprobación.
-    </p>
-    <div class="note">
-      Una aprobación autoriza el intento, no garantiza la intención ni el resultado. Una coordenada
-      puede apuntar al lugar equivocado si la pantalla cambia; un comando puede borrar datos;
-      detener un proceso puede perder trabajo; y una acción en Google, GitHub u otro sitio puede ser
-      difícil de revertir. Conserva respaldos y verifica las operaciones importantes.
-    </div>
-    <p>
-      El modo de autonomía no amplía por sí solo los permisos del sistema. Incluso en modo “Actuar”,
-      solo deben ejecutarse automáticamente las acciones cubiertas por una regla explícita. Los
-      mecanismos de sandbox, validación, detección de prompt injection y rollback reducen riesgos,
-      pero no los eliminan.
-    </p>
+          <h2 id="ia">4. Inteligencia artificial</h2>
+          <p>
+            Las respuestas y decisiones de herramienta pueden depender del proveedor LLM que
+            configures. Los modelos generativos pueden equivocarse, omitir contexto, inventar
+            información o interpretar mal una interfaz aunque el resultado parezca convincente.
+            Verifica de forma independiente las decisiones médicas, legales, financieras, de
+            seguridad y cualquier acción irreversible.
+          </p>
+          <p>
+            El catálogo de proveedores y modelos cambia con el tiempo. Tu relación con un proveedor
+            externo se rige por sus términos, precios, límites y políticas. Un endpoint local puede
+            evitar transferir el prompt a un proveedor remoto, pero otras funciones de red —TTS,
+            web, Google, GitHub, MCP o actualizaciones— seguirán conectándose si las usas.
+          </p>
 
-    <h2 id="ia">4. Inteligencia artificial</h2>
-    <p>
-      Las respuestas y decisiones de herramienta pueden depender del proveedor LLM que configures.
-      Los modelos generativos pueden equivocarse, omitir contexto, inventar información o
-      interpretar mal una interfaz aunque el resultado parezca convincente. Verifica de forma
-      independiente las decisiones médicas, legales, financieras, de seguridad y cualquier acción
-      irreversible.
-    </p>
-    <p>
-      El catálogo de proveedores y modelos cambia con el tiempo. Tu relación con un proveedor
-      externo se rige por sus términos, precios, límites y políticas. Un endpoint local puede evitar
-      transferir el prompt a un proveedor remoto, pero otras funciones de red —TTS, web, Google,
-      GitHub, MCP o actualizaciones— seguirán conectándose si las usas.
-    </p>
+          <h2 id="cuentas">5. Cuentas, credenciales y terceros</h2>
+          <ul>
+            <li>
+              Usa únicamente cuentas y claves que te pertenezcan o para las que tengas autorización.
+            </li>
+            <li>
+              Selecciona el alcance mínimo en Google Workspace y GitHub; revoca accesos que ya no
+              necesites.
+            </li>
+            <li>
+              No compartas archivos de configuración: si el llavero del sistema no está disponible,
+              algunas credenciales pueden quedar en archivos locales legibles por tu usuario.
+            </li>
+            <li>
+              Los sitios visitados, Microsoft Edge TTS, proveedores LLM, Google, GitHub, models.dev,
+              servidores MCP y plugins son servicios o componentes de terceros; Kaoru no controla su
+              disponibilidad ni sus políticas.
+            </li>
+            <li>
+              Un plugin o servidor MCP puede procesar contexto y ejecutar código con el alcance que
+              le concedas. Revisa su origen, dependencias y permisos antes de instalarlo.
+            </li>
+          </ul>
 
-    <h2 id="cuentas">5. Cuentas, credenciales y terceros</h2>
-    <ul>
-      <li>
-        Usa únicamente cuentas y claves que te pertenezcan o para las que tengas autorización.
-      </li>
-      <li>
-        Selecciona el alcance mínimo en Google Workspace y GitHub; revoca accesos que ya no
-        necesites.
-      </li>
-      <li>
-        No compartas archivos de configuración: si el llavero del sistema no está disponible,
-        algunas credenciales pueden quedar en archivos locales legibles por tu usuario.
-      </li>
-      <li>
-        Los sitios visitados, Microsoft Edge TTS, proveedores LLM, Google, GitHub, models.dev,
-        servidores MCP y plugins son servicios o componentes de terceros; Kaoru no controla su
-        disponibilidad ni sus políticas.
-      </li>
-      <li>
-        Un plugin o servidor MCP puede procesar contexto y ejecutar código con el alcance que le
-        concedas. Revisa su origen, dependencias y permisos antes de instalarlo.
-      </li>
-    </ul>
+          <h2 id="uso">6. Uso permitido</h2>
+          <p>
+            Debes usar Kaoru de forma lícita y solo sobre dispositivos, cuentas, repositorios y
+            datos para los que tengas autorización. No lo uses para vigilar a terceros sin
+            consentimiento, vulnerar sistemas, eludir controles de acceso, distribuir malware,
+            infringir derechos, acosar ni procesar ilegalmente datos personales. En equipos de
+            trabajo o estudio también aplican las políticas de la organización.
+          </p>
 
-    <h2 id="uso">6. Uso permitido</h2>
-    <p>
-      Debes usar Kaoru de forma lícita y solo sobre dispositivos, cuentas, repositorios y datos para
-      los que tengas autorización. No lo uses para vigilar a terceros sin consentimiento, vulnerar
-      sistemas, eludir controles de acceso, distribuir malware, infringir derechos, acosar ni
-      procesar ilegalmente datos personales. En equipos de trabajo o estudio también aplican las
-      políticas de la organización.
-    </p>
+          <h2 id="licencia">7. Código, assets y propiedad intelectual</h2>
+          <p>
+            El código se ofrece bajo la licencia incluida en el repositorio. Esa licencia no concede
+            derechos sobre modelos Live2D, personajes, nombres, marcas, música ni otros materiales
+            de terceros. Los assets de March 7th pertenecen a Cognosphere Pte. Ltd./HoYoverse; Kaoru
+            es un proyecto de fan independiente y no está afiliado ni respaldado por esas entidades.
+            Si redistribuyes el proyecto, verifica tus derechos, sustituye los assets o exclúyelos.
+          </p>
 
-    <h2 id="licencia">7. Código, assets y propiedad intelectual</h2>
-    <p>
-      El código se ofrece bajo la licencia incluida en el repositorio. Esa licencia no concede
-      derechos sobre modelos Live2D, personajes, nombres, marcas, música ni otros materiales de
-      terceros. Los assets de March 7th pertenecen a Cognosphere Pte. Ltd./HoYoverse; Kaoru es un
-      proyecto de fan independiente y no está afiliado ni respaldado por esas entidades. Si
-      redistribuyes el proyecto, verifica tus derechos, sustituye los assets o exclúyelos.
-    </p>
+          <h2 id="garantias">8. Garantías y responsabilidad</h2>
+          <p>
+            En la máxima medida permitida por la ley aplicable, Kaoru se proporciona “tal cual” y
+            sin garantías de disponibilidad, exactitud, idoneidad, seguridad absoluta o ausencia de
+            errores. Conservas la responsabilidad de revisar salidas, respaldar datos, proteger
+            credenciales y decidir qué acciones y transferencias autorizas.
+          </p>
+          <p>
+            En la máxima medida permitida por la ley, el desarrollador no será responsable por daños
+            indirectos, pérdida de datos, trabajo, ingresos o acceso a cuentas derivados del uso,
+            imposibilidad de uso, configuración del usuario, respuestas del proveedor o componentes
+            de terceros. Nada en esta sección excluye derechos irrenunciables ni responsabilidad que
+            legalmente no pueda limitarse.
+          </p>
 
-    <h2 id="garantias">8. Garantías y responsabilidad</h2>
-    <p>
-      En la máxima medida permitida por la ley aplicable, Kaoru se proporciona “tal cual” y sin
-      garantías de disponibilidad, exactitud, idoneidad, seguridad absoluta o ausencia de errores.
-      Conservas la responsabilidad de revisar salidas, respaldar datos, proteger credenciales y
-      decidir qué acciones y transferencias autorizas.
-    </p>
-    <p>
-      En la máxima medida permitida por la ley, el desarrollador no será responsable por daños
-      indirectos, pérdida de datos, trabajo, ingresos o acceso a cuentas derivados del uso,
-      imposibilidad de uso, configuración del usuario, respuestas del proveedor o componentes de
-      terceros. Nada en esta sección excluye derechos irrenunciables ni responsabilidad que
-      legalmente no pueda limitarse.
-    </p>
+          <h2 id="edad">9. Edad y jurisdicción</h2>
+          <p>
+            Kaoru está dirigido a mayores de 18 años o a la mayoría de edad aplicable. Estos
+            términos se rigen por las leyes aplicables en México, sin perjuicio de las protecciones
+            obligatorias que correspondan al usuario en su jurisdicción. Antes de iniciar una
+            controversia, puedes intentar resolverla por el canal de contacto indicado abajo.
+          </p>
 
-    <h2 id="edad">9. Edad y jurisdicción</h2>
-    <p>
-      Kaoru está dirigido a mayores de 18 años o a la mayoría de edad aplicable. Estos términos se
-      rigen por las leyes aplicables en México, sin perjuicio de las protecciones obligatorias que
-      correspondan al usuario en su jurisdicción. Antes de iniciar una controversia, puedes intentar
-      resolverla por el canal de contacto indicado abajo.
-    </p>
-
-    <h2 id="cambios">10. Cambios y contacto</h2>
-    <p>
-      Estos términos pueden cambiar cuando evolucionen las capacidades, dependencias o requisitos
-      legales. La fecha superior identifica la versión vigente; los cambios materiales se
-      comunicarán en el repositorio o la aplicación cuando sea razonablemente posible.
-    </p>
+          <h2 id="cambios">10. Cambios y contacto</h2>
+          <p>
+            Estos términos pueden cambiar cuando evolucionen las capacidades, dependencias o
+            requisitos legales. La fecha superior identifica la versión vigente; los cambios
+            materiales se comunicarán en el repositorio o la aplicación cuando sea razonablemente
+            posible.
+          </p>
+          <footer>
+            Preguntas: <a href="mailto:dregxmoon@gmail.com">dregxmoon@gmail.com</a> ·
+            <a href="privacy.html">Aviso de privacidad</a>
+          </footer>
+        </article>
+      </div>
+    </main>
     <footer>
-      Preguntas: <a href="mailto:dregxmoon@gmail.com">dregxmoon@gmail.com</a> ·
-      <a href="privacy.html">Aviso de privacidad</a>
+      <div class="container footer-top">
+        <a class="nav-logo" href="index.html"
+          ><span class="logo-mark" aria-hidden="true">k.</span>Kaoru</a
+        >
+        <nav aria-label="Términos y licencia">
+          <a href="index.html">Inicio</a><a href="guide.html">Guía de uso</a
+          ><a href="privacy.html">Privacidad</a
+          ><a href="terms.html" aria-current="page">Términos y licencia</a
+          ><a href="mailto:dregxmoon@gmail.com">dregxmoon@gmail.com</a>
+        </nav>
+      </div>
+      <div class="container footer-bottom">
+        <p>Kaoru · Código bajo licencia MIT</p>
+        <p>
+          Los modelos y personajes de terceros mantienen sus propios derechos. Proyecto
+          independiente, sin afiliación con HoYoverse.
+        </p>
+      </div>
     </footer>
   </body>
 </html>

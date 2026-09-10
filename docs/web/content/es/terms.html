@@ -1,0 +1,144 @@
+<p class="updated">Última actualización: 8 de septiembre de 2026</p>
+
+<nav class="toc" aria-label="Contenido">
+  <strong>Contenido</strong>
+  <a href="#aceptacion">1. Aceptación y alcance</a>
+  <a href="#servicio">2. Qué ofrece Kaoru</a>
+  <a href="#permisos">3. Automatización, permisos y riesgos</a>
+  <a href="#ia">4. Inteligencia artificial</a>
+  <a href="#cuentas">5. Cuentas, credenciales y terceros</a>
+  <a href="#uso">6. Uso permitido</a>
+  <a href="#licencia">7. Código, assets y propiedad intelectual</a>
+  <a href="#garantias">8. Garantías y responsabilidad</a>
+  <a href="#edad">9. Edad y jurisdicción</a>
+  <a href="#cambios">10. Cambios y contacto</a>
+</nav>
+
+<h2 id="aceptacion">1. Aceptación y alcance</h2>
+<p>
+  Al instalar o usar Kaoru aceptas estos términos y el
+  <a href="privacy.html">Aviso de privacidad</a>. Si no estás de acuerdo, no uses la aplicación.
+  Estos términos cubren el software del proyecto; los proveedores, sitios, modelos, plugins,
+  servicios conectados y assets de terceros mantienen sus propias condiciones.
+</p>
+
+<h2 id="servicio">2. Qué ofrece Kaoru</h2>
+<p>
+  Kaoru es una aplicación de escritorio de uso personal con chat, memoria, voz, proactividad y
+  herramientas. Puede leer o modificar archivos, ejecutar comandos, usar Git/GitHub, abrir sitios,
+  controlar interfaces accesibles, realizar clics visuales vinculados a capturas, enviar teclado,
+  listar o detener procesos y abrir aplicaciones. La capacidad “cámara” actual consulta estado o
+  abre la aplicación correspondiente; no graba ni toma fotografías.
+</p>
+<p>
+  <code>open_website</code> utiliza normalmente tu navegador predeterminado y su sesión existente,
+  aunque Kaoru solo solicita abrir la URL. Los flujos que requieren inspeccionar DOM, buscar, hacer
+  clic y verificar se ejecutan en un perfil Chromium administrado y separado.
+</p>
+
+<h2 id="permisos">3. Automatización, permisos y riesgos</h2>
+<p>
+  Kaoru aplica reglas <code>allow</code>, <code>ask</code> y <code>deny</code>, aprobaciones de
+  sesión, límites de ruta y, según la acción, checkpoints y verificación. También permite desactivar
+  por separado aplicaciones, navegador, pantalla, puntero, teclado, procesos y cámara. Eres
+  responsable de revisar esa configuración y las solicitudes de aprobación.
+</p>
+<div class="note">
+  Una aprobación autoriza el intento, no garantiza la intención ni el resultado. Una coordenada
+  puede apuntar al lugar equivocado si la pantalla cambia; un comando puede borrar datos; detener un
+  proceso puede perder trabajo; y una acción en Google, GitHub u otro sitio puede ser difícil de
+  revertir. Conserva respaldos y verifica las operaciones importantes.
+</div>
+<p>
+  El modo de autonomía no amplía por sí solo los permisos del sistema. Incluso en modo “Actuar”,
+  solo deben ejecutarse automáticamente las acciones cubiertas por una regla explícita. Los
+  mecanismos de sandbox, validación, detección de prompt injection y rollback reducen riesgos, pero
+  no los eliminan.
+</p>
+
+<h2 id="ia">4. Inteligencia artificial</h2>
+<p>
+  Las respuestas y decisiones de herramienta pueden depender del proveedor LLM que configures. Los
+  modelos generativos pueden equivocarse, omitir contexto, inventar información o interpretar mal
+  una interfaz aunque el resultado parezca convincente. Verifica de forma independiente las
+  decisiones médicas, legales, financieras, de seguridad y cualquier acción irreversible.
+</p>
+<p>
+  El catálogo de proveedores y modelos cambia con el tiempo. Tu relación con un proveedor externo se
+  rige por sus términos, precios, límites y políticas. Un endpoint local puede evitar transferir el
+  prompt a un proveedor remoto, pero otras funciones de red —TTS, web, Google, GitHub, MCP o
+  actualizaciones— seguirán conectándose si las usas.
+</p>
+
+<h2 id="cuentas">5. Cuentas, credenciales y terceros</h2>
+<ul>
+  <li>Usa únicamente cuentas y claves que te pertenezcan o para las que tengas autorización.</li>
+  <li>
+    Selecciona el alcance mínimo en Google Workspace y GitHub; revoca accesos que ya no necesites.
+  </li>
+  <li>
+    No compartas archivos de configuración: si el llavero del sistema no está disponible, algunas
+    credenciales pueden quedar en archivos locales legibles por tu usuario.
+  </li>
+  <li>
+    Los sitios visitados, Microsoft Edge TTS, proveedores LLM, Google, GitHub, models.dev,
+    servidores MCP y plugins son servicios o componentes de terceros; Kaoru no controla su
+    disponibilidad ni sus políticas.
+  </li>
+  <li>
+    Un plugin o servidor MCP puede procesar contexto y ejecutar código con el alcance que le
+    concedas. Revisa su origen, dependencias y permisos antes de instalarlo.
+  </li>
+</ul>
+
+<h2 id="uso">6. Uso permitido</h2>
+<p>
+  Debes usar Kaoru de forma lícita y solo sobre dispositivos, cuentas, repositorios y datos para los
+  que tengas autorización. No lo uses para vigilar a terceros sin consentimiento, vulnerar sistemas,
+  eludir controles de acceso, distribuir malware, infringir derechos, acosar ni procesar ilegalmente
+  datos personales. En equipos de trabajo o estudio también aplican las políticas de la
+  organización.
+</p>
+
+<h2 id="licencia">7. Código, assets y propiedad intelectual</h2>
+<p>
+  El código se ofrece bajo la licencia incluida en el repositorio. Esa licencia no concede derechos
+  sobre modelos Live2D, personajes, nombres, marcas, música ni otros materiales de terceros. Los
+  assets de March 7th pertenecen a Cognosphere Pte. Ltd./HoYoverse; Kaoru es un proyecto de fan
+  independiente y no está afiliado ni respaldado por esas entidades. Si redistribuyes el proyecto,
+  verifica tus derechos, sustituye los assets o exclúyelos.
+</p>
+
+<h2 id="garantias">8. Garantías y responsabilidad</h2>
+<p>
+  En la máxima medida permitida por la ley aplicable, Kaoru se proporciona “tal cual” y sin
+  garantías de disponibilidad, exactitud, idoneidad, seguridad absoluta o ausencia de errores.
+  Conservas la responsabilidad de revisar salidas, respaldar datos, proteger credenciales y decidir
+  qué acciones y transferencias autorizas.
+</p>
+<p>
+  En la máxima medida permitida por la ley, el desarrollador no será responsable por daños
+  indirectos, pérdida de datos, trabajo, ingresos o acceso a cuentas derivados del uso,
+  imposibilidad de uso, configuración del usuario, respuestas del proveedor o componentes de
+  terceros. Nada en esta sección excluye derechos irrenunciables ni responsabilidad que legalmente
+  no pueda limitarse.
+</p>
+
+<h2 id="edad">9. Edad y jurisdicción</h2>
+<p>
+  Kaoru está dirigido a mayores de 18 años o a la mayoría de edad aplicable. Estos términos se rigen
+  por las leyes aplicables en México, sin perjuicio de las protecciones obligatorias que
+  correspondan al usuario en su jurisdicción. Antes de iniciar una controversia, puedes intentar
+  resolverla por el canal de contacto indicado abajo.
+</p>
+
+<h2 id="cambios">10. Cambios y contacto</h2>
+<p>
+  Estos términos pueden cambiar cuando evolucionen las capacidades, dependencias o requisitos
+  legales. La fecha superior identifica la versión vigente; los cambios materiales se comunicarán en
+  el repositorio o la aplicación cuando sea razonablemente posible.
+</p>
+<footer>
+  Preguntas: <a href="mailto:dregxmoon@gmail.com">dregxmoon@gmail.com</a> ·
+  <a href="privacy.html">Aviso de privacidad</a>
+</footer>

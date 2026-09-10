@@ -1,0 +1,204 @@
+{
+  "lang": "es",
+  "name": "Español",
+  "title": "Kaoru — Asistente de escritorio y agente de código",
+  "description": "Trabaja con tu repositorio, ejecuta herramientas y revisa resultados con Kaoru, un asistente de escritorio con memoria, voz y avatar Live2D.",
+  "nav": ["Capacidades", "Cómo trabaja", "Seguridad", "Guía de uso"],
+  "pages": {
+    "index": "Inicio",
+    "guide": "Guía de uso",
+    "privacy": "Privacidad",
+    "terms": "Términos y licencia"
+  },
+  "skip": "Ir al contenido",
+  "theme": "Cambiar tema",
+  "menu": "Abrir navegación",
+  "language": "Idioma",
+  "source": "Código fuente",
+  "start": "Configurar Kaoru",
+  "explore": "Explorar capacidades",
+  "badge": "Código abierto · Asistente de escritorio",
+  "hero": "Tu proyecto, tu escritorio.<br>Kaoru, a tu lado.",
+  "intro": "Un agente de código que inspecciona tu repositorio, prepara un plan, utiliza herramientas y comprueba los cambios. Y una compañera Live2D para conversar, recordar el contexto y trabajar contigo por voz.",
+  "note": "El micrófono se activa al pulsarlo. Sin palabra de activación ni escucha ambiental permanente.",
+  "caption": "Avatar Live2D de Kaoru. Puedes elegir otro modelo con sus correspondientes permisos de uso.",
+  "strip": ["Código y herramientas", "Memoria local", "Voz bajo tu control", "Avatar Live2D"],
+  "featuresTitle": "Qué puedes hacer con Kaoru",
+  "featuresIntro": "Desde entender una función hasta trabajar en una tarea de varios pasos. Las capacidades disponibles dependen del proveedor, el sistema operativo y los permisos que configures.",
+  "features": [
+    [
+      "01",
+      "Trabajar en un repositorio",
+      "Explora archivos, dependencias y símbolos LSP para orientar el plan. Puede leer y editar código, ejecutar comandos y usar Git. El índice estructural es acotado: las referencias y el contenido se confirman con las herramientas del proyecto."
+    ],
+    [
+      "02",
+      "Comprobar los cambios",
+      "En el flujo smart, una mutación reconocida activa la verificación configurada. Las pruebas focales compatibles se anteponen a los controles generales; un resultado omitido o fallido no equivale a una prueba pasada."
+    ],
+    [
+      "03",
+      "Retomar un objetivo",
+      "Objetivos, pasos y evidencias pueden persistir en SQLite para continuar el trabajo. Si el almacenamiento se degrada a memoria, esa continuidad no sobrevive al cierre de la aplicación."
+    ],
+    [
+      "04",
+      "Conversar con contexto",
+      "La memoria local recupera hechos, preferencias y episodios relacionados con la conversación. Puedes pedir que olvide recuerdos. El contexto recuperado puede formar parte de una solicitud al proveedor de IA."
+    ],
+    [
+      "05",
+      "Usar voz y presencia",
+      "Vosk transcribe el audio localmente; Edge TTS sintetiza la respuesta mediante un servicio de Microsoft. Al pulsar el micrófono, Kaoru interrumpe la reproducción. El avatar admite modelos y gestos configurables."
+    ],
+    [
+      "06",
+      "Operar el escritorio",
+      "Abre aplicaciones y sitios, inspecciona controles accesibles y utiliza pantalla, puntero o teclado con las capacidades habilitadas. Linux y Windows tienen control semántico; macOS aún no tiene la misma cobertura."
+    ],
+    [
+      "07",
+      "Conectar tus herramientas",
+      "GitHub, Google Workspace opcional, servidores MCP y plugins amplían las tareas disponibles. Cada conexión tiene sus propios permisos, dependencias y posibles transferencias de datos."
+    ],
+    [
+      "08",
+      "Recibir sugerencias oportunas",
+      "Los sensores configurados aportan señales del sistema y del proyecto. La proactividad evalúa contexto y políticas para proponer ayuda; no concede al modelo nuevos permisos de ejecución."
+    ],
+    [
+      "09",
+      "Elegir dónde responde el modelo",
+      "Configura un proveedor compatible o un endpoint local. La calidad, el coste, la visión y la disponibilidad de herramientas dependen del modelo y del servicio seleccionado."
+    ]
+  ],
+  "flowTitle": "Del pedido a un resultado comprobable",
+  "flowIntro": "Puedes seguir el plan y la actividad de las herramientas desde el chat. La autorización y la verificación forman parte de la ejecución.",
+  "flow": [
+    [
+      "Reconocer",
+      "Inspecciona el workspace, busca rutas relevantes y consulta símbolos disponibles."
+    ],
+    ["Planificar", "Divide el objetivo en pasos con criterios que se puedan comprobar."],
+    ["Autorizar", "Las reglas permiten, consultan o bloquean cada acción según su alcance."],
+    ["Ejecutar", "Utiliza herramientas y conserva sus resultados como evidencia del trabajo."],
+    [
+      "Verificar",
+      "Ejecuta controles; un fallo puede volver al ciclo de reparación o dejar trabajo pendiente."
+    ]
+  ],
+  "securityTitle": "Decide a qué puede acceder",
+  "securityIntro": "Configura los permisos para tu tarea y tu equipo. La aplicación separa las propuestas del modelo de los controles que autorizan herramientas.",
+  "security": [
+    [
+      "Permisos por herramienta",
+      "Las reglas allow, ask y deny permiten automatizar operaciones concretas, pedir confirmación o bloquearlas. No todas las acciones muestran una pregunta: depende de la política activa."
+    ],
+    [
+      "Capacidades de escritorio separadas",
+      "Aplicaciones, navegador, pantalla, puntero, teclado, procesos y cámara tienen controles independientes. La cámara actual consulta estado o abre su aplicación; no toma fotos ni graba vídeo."
+    ],
+    [
+      "Aislamiento según el entorno",
+      "Las ventanas de Electron están aisladas del acceso directo a Node. El aislamiento de comandos es otro mecanismo y depende de las capacidades y configuración del sistema."
+    ],
+    [
+      "Checkpoint y recuperación",
+      "Kaoru captura una línea base para cambios reconocidos. La recuperación tiene límites: acciones remotas, comandos arbitrarios y efectos externos pueden no ser reversibles."
+    ],
+    [
+      "Contenido externo",
+      "Resultados web y de integraciones se tratan como contenido no confiable en los flujos que lo delimitan. Estos controles reducen riesgo de instrucciones maliciosas; no garantizan inmunidad."
+    ],
+    [
+      "Datos y credenciales",
+      "Memoria y embeddings se almacenan localmente. El prompt puede salir al proveedor elegido. El llavero del sistema se usa cuando está disponible; los respaldos de configuración requieren cuidado."
+    ]
+  ],
+  "privacyLink": "Leer qué datos se guardan y cuáles salen del equipo",
+  "audienceTitle": "Una configuración para cada forma de trabajar",
+  "audience": [
+    [
+      "Para uso personal",
+      "Empieza con conversación, un workspace concreto y los permisos que necesites. Activa voz, memoria o sugerencias según tu rutina; puedes cambiar el modelo Live2D."
+    ],
+    [
+      "Para desarrollo",
+      "Declara las reglas del repositorio, prepara las dependencias y configura comandos de verificación. Revisa el diff y los resultados antes de integrar cambios importantes."
+    ],
+    [
+      "Para equipos y clientes",
+      "Define qué información puede enviarse al proveedor, quién administra las claves y qué herramientas se permiten. La licencia del código no incluye los personajes ni sustituye las políticas de tu organización."
+    ]
+  ],
+  "galleryTitle": "El producto en tu escritorio",
+  "galleryIntro": "Capturas reales del proyecto. La apariencia puede variar según el modelo y la configuración.",
+  "gallery": ["Conversación y herramientas en la ventana de chat", "Propuesta de ayuda en Kaoru"],
+  "quickTitle": "Prepara tu primera tarea",
+  "quickIntro": "Elige un proveedor, un proyecto y un resultado pequeño que puedas comprobar. La guía incluye instalación, permisos y límites por plataforma.",
+  "quickSteps": [
+    "Instala y abre Kaoru.",
+    "Configura el proveedor y selecciona el workspace.",
+    "Pide un análisis de lectura antes de permitir cambios."
+  ],
+  "docs": "Referencia técnica",
+  "footer": "Kaoru · Código bajo licencia MIT",
+  "rights": "Los modelos y personajes de terceros mantienen sus propios derechos. Proyecto independiente, sin afiliación con HoYoverse.",
+  "guideIntro": "Configuración, tareas y criterios de revisión para utilizar Kaoru en tu equipo o en un proyecto de cliente.",
+  "guideSections": [
+    [
+      "install",
+      "Instalación y primer arranque",
+      "Necesitas Git, Node.js ≥ 18 y npm ≥ 9 para instalar desde el código. Los módulos nativos se reconstruyen para Electron; según el sistema puedes necesitar herramientas de compilación. Consulta la documentación de instalación si falla una dependencia."
+    ],
+    [
+      "provider",
+      "Proveedor, modelo y coste",
+      "Elige el proveedor y el modelo en la configuración de Kaoru. Usa una clave autorizada o un endpoint compatible. Revisa la política de datos, las cuotas y el coste de tu proveedor; el software abierto no incluye consumo de APIs. Un modelo local no desconecta automáticamente TTS, navegación ni integraciones."
+    ],
+    [
+      "workspace",
+      "Workspace y reglas",
+      "Selecciona la carpeta del proyecto desde la barra del chat. Prepara sus dependencias y reglas: Kaoru puede incorporar AGENTS.md, CLAUDE.md o .cursorrules. Evita incluir archivos ajenos a la tarea. Las reglas del proyecto orientan el trabajo; los permisos de ejecución se resuelven por separado."
+    ],
+    [
+      "task",
+      "Una primera tarea útil",
+      "Prueba con: “Analiza cómo se valida este formulario, identifica los archivos implicados y propón las pruebas; todavía no edites”. Después autoriza un cambio concreto con un resultado observable. Revisa el plan, la actividad y el diff, y cancela la generación si necesitas detener el trabajo."
+    ],
+    [
+      "verification",
+      "Pruebas y finalización",
+      "Configura los comandos del proyecto. En smart, la verificación posterior a mutaciones reconocidas puede ejecutar scripts de calidad y un control de sintaxis JS de respaldo. La selección focal automática reconoce tests/run-all.sh; otros runners requieren configuración. Las búsquedas de impacto son aproximadas y no sustituyen las pruebas de integración."
+    ],
+    [
+      "desktop",
+      "Voz, navegador y sistema operativo",
+      "La voz requiere Python y los componentes de ASR/TTS configurados. El micrófono se abre por acción explícita; pulsarlo interrumpe la voz de Kaoru. Abrir una URL utiliza el navegador predeterminado; las tareas que inspeccionan páginas usan un Chromium administrado con un perfil separado. Linux usa AT-SPI2 y Windows UI Automation para accesibilidad; macOS tiene cobertura parcial."
+    ],
+    [
+      "connections",
+      "Integraciones y trabajo en equipo",
+      "Conecta únicamente cuentas autorizadas. En GitHub y Google elige los alcances necesarios y revoca accesos que ya no uses. Revisa el origen y los permisos de MCP y plugins. Empieza con un repositorio de prueba antes de usar datos de clientes y acuerda qué contexto puede salir del equipo."
+    ],
+    [
+      "recovery",
+      "Continuidad y recuperación",
+      "La memoria y los objetivos durables necesitan el almacenamiento local operativo. Guarda respaldos antes de operaciones importantes. Un checkpoint no revierte automáticamente acciones en servicios externos. Los subagentes de lectura pueden investigar en paralelo; los que modifican el workspace se ejecutan de forma serial."
+    ],
+    [
+      "delivery",
+      "Antes de entregar a un cliente",
+      "Comprueba el resultado funcional, el diff, las pruebas y las limitaciones informadas. Documenta proveedor, permisos y tratamiento de datos para esa instalación. Si distribuyes Kaoru comercialmente, usa un avatar propio o con derechos adecuados: los assets de March 7th no están cubiertos por MIT. No se ofrece aquí un compromiso contractual de soporte ni un SLA."
+    ]
+  ],
+  "installNote": "Ejecuta estos comandos dentro de tu entorno de desarrollo. Después consulta la referencia del repositorio para la configuración inicial, voz y dependencias específicas de tu sistema.",
+  "release": "Consultar versiones publicadas",
+  "installDocs": "Instrucciones completas de instalación",
+  "copy": "Copiar comandos",
+  "copied": "Copiado",
+  "copyError": "Selecciona y copia el bloque de comandos.",
+  "legalIntro": "Información sobre el uso de Kaoru y sus componentes.",
+  "updated": "Revisión de la web: 9 de septiembre de 2026",
+  "contents": "En esta página"
+}

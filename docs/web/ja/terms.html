@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Kaoruとその構成要素の利用に関する情報。" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f8f8f7" />
+    <title>利用規約とライセンス — Kaoru</title>
+    <link rel="alternate" hreflang="es" href="../terms.html" />
+    <link rel="alternate" hreflang="en" href="../en/terms.html" />
+    <link rel="alternate" hreflang="ja" href="../ja/terms.html" />
+    <link rel="alternate" hreflang="x-default" href="../terms.html" />
+    <link rel="stylesheet" href="../assets/styles.css" />
+    <script src="../assets/main.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">本文へ移動</a>
+    <header class="nav">
+      <div class="nav-inner">
+        <a class="nav-logo" href="index.html" aria-label="Kaoru"
+          ><span class="logo-mark" aria-hidden="true">k.</span>Kaoru</a
+        >
+        <nav class="nav-links" id="site-navigation" aria-label="ホーム">
+          <a href="index.html#features">できること</a><a href="index.html#workflow">作業の流れ</a
+          ><a href="index.html#security">セキュリティ</a><a href="guide.html">使い方</a>
+        </nav>
+        <div class="nav-actions">
+          <button
+            class="theme-btn"
+            id="theme-toggle"
+            type="button"
+            aria-label="テーマを切り替える"
+            aria-pressed="false"
+          >
+            <span aria-hidden="true">◐</span></button
+          ><button
+            class="theme-btn menu-toggle"
+            type="button"
+            aria-label="ナビゲーションを開く"
+            aria-controls="site-navigation"
+            aria-expanded="false"
+          >
+            <span aria-hidden="true">☰</span></button
+          ><a class="btn-dark nav-github" href="https://github.com/Dregxmoon/Kaoru-Agent"
+            >GitHub <span aria-hidden="true">↗</span></a
+          >
+        </div>
+      </div>
+      <nav class="language-bar" aria-label="言語">
+        <a href="../terms.html" lang="es" hreflang="es">Español</a
+        ><a href="../en/terms.html" lang="en" hreflang="en">English</a
+        ><a href="../ja/terms.html" lang="ja" hreflang="ja" aria-current="page">日本語</a>
+      </nav>
+    </header>
+    <main id="main">
+      <header class="page-heading container">
+        <span class="eyebrow">KAORU / 利用規約とライセンス</span>
+        <h1>利用規約とライセンス</h1>
+      </header>
+      <div class="container document-layout">
+        <aside class="toc">
+          <nav aria-label="このページの内容">
+            <strong>このページの内容</strong><a href="#aceptacion">1. 同意と適用範囲</a
+            ><a href="#servicio">2. Kaoruが提供する機能</a
+            ><a href="#permisos">3. 自動操作、権限、リスク</a><a href="#ia">4. 人工知能</a
+            ><a href="#cuentas">5. アカウント、認証情報、第三者</a
+            ><a href="#uso">6. 許可される利用</a
+            ><a href="#licencia">7. コード、アセット、知的財産</a
+            ><a href="#garantias">8. 保証と責任</a><a href="#edad">9. 年齢と準拠法</a
+            ><a href="#cambios">10. 変更と連絡先</a>
+          </nav>
+        </aside>
+        <article class="prose legal">
+          <p class="updated">利用規約の更新日：2026年9月8日。Web翻訳日：2026年9月9日。</p>
+          <p>
+            スペイン語版を正文とします。この規約はKaoruの利用を対象とし、コードのライセンスと第三者サービス・アセットの条件を区別します。
+          </p>
+          <h2 id="aceptacion">1. 同意と適用範囲</h2>
+          <p>
+            Kaoruをインストールまたは使用すると、この規約と<a href="privacy.html"
+              >プライバシー通知</a
+            >に同意したものとします。同意しない場合は使用しないでください。プロバイダー、Webサイト、モデル、プラグイン、接続サービス、第三者のアセットには、それぞれの条件が適用されます。
+          </p>
+          <h2 id="servicio">2. Kaoruが提供する機能</h2>
+          <p>
+            Kaoruは、会話、記憶、音声、能動的な提案、ツールを備える個人向けデスクトップアプリです。ファイルの読み書き、コマンド実行、Git/GitHub、Webサイトやアプリの起動、アクセシブルな画面の操作、画像にひも付くクリック、キー入力、プロセスの一覧表示や終了を行えます。現在のカメラ機能は状態確認とアプリ起動のみで、撮影や録画はしません。
+          </p>
+          <p>
+            open_websiteは通常、既定のブラウザーでURLを開くよう要求し、既存のセッションを使います。DOMの調査、検索、クリック、検証を行うフローは、別の管理対象Chromiumプロファイルを使います。
+          </p>
+          <h2 id="permisos">3. 自動操作、権限、リスク</h2>
+          <p>
+            allow・ask・denyのルール、セッション承認、パス制限、操作に応じたチェックポイントと検証を適用します。デスクトップの各機能は個別に無効化できます。設定と承認要求の確認は利用者の責任です。
+          </p>
+          <div class="note">
+            承認は操作の試行を許可するもので、その意図や結果を保証しません。画面の変化で座標がずれたり、コマンドがデータを削除したり、プロセスの終了で作業が失われたりする可能性があります。外部サービスでの操作は戻せない場合があります。バックアップを取り、重要な操作を検証してください。
+          </div>
+          <p>
+            自律モード自体がOSの権限を拡大することはありません。実行モードでも、自動操作は明示的なルールの範囲に収まる必要があります。サンドボックス、検証、プロンプトインジェクションの検出、ロールバックはリスクを減らしますが、なくすものではありません。
+          </p>
+          <h2 id="ia">4. 人工知能</h2>
+          <p>
+            回答とツールの判断は、設定したLLMプロバイダーに依存する場合があります。生成モデルは誤り、文脈の欠落、事実でない情報、画面の誤読を起こし得ます。医療、法律、金融、セキュリティ、取り消せない判断については独立した確認を行ってください。
+          </p>
+          <p>
+            プロバイダーとモデルの一覧は変わります。外部サービスの規約、料金、制限、ポリシーが適用されます。ローカル接続先ならプロンプトをリモートプロバイダーへ送らずに済む場合がありますが、TTS、Web、Google、GitHub、MCP、更新は使用時に通信する場合があります。
+          </p>
+          <h2 id="cuentas">5. アカウント、認証情報、第三者</h2>
+          <ul>
+            <li>所有する、または使用権限のあるアカウントとキーのみを使ってください。</li>
+            <li>
+              Google WorkspaceとGitHubは必要最小限のスコープにし、不要な権限を取り消してください。
+            </li>
+            <li>
+              設定ファイルを共有しないでください。OSのキーチェーンが使えない場合、自分のアカウントから読めるファイルに認証情報が残ることがあります。
+            </li>
+            <li>
+              Webサイト、Edge
+              TTS、LLM、Google、GitHub、models.dev、MCP、プラグインは第三者のサービスや構成要素です。Kaoruはその可用性やポリシーを管理しません。
+            </li>
+            <li>
+              拡張機能の配布元、依存関係、権限を確認してください。許可した範囲で文脈を処理し、コードを実行する場合があります。
+            </li>
+          </ul>
+          <h2 id="uso">6. 許可される利用</h2>
+          <p>
+            法律に従い、権限のある端末、アカウント、リポジトリ、データに限って使ってください。同意のない監視、システム侵入、アクセス制御の回避、マルウェア配布、権利侵害、嫌がらせ、違法な個人情報処理に使用しないでください。職場や学校の端末には組織の規則も適用されます。
+          </p>
+          <h2 id="licencia">7. コード、アセット、知的財産</h2>
+          <p>
+            独自のソースコードはリポジトリの<a
+              href="https://github.com/Dregxmoon/Kaoru-Agent/blob/produccion/LICENSE"
+              >MITライセンス</a
+            >で提供します。対象となるコピーの配布時には著作権と許諾の表示を残してください。第三者のLive2Dモデル、キャラクター、名称、商標、音楽、画像の権利は付与されません。
+          </p>
+          <p>
+            三月なのかのアセットはCognosphere Pte.
+            Ltd./HoYoverseに帰属し、非公式かつ非商用のファンコンテンツとして含まれています。Kaoruは独立したプロジェクトで、これらの企業の提携・承認を受けていません。再配布する場合は権利を確認し、アセットを差し替えるか除外してください。コードのMITライセンスはアセットの商用利用を許可するものではありません。
+          </p>
+          <h2 id="garantias">8. 保証と責任</h2>
+          <p>
+            適用法で認められる範囲で、Kaoruは現状のまま提供され、可用性、正確性、目的適合性、絶対的な安全性、無欠陥を保証しません。出力の確認、データのバックアップ、認証情報の保護、許可する操作と転送の選択は利用者の責任です。
+          </p>
+          <p>
+            法律で認められる範囲で、開発者は利用・利用不能、設定、プロバイダーの回答、第三者の構成要素から生じる間接損害、データ・作業・収益・アカウントアクセスの喪失に責任を負いません。放棄できない権利や、法律上制限できない責任を除外するものではありません。
+          </p>
+          <h2 id="edad">9. 年齢と準拠法</h2>
+          <p>
+            Kaoruは18歳以上、または適用される成年年齢以上の利用者を対象とします。適用されるメキシコ法を準拠法とし、利用者の地域で強制的に適用される保護を妨げません。手続を始める前に、連絡先を通じて紛争の解決を試みることができます。
+          </p>
+          <h2 id="cambios">10. 変更と連絡先</h2>
+          <p>
+            機能、依存関係、法的要件の変更に応じて規約を更新する場合があります。日付が版を示します。重要な変更は合理的に可能な範囲でリポジトリまたはアプリに掲載します。
+          </p>
+          <p>
+            お問い合わせ：<a href="mailto:dregxmoon@gmail.com">dregxmoon@gmail.com</a> ·
+            <a href="privacy.html">プライバシー通知</a>。
+          </p>
+        </article>
+      </div>
+    </main>
+    <footer>
+      <div class="container footer-top">
+        <a class="nav-logo" href="index.html"
+          ><span class="logo-mark" aria-hidden="true">k.</span>Kaoru</a
+        >
+        <nav aria-label="利用規約とライセンス">
+          <a href="index.html">ホーム</a><a href="guide.html">使い方</a
+          ><a href="privacy.html">プライバシー</a
+          ><a href="terms.html" aria-current="page">利用規約とライセンス</a
+          ><a href="mailto:dregxmoon@gmail.com">dregxmoon@gmail.com</a>
+        </nav>
+      </div>
+      <div class="container footer-bottom">
+        <p>Kaoru · ソースコードはMITライセンス</p>
+        <p>
+          第三者のモデルとキャラクターには、それぞれの権利が適用されます。HoYoverseとは提携していない独立したプロジェクトです。
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

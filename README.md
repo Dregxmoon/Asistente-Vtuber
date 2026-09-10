@@ -13,7 +13,7 @@
 [![Node.js ≥18](https://img.shields.io/badge/Node.js-%E2%89%A518-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/Licencia-MIT-7C3AED.svg)](./LICENSE)
 
-**Español** · [日本語](./docs/i18n/ja/README.md) · [한국어](./docs/i18n/ko/README.md) · [English (US)](./docs/i18n/en-US/README.md) · [English (UK)](./docs/i18n/en-GB/README.md) · [Português](./docs/i18n/pt/README.md)
+**Español** · [日本語](./docs/i18n/ja/README.md) · [English](./docs/i18n/en/README.md)
 
 [Inicio rápido](#6-inicio-rápido) · [Arquitectura](#2-arquitectura-del-sistema) · [Seguridad](#seguridad) · [Privacidad](./docs/web/privacy.html) · [Términos](./docs/web/terms.html) · [Documentación](#8-documentación)
 

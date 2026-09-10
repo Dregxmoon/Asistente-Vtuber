@@ -12,10 +12,7 @@ Las portadas localizadas ofrecen una presentación, instalación, arquitectura y
 
 - [Español](../../README.md)
 - [日本語](./ja/README.md)
-- [한국어](./ko/README.md)
-- [English — United States](./en-US/README.md)
-- [English — United Kingdom](./en-GB/README.md)
-- [Português](./pt/README.md)
+- [English](./en/README.md)
 
 ## Regla de actualización
 
@@ -24,6 +21,11 @@ Las portadas localizadas ofrecen una presentación, instalación, arquitectura y
 3. Conserva comandos, rutas, nombres de configuración y símbolos de código sin traducir.
 4. No copies cifras volátiles. Enlaza a CI o a comandos reproducibles.
 5. Si una traducción no puede verificarse, indícalo y enlaza a la versión española.
-6. El [aviso de privacidad](../web/privacy.html) y los [términos de uso](../web/terms.html) son
-   documentos públicos canónicos en español. Las portadas traducidas deben enlazarlos y no resumirlos
-   de forma que oculte transferencias a LLM, voz, navegador, Google, GitHub, MCP o plugins.
+6. La web pública mantiene portada, guía, privacidad y términos en español, inglés y japonés con
+   una plantilla compartida. El español sigue siendo la fuente canónica; las traducciones legales
+   lo indican. No omitas transferencias a proveedores o limitaciones en una traducción.
+7. Las fuentes de la web viven en `docs/web/content/`; genera las doce páginas con
+   `node scripts/build-website.js`. El selector debe conservar la página y la sección entre idiomas.
+
+Las ediciones coreana y portuguesa se retiraron; las variantes inglesa británica y estadounidense
+se consolidaron en `en`. Sus versiones anteriores se pueden recuperar desde el historial Git.

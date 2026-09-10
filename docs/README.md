@@ -4,13 +4,17 @@
 
 **Una entrada clara al producto, su arquitectura y sus límites.**
 
-**Español** · [日本語](./i18n/ja/README.md) · [한국어](./i18n/ko/README.md) · [English (US)](./i18n/en-US/README.md) · [English (UK)](./i18n/en-GB/README.md) · [Português](./i18n/pt/README.md)
+**Español** · [日本語](./i18n/ja/README.md) · [English](./i18n/en/README.md)
 
 </div>
 
 ---
 
 ## Empieza aquí
+
+La [web pública](./web/index.html) y su [guía de uso](./web/guide.html) están disponibles en
+español, inglés y japonés. Consulta [cómo mantener la web](./web/README.md) para actualizar el diseño
+compartido y generar las páginas.
 
 | Quiero…                          | Documento                                              |
 | -------------------------------- | ------------------------------------------------------ |

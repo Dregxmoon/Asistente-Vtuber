@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Kaoruとその構成要素の利用に関する情報。" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f8f8f7" />
+    <title>プライバシー — Kaoru</title>
+    <link rel="alternate" hreflang="es" href="../privacy.html" />
+    <link rel="alternate" hreflang="en" href="../en/privacy.html" />
+    <link rel="alternate" hreflang="ja" href="../ja/privacy.html" />
+    <link rel="alternate" hreflang="x-default" href="../privacy.html" />
+    <link rel="stylesheet" href="../assets/styles.css" />
+    <script src="../assets/main.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">本文へ移動</a>
+    <header class="nav">
+      <div class="nav-inner">
+        <a class="nav-logo" href="index.html" aria-label="Kaoru"
+          ><span class="logo-mark" aria-hidden="true">k.</span>Kaoru</a
+        >
+        <nav class="nav-links" id="site-navigation" aria-label="ホーム">
+          <a href="index.html#features">できること</a><a href="index.html#workflow">作業の流れ</a
+          ><a href="index.html#security">セキュリティ</a><a href="guide.html">使い方</a>
+        </nav>
+        <div class="nav-actions">
+          <button
+            class="theme-btn"
+            id="theme-toggle"
+            type="button"
+            aria-label="テーマを切り替える"
+            aria-pressed="false"
+          >
+            <span aria-hidden="true">◐</span></button
+          ><button
+            class="theme-btn menu-toggle"
+            type="button"
+            aria-label="ナビゲーションを開く"
+            aria-controls="site-navigation"
+            aria-expanded="false"
+          >
+            <span aria-hidden="true">☰</span></button
+          ><a class="btn-dark nav-github" href="https://github.com/Dregxmoon/Kaoru-Agent"
+            >GitHub <span aria-hidden="true">↗</span></a
+          >
+        </div>
+      </div>
+      <nav class="language-bar" aria-label="言語">
+        <a href="../privacy.html" lang="es" hreflang="es">Español</a
+        ><a href="../en/privacy.html" lang="en" hreflang="en">English</a
+        ><a href="../ja/privacy.html" lang="ja" hreflang="ja" aria-current="page">日本語</a>
+      </nav>
+    </header>
+    <main id="main">
+      <header class="page-heading container">
+        <span class="eyebrow">KAORU / プライバシー</span>
+        <h1>プライバシー</h1>
+      </header>
+      <div class="container document-layout">
+        <aside class="toc">
+          <nav aria-label="このページの内容">
+            <strong>このページの内容</strong><a href="#responsable">1. 運営者と連絡先</a
+            ><a href="#datos">2. データと利用目的</a
+            ><a href="#transferencias">3. 外部への送信と第三者</a
+            ><a href="#google">4. Google WorkspaceとLimited Use</a
+            ><a href="#desktop">5. デスクトップ、ブラウザー、権限</a
+            ><a href="#seguridad">6. 保存とセキュリティ</a><a href="#retencion">7. 保持と削除</a
+            ><a href="#derechos">8. 権利と同意の撤回</a
+            ><a href="#menores">9. 権限のある利用と未成年者</a><a href="#cambios">10. 変更</a>
+          </nav>
+        </aside>
+        <article class="prose legal">
+          <p class="updated">プライバシー通知の更新日：2026年9月8日。Web翻訳日：2026年9月9日。</p>
+          <p>
+            この通知は、Kaoruのデスクトップアプリが扱う可能性のある情報、その保存先、端末外への送信、利用者が使える制御を説明します。既存のスペイン語通知は、メキシコの民間保有個人情報保護法（LFPDPPP）を参照して作成されています。実装についての説明であり、特定の配布や事業に対する専門的な法務確認に代わるものではありません。スペイン語版を正文とします。
+          </p>
+          <div class="note">
+            Kaoruは会話を集める中央サーバーを運営していません。記憶、埋め込み、設定、テレメトリーはローカルに保存されます。ただし、必ずしもオフラインではありません。選択されたメッセージや文脈はAIプロバイダーへ、音声合成用テキストはMicrosoftへ送信されます。有効にした連携、Webサイト、プラグイン、MCPサーバーにも、作業に必要なデータが送られる場合があります。
+          </div>
+          <h2 id="responsable">1. 運営者と連絡先</h2>
+          <p>
+            Kaoruは、メキシコ・バハカリフォルニア州ティフアナを拠点とするDregxmoonが開発する独立プロジェクトです。プライバシーに関する依頼や質問は<a
+              href="mailto:dregxmoon@gmail.com"
+              >dregxmoon@gmail.com</a
+            >へお送りください。Dregxmoonがローカルデータベースや設定したキーのコピーを自動で受け取ることはありません。
+          </p>
+          <h2 id="datos">2. データと利用目的</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>種類</th>
+                <th>例と目的</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>会話と選択したファイル</td>
+                <td>
+                  メッセージ、添付、ワークスペースの抜粋、ツールの結果。依頼への回答、計画、実行、検証に使います。
+                </td>
+              </tr>
+              <tr>
+                <td>記憶とセッション</td>
+                <td>
+                  申告された事実、好み、エピソード、会話履歴、意図、推測と明示された認識。継続性、意味検索、個別化に使います。
+                </td>
+              </tr>
+              <tr>
+                <td>システムの文脈</td>
+                <td>
+                  アクティブなアプリやウィンドウ、アイドル時間、資源使用量、Git/LSPの情報、エラーのタイトル、リマインダー、有効化した技術的なクリップボード情報。状況の理解とポリシーに基づく提案に使います。
+                </td>
+              </tr>
+              <tr>
+                <td>自動操作</td>
+                <td>
+                  アクセシビリティツリー、ウィンドウ、画面キャプチャ、一時的な座標、プロセス名・ID、操作結果。依頼された画面の操作と確認に使います。
+                </td>
+              </tr>
+              <tr>
+                <td>連携</td>
+                <td>
+                  有効にしたGoogle
+                  Workspace、GitHub、Webサイト、MCPサーバー、プラグインの内容。選択した機能を提供するために使います。
+                </td>
+              </tr>
+              <tr>
+                <td>ローカル診断</td>
+                <td>
+                  所要時間、ツール、結果、失敗の種類、技術ログ。デバッグ、セキュリティ、ローカルの計測に使います。
+                </td>
+              </tr>
+              <tr>
+                <td>認証情報</td>
+                <td>
+                  APIキー、OAuthトークン、プロバイダー設定。設定した接続を認証するために使います。
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            回答とセッションの維持は基本機能です。永続記憶、能動的な提案、センサー、音声、Google/GitHub、自動操作、プラグイン、MCPは、利用者が設定または使用する機能です。不要な機微情報や、処理する権限のない第三者の情報は入力しないでください。
+          </p>
+          <h2 id="transferencias">3. 外部への送信と第三者</h2>
+          <p>
+            有効なLLMプロバイダーは、回答に必要なプロンプトを受け取ります。メッセージ、検索した記憶、システムの文脈、ファイルや接続先の内容、ツールの結果、視覚的な作業で使うJPEG/PNG画像が含まれる場合があります。組み込みのプロバイダーと互換エンドポイントに対応し、ローカルの接続先も選べます。利用可能な一覧はアプリ内に表示されます。
+          </p>
+          <ul>
+            <li>
+              <strong>選択したLLMプロバイダー：</strong
+              >契約、地域、保持期間、データポリシーが適用されます。キーや接続先を追加する前に確認してください。
+            </li>
+            <li>
+              <strong>Microsoft Edge TTS：</strong
+              >音声に変換するテキストを受け取ります。Voskの文字起こしは端末上で行います。
+            </li>
+            <li>
+              <strong>GoogleとGitHub：</strong
+              >アカウントを接続して利用すると、端末から直接API呼び出しを送信します。
+            </li>
+            <li>
+              <strong>Webサイト：</strong
+              >リクエスト、IPアドレス、入力したデータを受け取ります。各サイトのCookieとポリシーが適用されます。
+            </li>
+            <li>
+              <strong>MCPとプラグイン：</strong
+              >実装に応じて文脈を受け取ったりコードを実行したりします。配布元と権限を確認してください。
+            </li>
+            <li>
+              <strong>カタログと更新：</strong
+              >models.devの公開モデル情報やGitHubのリリースを照会する場合があります。この照会に会話内容を含める必要はありません。
+            </li>
+          </ul>
+          <p>
+            Dregxmoonは個人データを販売せず、行動ターゲティング広告にも利用しません。設定した第三者への送信は端末から直接行われ、送信先の規約とポリシーも適用されます。
+          </p>
+          <p>
+            主な参照先：<a href="https://openai.com/policies/privacy-policy/">OpenAI</a>、<a
+              href="https://policies.google.com/privacy"
+              >Google</a
+            >、<a href="https://privacy.microsoft.com/privacystatement">Microsoft</a>、<a
+              href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement"
+              >GitHub</a
+            >。その他の接続先についても、そのポリシーを確認してください。
+          </p>
+          <h2 id="google">4. Google WorkspaceとLimited Use</h2>
+          <p>
+            Google
+            Workspace連携は任意です。利用者がOAuthクライアントを用意し、Calendar、Gmail、Drive、Docs、Sheets、Tasks、Contactsなどのサービスとスコープを選びます。対応する機能では読み取り専用または書き込みを選べます。必要最小限の権限を許可し、不要になったら取り消してください。
+          </p>
+          <div class="note">
+            Google APIから受け取った情報のKaoruによる利用と転送は、Limited Useの要件を含む<a
+              href="https://developers.google.com/terms/api-services-user-data-policy"
+              >Google API Services User Data Policy</a
+            >に従います。利用者が依頼した目に見える機能の提供または改善に使い、販売、広告、無関係な目的での人への転送には使いません。メール要約など、依頼された操作に必要な場合に限り、選択したLLMプロバイダーへ送られることがあります。
+          </div>
+          <h2 id="desktop">5. デスクトップ、ブラウザー、権限</h2>
+          <p>
+            アプリ、ブラウザー、画面、ポインター、キーボード、プロセス、カメラには個別のスイッチがあります。allow・ask・denyのルールも適用されます。承認はリスクを減らしますが、結果を保証しません。
+          </p>
+          <ul>
+            <li>
+              <strong>アクセシビリティ：</strong>LinuxではAT-SPI2、WindowsではUI
+              Automationを使います。macOSの意味情報による操作は同等ではありません。
+            </li>
+            <li>
+              <strong>画面とクリック：</strong
+              >座標は撮影した画像にひも付き、30秒で失効し、一度だけ使えます。次の操作には再観測が必要です。画像は有効な画像対応LLMに送られる場合があります。
+            </li>
+            <li>
+              <strong>個人のブラウザー：</strong
+              >open_websiteはOSに既定のブラウザーでURLを開くよう依頼します。既存のセッションを使いますが、KaoruがCookieやパスワードを直接取り込むことはありません。
+            </li>
+            <li>
+              <strong>管理対象ブラウザー：</strong
+              >検索や検証を伴う処理は、独立した永続Chromiumプロファイルを使います。ログインした場合、Cookieは削除するまでKaoruのデータ領域に残ります。
+            </li>
+            <li>
+              <strong>プロセス：</strong
+              >名前とIDを一覧表示し、終了を要求できます。対象を確認してください。終了後の状態が検証されない場合があります。
+            </li>
+            <li>
+              <strong>カメラ：</strong
+              >現在の機能は状態確認とカメラアプリの起動のみです。写真撮影や録画はしません。
+            </li>
+          </ul>
+          <h2 id="seguridad">6. 保存とセキュリティ</h2>
+          <p>
+            記憶、セッション、テレメトリー、設定はElectronのローカルuserDataに保存し、埋め込みは端末上で計算します。認証情報はOSの安全な保存先（Keychain、Credential
+            Manager、Secret
+            Service）を優先します。利用できない場合、対応する代替経路により、自分のアカウントから読める設定ファイルや環境ファイルに認証情報が残ることがあります。端末、ファイル、バックアップを保護してください。ローカル保存はデータベース全体の暗号化を意味しません。
+          </p>
+          <h2 id="retencion">7. 保持と削除</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>データ</th>
+                <th>保持</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>アプリの履歴</td>
+                <td>30日後に自動削減します。</td>
+              </tr>
+              <tr>
+                <td>ローカルテレメトリー</td>
+                <td>最大90日です。</td>
+              </tr>
+              <tr>
+                <td>ログ</td>
+                <td>
+                  現在のファイルと一つのローテーション。それぞれ最大5
+                  MiB。日数ではなくサイズで切り替えます。
+                </td>
+              </tr>
+              <tr>
+                <td>ポインターにひも付く画像</td>
+                <td>
+                  メモリ上の参照は最大30秒または最初のクリックまで。外部に送ったコピーは送信先の規定に従います。
+                </td>
+              </tr>
+              <tr>
+                <td>記憶とセッション</td>
+                <td>
+                  削除または減衰ルールによるアーカイブまで。アーカイブは論理削除であり、即時の物理削除ではありません。
+                </td>
+              </tr>
+              <tr>
+                <td>管理ブラウザーのプロファイルとチェックポイント</td>
+                <td>手動または対応機能で削除するまで残ります。</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Kaoruに記憶を忘れるよう依頼し、連携を解除し、OSのデータ領域からアプリのデータを削除できます。アンインストールしてもデータ領域が残る場合があります。必要なデータをバックアップし、ファイルを削除する前にKaoruを終了してください。OSのバックアップと外部プロバイダーには、それぞれ別の保持期間があります。
+          </p>
+          <h2 id="derechos">8. 権利と同意の撤回</h2>
+          <p>
+            アクセス、訂正、取消し、異議申立て（ARCOの権利）、利用の制限、同意の撤回を連絡先メールで依頼できます。内容を十分に説明してください。合理的な本人確認を求める場合があります。多くのデータは端末内にあり、ローカルでの閲覧や削除も可能です。
+          </p>
+          <p>
+            Googleの権限は<a href="https://myaccount.google.com/permissions"
+              >Googleアカウントの権限設定</a
+            >、GitHubは承認済みアプリの設定で取り消せます。取消しは将来のアクセスを止めますが、送信済みのコピーやバックアップを自動で削除するものではありません。
+          </p>
+          <h2 id="menores">9. 権限のある利用と未成年者</h2>
+          <p>
+            利用権限のある端末、アカウント、ワークスペースのみで使用してください。他者に知らせず、同意なく監視しないでください。職場や教育機関の規則に従ってください。Kaoruは18歳以上、または適用される成年年齢以上の利用者を対象とし、未成年者のデータを意図的に収集するものではありません。
+          </p>
+          <h2 id="cambios">10. 変更</h2>
+          <p>
+            この公開Webサイトは、明るいテーマ・暗いテーマの選択をブラウザーのlocalStorageに保存します。
+            アクセス解析やフォームは組み込んでいません。画像、スタイル、スクリプトは同じサイトから配信します。
+            ホスティングはページ配信に必要なリクエストを処理します。外部リンクを開くと、移動先のデータの取り扱いも適用されます。
+          </p>
+          <p>
+            機能、プロバイダー、取り扱いに重要な変更があれば通知を更新します。日付が版を示します。合理的に可能な範囲で、重要な変更は適用前または適用時にリポジトリかアプリでお知らせします。
+          </p>
+          <p>
+            法令の参照先：<a href="https://www.diputados.gob.mx/LeyesBiblio/pdf/LFPDPPP.pdf"
+              >メキシコ下院が公開するLFPDPPP</a
+            >。
+          </p>
+        </article>
+      </div>
+    </main>
+    <footer>
+      <div class="container footer-top">
+        <a class="nav-logo" href="index.html"
+          ><span class="logo-mark" aria-hidden="true">k.</span>Kaoru</a
+        >
+        <nav aria-label="利用規約とライセンス">
+          <a href="index.html">ホーム</a><a href="guide.html">使い方</a
+          ><a href="privacy.html" aria-current="page">プライバシー</a
+          ><a href="terms.html">利用規約とライセンス</a
+          ><a href="mailto:dregxmoon@gmail.com">dregxmoon@gmail.com</a>
+        </nav>
+      </div>
+      <div class="container footer-bottom">
+        <p>Kaoru · ソースコードはMITライセンス</p>
+        <p>
+          第三者のモデルとキャラクターには、それぞれの権利が適用されます。HoYoverseとは提携していない独立したプロジェクトです。
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

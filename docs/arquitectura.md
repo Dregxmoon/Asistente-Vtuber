@@ -2,7 +2,7 @@
 
 # Arquitectura de Kaoru
 
-**Español** · [日本語](./i18n/ja/README.md) · [한국어](./i18n/ko/README.md) · [English (US)](./i18n/en-US/README.md) · [English (UK)](./i18n/en-GB/README.md) · [Português](./i18n/pt/README.md)
+**Español** · [日本語](./i18n/ja/README.md) · [English](./i18n/en/README.md)
 
 [← Centro de documentación](./README.md)
 

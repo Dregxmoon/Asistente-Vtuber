@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Information about using Kaoru and its components." />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f8f8f7" />
+    <title>Privacy — Kaoru</title>
+    <link rel="alternate" hreflang="es" href="../privacy.html" />
+    <link rel="alternate" hreflang="en" href="../en/privacy.html" />
+    <link rel="alternate" hreflang="ja" href="../ja/privacy.html" />
+    <link rel="alternate" hreflang="x-default" href="../privacy.html" />
+    <link rel="stylesheet" href="../assets/styles.css" />
+    <script src="../assets/main.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="nav">
+      <div class="nav-inner">
+        <a class="nav-logo" href="index.html" aria-label="Kaoru"
+          ><span class="logo-mark" aria-hidden="true">k.</span>Kaoru</a
+        >
+        <nav class="nav-links" id="site-navigation" aria-label="Home">
+          <a href="index.html#features">Capabilities</a><a href="index.html#workflow">Workflow</a
+          ><a href="index.html#security">Security</a><a href="guide.html">User guide</a>
+        </nav>
+        <div class="nav-actions">
+          <button
+            class="theme-btn"
+            id="theme-toggle"
+            type="button"
+            aria-label="Change theme"
+            aria-pressed="false"
+          >
+            <span aria-hidden="true">◐</span></button
+          ><button
+            class="theme-btn menu-toggle"
+            type="button"
+            aria-label="Open navigation"
+            aria-controls="site-navigation"
+            aria-expanded="false"
+          >
+            <span aria-hidden="true">☰</span></button
+          ><a class="btn-dark nav-github" href="https://github.com/Dregxmoon/Kaoru-Agent"
+            >GitHub <span aria-hidden="true">↗</span></a
+          >
+        </div>
+      </div>
+      <nav class="language-bar" aria-label="Language">
+        <a href="../privacy.html" lang="es" hreflang="es">Español</a
+        ><a href="../en/privacy.html" lang="en" hreflang="en" aria-current="page">English</a
+        ><a href="../ja/privacy.html" lang="ja" hreflang="ja">日本語</a>
+      </nav>
+    </header>
+    <main id="main">
+      <header class="page-heading container">
+        <span class="eyebrow">KAORU / Privacy</span>
+        <h1>Privacy</h1>
+      </header>
+      <div class="container document-layout">
+        <aside class="toc">
+          <nav aria-label="On this page">
+            <strong>On this page</strong><a href="#responsable">1. Operator and contact</a
+            ><a href="#datos">2. Data and purposes</a
+            ><a href="#transferencias">3. Transfers and third parties</a
+            ><a href="#google">4. Google Workspace and Limited Use</a
+            ><a href="#desktop">5. Desktop, browser and permissions</a
+            ><a href="#seguridad">6. Storage and security</a
+            ><a href="#retencion">7. Retention and deletion</a
+            ><a href="#derechos">8. Rights and revocation</a
+            ><a href="#menores">9. Authorized use and minors</a><a href="#cambios">10. Changes</a>
+          </nav>
+        </aside>
+        <article class="prose legal">
+          <p class="updated">
+            Privacy notice updated: September 8, 2026. Website translation: September 9, 2026.
+          </p>
+          <p>
+            This notice describes the information the Kaoru desktop application may process, where
+            it is stored, when it may leave your device and the controls available to you. The
+            existing Spanish notice was prepared with reference to Mexico’s Federal Law on the
+            Protection of Personal Data Held by Private Parties (LFPDPPP). It describes the
+            implementation and does not replace a professional legal review for a specific
+            distribution or activity. The Spanish version is the canonical text.
+          </p>
+          <div class="note">
+            Kaoru does not operate a central conversation storage server. Memory, embeddings,
+            preferences and telemetry are stored locally. It is not necessarily offline: selected
+            messages and context may reach your AI provider; speech synthesis uses Microsoft;
+            integrations, websites, plugins and MCP servers you enable may receive data needed for a
+            task.
+          </div>
+          <h2 id="responsable">1. Operator and contact</h2>
+          <p>
+            Kaoru is an independent project developed by Dregxmoon, based in Tijuana, Baja
+            California, Mexico. Send privacy requests and questions to
+            <a href="mailto:dregxmoon@gmail.com">dregxmoon@gmail.com</a>. Dregxmoon does not
+            automatically receive a copy of your local database or configured keys.
+          </p>
+          <h2 id="datos">2. Data and purposes</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Examples and purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Conversation and selected files</td>
+                <td>
+                  Messages, attachments, workspace excerpts and tool results used to respond, plan,
+                  execute and verify your task.
+                </td>
+              </tr>
+              <tr>
+                <td>Memory and sessions</td>
+                <td>
+                  Stated facts, preferences, episodes, conversation history, intentions and inferred
+                  beliefs labeled as such, used for continuity, semantic retrieval and
+                  personalization.
+                </td>
+              </tr>
+              <tr>
+                <td>System context</td>
+                <td>
+                  Active application or window, idle time, resource use, Git/LSP signals, error
+                  titles, reminders and technical clipboard content when enabled; used for context
+                  and policy-based suggestions.
+                </td>
+              </tr>
+              <tr>
+                <td>Automation</td>
+                <td>
+                  Accessibility trees, windows, screenshots, temporary coordinates, process
+                  names/IDs and action results, used to operate and check interfaces you request.
+                </td>
+              </tr>
+              <tr>
+                <td>Integrations</td>
+                <td>
+                  Content from enabled Google Workspace, GitHub, websites, MCP servers or plugins,
+                  used for the selected tool or integration.
+                </td>
+              </tr>
+              <tr>
+                <td>Local diagnostics</td>
+                <td>
+                  Duration, tool, outcome, failure category and technical logs, used for debugging,
+                  security and local metrics.
+                </td>
+              </tr>
+              <tr>
+                <td>Credentials</td>
+                <td>
+                  API keys, OAuth tokens and provider settings used to authenticate your configured
+                  connections.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Responding and maintaining a session are core functions. Persistent memory, proactivity,
+            sensors, voice, Google/GitHub, automation, plugins and MCP are functions you choose to
+            configure or use. Avoid unnecessary sensitive data and third-party information you are
+            not authorized to process.
+          </p>
+          <h2 id="transferencias">3. Transfers and third parties</h2>
+          <p>
+            Your active LLM provider receives the prompt needed to respond. It may contain messages,
+            retrieved memory, system context, file or connected-service content, tool results and
+            JPEG/PNG screenshots for a visual task. Kaoru supports integrated providers and
+            compatible endpoints, including local endpoints. The application’s selector shows the
+            available catalog.
+          </p>
+          <ul>
+            <li>
+              <strong>Chosen LLM provider:</strong> its contract, region, retention and data policy
+              apply. Review them before adding a key or endpoint.
+            </li>
+            <li>
+              <strong>Microsoft Edge TTS:</strong> receives the text to synthesize. Vosk transcribes
+              voice input locally.
+            </li>
+            <li>
+              <strong>Google and GitHub:</strong> receive direct calls from your device when you
+              connect and use those accounts.
+            </li>
+            <li>
+              <strong>Websites and browsing:</strong> sites receive requests, your IP address and
+              submitted data; their cookies and policies apply.
+            </li>
+            <li>
+              <strong>MCP and plugins:</strong> third-party extensions may receive context or
+              execute code according to their implementation. Review their origins and permissions.
+            </li>
+            <li>
+              <strong>Catalog and updates:</strong> Kaoru may query public model metadata at
+              models.dev and releases on GitHub; those queries do not need to include your
+              conversation.
+            </li>
+          </ul>
+          <p>
+            Dregxmoon does not sell personal data or use it for behavioral advertising. Configured
+            third-party requests travel directly from your device and are also subject to the
+            recipient’s terms and policies.
+          </p>
+          <p>
+            Provider references: <a href="https://openai.com/policies/privacy-policy/">OpenAI</a>,
+            <a href="https://policies.google.com/privacy">Google</a>,
+            <a href="https://privacy.microsoft.com/privacystatement">Microsoft</a> and
+            <a
+              href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement"
+              >GitHub</a
+            >. Review the policy of any other provider you connect.
+          </p>
+          <h2 id="google">4. Google Workspace and Limited Use</h2>
+          <p>
+            Google Workspace is optional. You create or provide the OAuth client and choose services
+            and scopes: Calendar, Gmail, Drive, Docs, Sheets, Tasks or Contacts; read-only or write
+            access where supported. Authorize the minimum scope needed and revoke it when no longer
+            required.
+          </p>
+          <div class="note">
+            Kaoru’s use and transfer of information received from Google APIs adhere to the
+            <a href="https://developers.google.com/terms/api-services-user-data-policy"
+              >Google API Services User Data Policy</a
+            >, including Limited Use requirements. Data is used to provide or improve the
+            user-requested visible feature; it is not sold, used for advertising or transferred to
+            people for unrelated purposes. It may reach your chosen LLM provider only when necessary
+            for your requested action, such as summarizing an email.
+          </div>
+          <h2 id="desktop">5. Desktop, browser and permissions</h2>
+          <p>
+            Application, browser, screen, pointer, keyboard, process and camera capabilities have
+            separate switches. Rules can allow, ask or deny. Approval reduces risk but does not
+            guarantee an action’s outcome.
+          </p>
+          <ul>
+            <li>
+              <strong>Accessibility:</strong> AT-SPI2 on Linux and UI Automation on Windows expose
+              controls. macOS does not yet have equivalent semantic control.
+            </li>
+            <li>
+              <strong>Screenshots and visual clicks:</strong> coordinates are linked to a captured
+              image, expire after 30 seconds, are single-use and require a new observation. The
+              image may reach the active vision-capable LLM.
+            </li>
+            <li>
+              <strong>Personal browser:</strong> open_website asks the OS to open a URL in your
+              default browser, retaining its session. Kaoru does not directly import its cookies or
+              passwords.
+            </li>
+            <li>
+              <strong>Managed browser:</strong> searchable and verifiable flows use a separate
+              persistent Chromium profile. Login cookies remain in Kaoru’s data directory until
+              removed.
+            </li>
+            <li>
+              <strong>Processes:</strong> Kaoru can list names and IDs and request termination.
+              Review the target; termination may not have a verified postcondition.
+            </li>
+            <li>
+              <strong>Camera:</strong> the current tool checks status or opens the camera app. It
+              does not capture photographs or record video.
+            </li>
+          </ul>
+          <h2 id="seguridad">6. Storage and security</h2>
+          <p>
+            Memory, sessions, telemetry and configuration are stored in Electron’s local userData
+            directory. Embeddings are computed locally. Credentials preferentially use the OS secure
+            store (Keychain, Credential Manager or Secret Service). If unavailable, supported
+            fallbacks may leave credentials in local configuration or environment files readable by
+            your account. Protect your device, files and backups; local storage does not imply full
+            database encryption.
+          </p>
+          <h2 id="retencion">7. Retention and deletion</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Retention</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Application history</td>
+                <td>Pruned after 30 days.</td>
+              </tr>
+              <tr>
+                <td>Local telemetry</td>
+                <td>Up to 90 days.</td>
+              </tr>
+              <tr>
+                <td>Logs</td>
+                <td>
+                  An active file and one rotation, up to 5 MiB each. Rotation depends on size, not
+                  age.
+                </td>
+              </tr>
+              <tr>
+                <td>Pointer-linked screenshot</td>
+                <td>
+                  In-memory reference for up to 30 seconds or the first click. Copies sent to
+                  providers follow their policies.
+                </td>
+              </tr>
+              <tr>
+                <td>Memory and sessions</td>
+                <td>
+                  Until deleted or archived by decay rules. Archiving is logical deletion, not
+                  immediate physical erasure.
+                </td>
+              </tr>
+              <tr>
+                <td>Managed browser profile and checkpoints</td>
+                <td>
+                  Remain locally until manual cleanup or the corresponding feature removes them.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            You can ask Kaoru to forget memories, disconnect integrations and remove application
+            data from your OS data directory. Uninstalling may leave that directory in place. Back
+            up anything you need and close Kaoru before deleting files. System backups and external
+            providers have separate lifecycles.
+          </p>
+          <h2 id="derechos">8. Rights and revocation</h2>
+          <p>
+            You may request access, rectification, cancellation or opposition (ARCO rights), limit
+            use or revoke consent through the contact email. Describe your request sufficiently;
+            reasonable identity verification may be requested. Most data is on your device and can
+            also be inspected or removed locally.
+          </p>
+          <p>
+            Revoke Google access from
+            <a href="https://myaccount.google.com/permissions">Google account permissions</a> and
+            GitHub access from that account’s authorized application settings. Revocation prevents
+            future access but does not automatically erase copies already sent to providers or
+            backups.
+          </p>
+          <h2 id="menores">9. Authorized use and minors</h2>
+          <p>
+            Use Kaoru only on authorized devices, accounts and workspaces. Do not monitor other
+            people without their knowledge and consent. Respect workplace or educational policies.
+            Kaoru is intended for adults aged 18 or the applicable age of majority and does not
+            intentionally seek to collect children’s data.
+          </p>
+          <h2 id="cambios">10. Changes</h2>
+          <p>
+            This public website stores your light/dark theme choice in browser localStorage. It
+            includes no analytics or forms. Images, styles and scripts are served by the site
+            itself. Hosting processes requests needed to deliver pages; opening an external link
+            also invokes the destination site's practices.
+          </p>
+          <p>
+            This notice will be updated when capabilities, providers or practices materially change.
+            The date identifies the version. Material changes should be communicated in the
+            repository or application before or when they take effect where reasonably possible.
+          </p>
+          <p>
+            Legal reference:
+            <a href="https://www.diputados.gob.mx/LeyesBiblio/pdf/LFPDPPP.pdf"
+              >LFPDPPP published by Mexico’s Chamber of Deputies</a
+            >.
+          </p>
+        </article>
+      </div>
+    </main>
+    <footer>
+      <div class="container footer-top">
+        <a class="nav-logo" href="index.html"
+          ><span class="logo-mark" aria-hidden="true">k.</span>Kaoru</a
+        >
+        <nav aria-label="Terms and license">
+          <a href="index.html">Home</a><a href="guide.html">User guide</a
+          ><a href="privacy.html" aria-current="page">Privacy</a
+          ><a href="terms.html">Terms and license</a
+          ><a href="mailto:dregxmoon@gmail.com">dregxmoon@gmail.com</a>
+        </nav>
+      </div>
+      <div class="container footer-bottom">
+        <p>Kaoru · Source code under the MIT license</p>
+        <p>
+          Third-party models and characters retain their own rights. Independent project, not
+          affiliated with HoYoverse.
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

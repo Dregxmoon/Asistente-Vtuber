@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="リポジトリの調査、ツールの実行、変更の確認をKaoruと。記憶、音声、Live2Dアバターを備えたデスクトップアシスタントです。"
+    />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f8f8f7" />
+    <title>Kaoru — デスクトップアシスタントとコーディングエージェント</title>
+    <link rel="alternate" hreflang="es" href="../index.html" />
+    <link rel="alternate" hreflang="en" href="../en/index.html" />
+    <link rel="alternate" hreflang="ja" href="../ja/index.html" />
+    <link rel="alternate" hreflang="x-default" href="../index.html" />
+    <link rel="stylesheet" href="../assets/styles.css" />
+    <script src="../assets/main.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">本文へ移動</a>
+    <header class="nav">
+      <div class="nav-inner">
+        <a class="nav-logo" href="index.html" aria-label="Kaoru"
+          ><span class="logo-mark" aria-hidden="true">k.</span>Kaoru</a
+        >
+        <nav class="nav-links" id="site-navigation" aria-label="ホーム">
+          <a href="index.html#features">できること</a><a href="index.html#workflow">作業の流れ</a
+          ><a href="index.html#security">セキュリティ</a><a href="guide.html">使い方</a>
+        </nav>
+        <div class="nav-actions">
+          <button
+            class="theme-btn"
+            id="theme-toggle"
+            type="button"
+            aria-label="テーマを切り替える"
+            aria-pressed="false"
+          >
+            <span aria-hidden="true">◐</span></button
+          ><button
+            class="theme-btn menu-toggle"
+            type="button"
+            aria-label="ナビゲーションを開く"
+            aria-controls="site-navigation"
+            aria-expanded="false"
+          >
+            <span aria-hidden="true">☰</span></button
+          ><a class="btn-dark nav-github" href="https://github.com/Dregxmoon/Kaoru-Agent"
+            >GitHub <span aria-hidden="true">↗</span></a
+          >
+        </div>
+      </div>
+      <nav class="language-bar" aria-label="言語">
+        <a href="../index.html" lang="es" hreflang="es">Español</a
+        ><a href="../en/index.html" lang="en" hreflang="en">English</a
+        ><a href="../ja/index.html" lang="ja" hreflang="ja" aria-current="page">日本語</a>
+      </nav>
+    </header>
+    <main id="main">
+      <section class="hero container">
+        <div class="badge">
+          <span class="status-dot"></span>オープンソース · デスクトップアシスタント
+        </div>
+        <h1>あなたのプロジェクトに。<br />デスクトップに、Kaoruを。</h1>
+        <p class="hero-intro">
+          リポジトリを調べ、計画を立て、ツールを使い、変更を検証するコーディングエージェント。会話の文脈を覚え、音声でも一緒に作業できるLive2Dのパートナーです。
+        </p>
+        <div class="hero-btns">
+          <a class="btn-dark" href="guide.html">Kaoruを設定する<span aria-hidden="true">↗</span></a
+          ><a class="btn-outline" href="#features">機能を見る<span aria-hidden="true">↓</span></a>
+        </div>
+        <p class="hero-note">
+          マイクはボタンを押したときに起動します。ウェイクワードや常時の環境音リスニングはありません。
+        </p>
+        <figure class="avatar-preview">
+          <div class="preview-top"><span class="status-dot"></span>Kaoru <span>Live2D</span></div>
+          <img
+            src="../assets/02-overlay-character.png"
+            width="452"
+            height="693"
+            alt="KaoruのLive2Dアバター。利用権限のある別のモデルを選ぶこともできます。"
+            fetchpriority="high"
+          />
+          <figcaption>
+            KaoruのLive2Dアバター。利用権限のある別のモデルを選ぶこともできます。
+          </figcaption>
+        </figure>
+      </section>
+      <div class="capability-strip container">
+        <span>コードとツール</span><span>ローカルの記憶</span><span>操作して使う音声</span
+        ><span>Live2Dアバター</span>
+      </div>
+      <section id="features" class="section sec-alt">
+        <div class="container">
+          <div class="section-heading fade-up">
+            <span class="eyebrow">01 / KAORU</span>
+            <h2>Kaoruでできること</h2>
+            <p>
+              関数の理解から、複数の手順が必要な作業まで。使える機能は、プロバイダー、OS、設定した権限によって変わります。
+            </p>
+          </div>
+          <div class="grid-3">
+            <article class="card fade-up">
+              <span class="card-number">01</span>
+              <h3>リポジトリで作業する</h3>
+              <p>
+                ファイル、依存関係、LSPシンボルを調べて計画に反映します。コードの読み書き、コマンド実行、Git操作に対応。構造インデックスには範囲の制限があり、参照先や内容はツールで確認する必要があります。
+              </p>
+            </article>
+            <article class="card fade-up">
+              <span class="card-number">02</span>
+              <h3>変更を検証する</h3>
+              <p>
+                smartの実行フローでは、認識された変更の後に設定済みの検証を行います。対応する関連テストを全体のチェックより先に実行します。スキップや失敗は、テスト合格を意味しません。
+              </p>
+            </article>
+            <article class="card fade-up">
+              <span class="card-number">03</span>
+              <h3>目標から作業を再開する</h3>
+              <p>
+                目標、手順、実行結果をSQLiteに保存して、作業を続けられます。保存先がメモリに縮退した場合、その状態はアプリ終了後には残りません。
+              </p>
+            </article>
+            <article class="card fade-up">
+              <span class="card-number">04</span>
+              <h3>文脈を踏まえて会話する</h3>
+              <p>
+                会話に関係する事実、好み、エピソードをローカルの記憶から検索します。記憶を忘れるよう依頼できます。検索された文脈は、AIプロバイダーへのリクエストに含まれる場合があります。
+              </p>
+            </article>
+            <article class="card fade-up">
+              <span class="card-number">05</span>
+              <h3>声とアバターでやり取りする</h3>
+              <p>
+                Voskが端末上で音声を文字起こしし、Edge
+                TTSがMicrosoftのサービス経由で音声を生成します。マイクを押すと再生を中断します。モデルとジェスチャーは設定できます。
+              </p>
+            </article>
+            <article class="card fade-up">
+              <span class="card-number">06</span>
+              <h3>デスクトップを操作する</h3>
+              <p>
+                アプリやWebサイトを開き、アクセシビリティ情報を調べ、有効にした画面・ポインター・キーボード機能を使います。LinuxとWindowsは意味情報による操作に対応し、macOSはまだ同等ではありません。
+              </p>
+            </article>
+            <article class="card fade-up">
+              <span class="card-number">07</span>
+              <h3>使っているツールとつなぐ</h3>
+              <p>
+                GitHub、任意のGoogle
+                Workspace連携、MCPサーバー、プラグインで作業範囲を広げられます。各接続には個別の権限、依存関係、データ送信先があります。
+              </p>
+            </article>
+            <article class="card fade-up">
+              <span class="card-number">08</span>
+              <h3>状況に合った提案を受ける</h3>
+              <p>
+                設定したセンサーからシステムやプロジェクトの情報を取得します。文脈とポリシーに基づいて支援を提案しますが、モデルに新しい実行権限を与える機能ではありません。
+              </p>
+            </article>
+            <article class="card fade-up">
+              <span class="card-number">09</span>
+              <h3>モデルの実行先を選ぶ</h3>
+              <p>
+                対応プロバイダーやローカルのエンドポイントを設定できます。品質、費用、画像理解、ツール対応は、選んだモデルとサービスに依存します。
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+      <section id="workflow" class="section sec-dark">
+        <div class="container">
+          <div class="section-heading fade-up">
+            <span class="eyebrow">02 / KAORU</span>
+            <h2>依頼から、確認できる結果へ</h2>
+            <p>
+              チャットで計画とツールの動作を追えます。権限の確認と結果の検証も、実行の一部です。
+            </p>
+          </div>
+          <ol class="flow-grid">
+            <li class="fade-up">
+              <span class="step-number">01</span>
+              <h3>調査</h3>
+              <p>ワークスペースを調べ、関連するパスと利用可能なシンボルを確認します。</p>
+            </li>
+            <li class="fade-up">
+              <span class="step-number">02</span>
+              <h3>計画</h3>
+              <p>目標を、結果を確認できる手順に分けます。</p>
+            </li>
+            <li class="fade-up">
+              <span class="step-number">03</span>
+              <h3>権限確認</h3>
+              <p>操作の範囲に応じて、ルールが許可・確認・拒否を決めます。</p>
+            </li>
+            <li class="fade-up">
+              <span class="step-number">04</span>
+              <h3>実行</h3>
+              <p>ツールを使い、その結果を作業の根拠として保持します。</p>
+            </li>
+            <li class="fade-up">
+              <span class="step-number">05</span>
+              <h3>検証</h3>
+              <p>チェックを実行します。失敗すれば修正に戻るか、未完了の作業として残ります。</p>
+            </li>
+          </ol>
+        </div>
+      </section>
+      <section id="security" class="section">
+        <div class="container">
+          <div class="section-heading fade-up">
+            <span class="eyebrow">03 / KAORU</span>
+            <h2>アクセス範囲を自分で決める</h2>
+            <p>
+              作業と端末に合わせて権限を設定します。モデルの提案と、ツールの実行を許可する制御は分かれています。
+            </p>
+          </div>
+          <div class="grid-2">
+            <article class="card fade-up security-card">
+              <h3>ツールごとの権限</h3>
+              <p>
+                allow・ask・denyで、特定の操作の自動実行、確認、拒否を設定します。すべての操作で確認画面が出るわけではなく、有効なポリシーに従います。
+              </p>
+            </article>
+            <article class="card fade-up security-card">
+              <h3>デスクトップ機能を個別に制御</h3>
+              <p>
+                アプリ、ブラウザー、画面、ポインター、キーボード、プロセス、カメラは個別に制御できます。現在のカメラ機能は状態確認とアプリの起動のみで、撮影や録画は行いません。
+              </p>
+            </article>
+            <article class="card fade-up security-card">
+              <h3>環境に応じた隔離</h3>
+              <p>
+                ElectronのウィンドウからNodeへの直接アクセスは隔離されています。コマンドの隔離は別の仕組みで、OSの機能と設定に依存します。
+              </p>
+            </article>
+            <article class="card fade-up security-card">
+              <h3>チェックポイントと復旧</h3>
+              <p>
+                認識された変更に対して変更前の状態を保存します。復旧には制限があり、リモート操作、任意のコマンド、外部への影響は取り消せない場合があります。
+              </p>
+            </article>
+            <article class="card fade-up security-card">
+              <h3>外部からの内容</h3>
+              <p>
+                区切り処理のあるフローでは、Webや連携先の結果を信頼されていない内容として扱います。悪意ある指示のリスクを減らす仕組みであり、完全な防御を保証するものではありません。
+              </p>
+            </article>
+            <article class="card fade-up security-card">
+              <h3>データと認証情報</h3>
+              <p>
+                記憶と埋め込みはローカルに保存します。プロンプトは選んだプロバイダーへ送られる場合があります。利用可能ならOSのキーチェーンを使います。設定のバックアップにも注意が必要です。
+              </p>
+            </article>
+          </div>
+          <p class="section-link">
+            <a href="privacy.html"
+              >端末に残るデータと外部に送られるデータを確認する <span aria-hidden="true">↗</span></a
+            >
+          </p>
+        </div>
+      </section>
+      <section class="section sec-alt" id="users">
+        <div class="container">
+          <div class="section-heading fade-up">
+            <span class="eyebrow">04 / KAORU</span>
+            <h2>使い方に合わせた設定</h2>
+          </div>
+          <div class="grid-3">
+            <article class="card fade-up">
+              <h3>個人で使う</h3>
+              <p>
+                会話、一つのワークスペース、必要な権限から始められます。音声、記憶、提案機能を日常の作業に合わせて設定し、Live2Dモデルも変更できます。
+              </p>
+            </article>
+            <article class="card fade-up">
+              <h3>開発に使う</h3>
+              <p>
+                リポジトリのルールを記載し、依存関係と検証コマンドを準備します。重要な変更を取り込む前に、差分と結果を確認してください。
+              </p>
+            </article>
+            <article class="card fade-up">
+              <h3>チームや顧客の案件で使う</h3>
+              <p>
+                プロバイダーに送信できる情報、鍵の管理者、利用可能なツールを決めます。コードのライセンスはキャラクターの権利を含まず、組織のポリシーを置き換えるものでもありません。
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+      <section class="section" id="screenshots">
+        <div class="container">
+          <div class="section-heading fade-up">
+            <h2>デスクトップでのKaoru</h2>
+            <p>プロジェクトの実際のスクリーンショットです。表示はモデルや設定により異なります。</p>
+          </div>
+          <div class="grid-2 gallery">
+            <figure class="fade-up">
+              <img
+                src="../assets/03-chat-conversacion.png"
+                alt="チャットウィンドウでの会話とツール"
+                loading="lazy"
+              />
+              <figcaption>チャットウィンドウでの会話とツール</figcaption>
+            </figure>
+            <figure class="fade-up">
+              <img src="../assets/07-propuesta.png" alt="Kaoruからの支援の提案" loading="lazy" />
+              <figcaption>Kaoruからの支援の提案</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+      <section class="section sec-dark" id="quickstart">
+        <div class="container quickstart fade-up">
+          <span class="eyebrow">KAORU / 使い方</span>
+          <h2>最初の作業を準備する</h2>
+          <p>
+            プロバイダー、プロジェクト、確認可能な小さな目標を選びます。ガイドではインストール、権限、OS別の制限を説明します。
+          </p>
+          <ol>
+            <li>Kaoruをインストールして起動する。</li>
+            <li>プロバイダーを設定し、ワークスペースを選ぶ。</li>
+            <li>変更を許可する前に、読み取りだけの分析を依頼する。</li>
+          </ol>
+          <div class="hero-btns">
+            <a class="btn-dark" href="guide.html"
+              >Kaoruを設定する <span aria-hidden="true">↗</span></a
+            ><a
+              class="btn-outline"
+              href="https://github.com/Dregxmoon/Kaoru-Agent/blob/produccion/docs/README.md"
+              >技術リファレンス</a
+            >
+          </div>
+        </div>
+      </section>
+    </main>
+    <footer>
+      <div class="container footer-top">
+        <a class="nav-logo" href="index.html"
+          ><span class="logo-mark" aria-hidden="true">k.</span>Kaoru</a
+        >
+        <nav aria-label="利用規約とライセンス">
+          <a href="index.html" aria-current="page">ホーム</a><a href="guide.html">使い方</a
+          ><a href="privacy.html">プライバシー</a><a href="terms.html">利用規約とライセンス</a
+          ><a href="mailto:dregxmoon@gmail.com">dregxmoon@gmail.com</a>
+        </nav>
+      </div>
+      <div class="container footer-bottom">
+        <p>Kaoru · ソースコードはMITライセンス</p>
+        <p>
+          第三者のモデルとキャラクターには、それぞれの権利が適用されます。HoYoverseとは提携していない独立したプロジェクトです。
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

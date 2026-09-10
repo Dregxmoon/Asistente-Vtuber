@@ -8,7 +8,7 @@
 
 **Understands context · remembers what matters · asks before acting**
 
-[Español](../../../README.md) · [日本語](../ja/README.md) · [한국어](../ko/README.md) · **English (US)** · [English (UK)](../en-GB/README.md) · [Português](../pt/README.md)
+[Español](../../../README.md) · [日本語](../ja/README.md) · **English**
 
 </div>
 
@@ -70,8 +70,9 @@ Desktop access is split into independently configurable application, browser, sc
 keyboard, process, and camera capabilities.
 
 - [Documentation center](../../README.md)
-- [Privacy notice — Spanish](../../web/privacy.html)
-- [Terms of use — Spanish](../../web/terms.html)
+- [Website and user guide](../../web/en/index.html)
+- [Privacy notice](../../web/en/privacy.html)
+- [Terms of use](../../web/en/terms.html)
 - [Architecture — Spanish](../../arquitectura.md)
 - [Core — Spanish](../../../core/README.md)
 - [IPC — Spanish](../../../ipc/README.md)

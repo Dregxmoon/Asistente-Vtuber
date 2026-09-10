@@ -67,7 +67,13 @@ jobs:
       - name: Indexar intenciones (init_vectors.js → data/core.db)
         run: ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron infrastructure/database/init_vectors.js
 
-      - name: Regresión completa
+      - name: Verificar generación de la web trilingüe
+        run: node scripts/build-website.js --check
+
+      - name: Instalar Chromium para pruebas web
+        run: npx playwright install --with-deps chromium
+
+      - name: Regresión completa (incluye web trilingüe)
         run: npm test
         # La suite conserva el diagnostico completo, pero la deuda existente
         # no bloquea los instaladores ni marca como fallido todo el workflow.

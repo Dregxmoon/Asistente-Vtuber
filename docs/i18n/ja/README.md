@@ -8,7 +8,7 @@
 
 **状況を理解する · 大切なことを覚える · 行動する前に確認する**
 
-[Español](../../../README.md) · **日本語** · [한국어](../ko/README.md) · [English (US)](../en-US/README.md) · [English (UK)](../en-GB/README.md) · [Português](../pt/README.md)
+[Español](../../../README.md) · **日本語** · [English](../en/README.md)
 
 </div>
 
@@ -70,8 +70,9 @@ npm test
 画面、ポインター、キーボード、プロセス、カメラごとに設定できます。
 
 - [ドキュメントセンター](../../README.md)
-- [プライバシー通知（スペイン語）](../../web/privacy.html)
-- [利用規約（スペイン語）](../../web/terms.html)
+- [Webサイトと使い方](../../web/ja/index.html)
+- [プライバシー通知](../../web/ja/privacy.html)
+- [利用規約](../../web/ja/terms.html)
 - [アーキテクチャ（スペイン語）](../../arquitectura.md)
 - [Core（スペイン語）](../../../core/README.md)
 - [IPC（スペイン語）](../../../ipc/README.md)

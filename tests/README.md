@@ -72,6 +72,10 @@ mantiene el mapa por contratos, sin copiar cifras que cambian cada vez que se ag
 
 ## 2. Mapa de suites
 
+La suite `test_website.js` abre las doce páginas públicas en Chromium y comprueba idiomas,
+recursos, enlaces, anclas, móvil, temas, navegación, copia de comandos y funcionamiento sin JS.
+Requiere el navegador de Playwright (`npx playwright install chromium`); no utiliza SQLite.
+
 ### Agente y ejecución
 
 | Suite                            | Cobertura                                                                                                                              |

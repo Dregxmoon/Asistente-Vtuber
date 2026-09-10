@@ -1,0 +1,318 @@
+<p class="updated">Última actualización: 8 de septiembre de 2026</p>
+<p>
+  Este aviso explica qué información puede tratar la aplicación de escritorio Kaoru, dónde se
+  guarda, cuándo puede salir del dispositivo y qué controles tiene el usuario. Se preparó con
+  referencia a la Ley Federal de Protección de Datos Personales en Posesión de los Particulares
+  (LFPDPPP) vigente en México. Describe la implementación actual; no sustituye una revisión legal
+  profesional para una distribución o actividad concreta.
+</p>
+
+<div class="note">
+  <strong>Resumen:</strong> Kaoru no opera un servidor central para almacenar conversaciones. La
+  memoria, los embeddings, preferencias y telemetría se guardan localmente. Sin embargo, Kaoru no es
+  necesariamente offline: los mensajes y el contexto seleccionado pueden enviarse al proveedor de IA
+  configurado; la voz sintetizada usa Microsoft; y las integraciones, sitios, plugins o servidores
+  MCP que actives pueden recibir datos necesarios para la tarea.
+</div>
+
+<nav class="toc" aria-label="Contenido">
+  <strong>Contenido</strong>
+  <a href="#responsable">1. Responsable y contacto</a>
+  <a href="#datos">2. Datos y finalidades</a>
+  <a href="#transferencias">3. Transferencias y terceros</a>
+  <a href="#google">4. Google Workspace y Uso Limitado</a>
+  <a href="#desktop">5. Escritorio, navegador y permisos</a>
+  <a href="#seguridad">6. Almacenamiento y seguridad</a>
+  <a href="#retencion">7. Retención y eliminación</a>
+  <a href="#derechos">8. Derechos y revocación</a>
+  <a href="#menores">9. Uso autorizado y menores</a>
+  <a href="#cambios">10. Cambios</a>
+</nav>
+
+<h2 id="responsable">1. Responsable y contacto</h2>
+<p>
+  Kaoru es un proyecto independiente desarrollado por Dregxmoon, operado desde Tijuana, Baja
+  California, México. Para solicitudes de privacidad o dudas sobre este aviso escribe a
+  <a href="mailto:dregxmoon@gmail.com">dregxmoon@gmail.com</a>. Dregxmoon no recibe una copia
+  automática de la base de datos local ni de las claves que configuras.
+</p>
+
+<h2 id="datos">2. Datos y finalidades</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Categoría</th>
+      <th>Ejemplos</th>
+      <th>Finalidad</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Conversación y archivos elegidos</td>
+      <td>Mensajes, adjuntos, fragmentos del workspace y resultados de herramientas</td>
+      <td>Responder, planear, ejecutar y verificar la tarea solicitada.</td>
+    </tr>
+    <tr>
+      <td>Memoria y sesiones</td>
+      <td>
+        Hechos declarados, preferencias, episodios, historial de conversación, intenciones y
+        creencias inferidas identificadas como tales
+      </td>
+      <td>Continuidad entre sesiones, recuperación semántica y personalización.</td>
+    </tr>
+    <tr>
+      <td>Contexto del sistema</td>
+      <td>
+        Aplicación o ventana activa, inactividad, uso de recursos, señales Git/LSP, títulos con
+        errores, recordatorios y portapapeles técnico cuando se activa
+      </td>
+      <td>Dar contexto y decidir de forma determinista si una sugerencia proactiva es oportuna.</td>
+    </tr>
+    <tr>
+      <td>Automatización</td>
+      <td>
+        Árbol de accesibilidad, ventanas, capturas de pantalla, coordenadas efímeras, nombres/PID de
+        procesos y resultado de acciones
+      </td>
+      <td>Controlar y verificar aplicaciones o interfaces cuando lo solicitas.</td>
+    </tr>
+    <tr>
+      <td>Integraciones</td>
+      <td>
+        Contenido de Google Workspace, GitHub, páginas web, servidores MCP o plugins habilitados
+      </td>
+      <td>Prestar la integración o herramienta elegida.</td>
+    </tr>
+    <tr>
+      <td>Diagnóstico local</td>
+      <td>Duración, herramienta, resultado, clase de fallo y logs técnicos</td>
+      <td>Depuración, seguridad, métricas locales y mejora del funcionamiento.</td>
+    </tr>
+    <tr>
+      <td>Credenciales</td>
+      <td>Claves API, tokens OAuth y configuración de proveedores</td>
+      <td>Autenticar directamente las conexiones que configuras.</td>
+    </tr>
+  </tbody>
+</table>
+<p>
+  Las funciones básicas necesarias son responder y mantener la sesión. Memoria persistente,
+  proactividad, sensores, voz, Google/GitHub, automatización, plugins y MCP son funciones que eliges
+  configurar o utilizar. Evita proporcionar datos sensibles que no sean necesarios para tu tarea o
+  información de terceros sin autorización.
+</p>
+
+<h2 id="transferencias">3. Transferencias y terceros</h2>
+<p>
+  El proveedor LLM activo recibe el prompt necesario para responder. Puede contener mensajes,
+  memoria recuperada, contexto del sistema, contenido de archivos o servicios conectados, resultados
+  de herramientas y una captura JPEG/PNG cuando una tarea visual lo requiere. Kaoru admite
+  proveedores integrados y endpoints compatibles con OpenAI, incluidos endpoints locales; el
+  selector de la aplicación muestra el catálogo disponible en ese momento.
+</p>
+<ul>
+  <li>
+    <strong>Proveedor LLM elegido:</strong> procesa solicitudes conforme a su contrato, región,
+    retención y política. Revisa esos documentos antes de añadir una clave o endpoint.
+  </li>
+  <li>
+    <strong>Microsoft Edge TTS:</strong> recibe el texto que se convertirá en audio. Vosk transcribe
+    la entrada de voz localmente.
+  </li>
+  <li>
+    <strong>Google y GitHub:</strong> reciben llamadas directas desde el dispositivo si conectas y
+    usas esas cuentas.
+  </li>
+  <li>
+    <strong>Web y navegador:</strong> los sitios reciben solicitudes, dirección IP y datos que
+    introduzcas; sus cookies y políticas aplican.
+  </li>
+  <li>
+    <strong>MCP y plugins:</strong> son extensiones de terceros y pueden recibir contexto o ejecutar
+    código según su implementación. Instálalos únicamente si confías en su origen y permisos.
+  </li>
+  <li>
+    <strong>Catálogo y actualizaciones:</strong> Kaoru puede consultar metadatos públicos de modelos
+    en models.dev y versiones en GitHub; esas consultas no necesitan incluir la conversación.
+  </li>
+</ul>
+<p>
+  Dregxmoon no vende datos personales ni los usa para publicidad conductual. Cuando configuras un
+  servicio de terceros, la transmisión ocurre directamente desde tu equipo y también queda sujeta a
+  los términos y políticas de ese tercero.
+</p>
+<p>
+  Referencias de los servicios principales:
+  <a href="https://openai.com/policies/privacy-policy/">OpenAI</a>,
+  <a href="https://policies.google.com/privacy">Google</a>,
+  <a href="https://privacy.microsoft.com/privacystatement">Microsoft</a> y
+  <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement"
+    >GitHub</a
+  >. Si conectas otro proveedor, revisa la política que muestre ese proveedor antes de usarlo.
+</p>
+
+<h2 id="google">4. Google Workspace y Uso Limitado</h2>
+<p>
+  Google Workspace es opcional. El usuario crea o proporciona el cliente OAuth y elige servicios y
+  alcance: Calendar, Gmail, Drive, Docs, Sheets, Tasks o Contacts; solo lectura o escritura cuando
+  la integración lo admite. Autoriza el mínimo alcance necesario y revócalo cuando deje de usarlo.
+</p>
+<div class="note">
+  <strong>Declaración de Uso Limitado:</strong> el uso y la transferencia de información recibida de
+  las APIs de Google por Kaoru se ajustan a la
+  <a href="https://developers.google.com/terms/api-services-user-data-policy"
+    >Política de Datos de Usuario de los Servicios de API de Google</a
+  >, incluidos sus requisitos de Limited Use. Se utiliza para proporcionar o mejorar la función
+  visible solicitada por el usuario; no se vende, no se usa para publicidad y no se transfiere a
+  personas para fines no relacionados. Puede enviarse al proveedor LLM elegido únicamente cuando sea
+  necesario para una acción solicitada por el usuario, como resumir un correo.
+</div>
+
+<h2 id="desktop">5. Escritorio, navegador y permisos</h2>
+<p>
+  Las capacidades de aplicaciones, navegador, pantalla, puntero, teclado, procesos y cámara tienen
+  interruptores independientes. También se aplican reglas <code>allow</code>, <code>ask</code> y
+  <code>deny</code>; una aprobación reduce riesgo, pero no garantiza que una acción produzca el
+  resultado esperado.
+</p>
+<ul>
+  <li>
+    <strong>Accesibilidad:</strong> Kaoru lee controles mediante AT-SPI2 en Linux o UI Automation en
+    Windows. macOS no tiene todavía la misma paridad de control semántico.
+  </li>
+  <li>
+    <strong>Captura y clic visual:</strong> para canvas o juegos puede capturar la pantalla. La
+    coordenada queda ligada a esa imagen, expira a los 30 segundos, se usa una vez y exige otra
+    observación. La imagen puede enviarse al LLM visual activo.
+  </li>
+  <li>
+    <strong>Navegador personal:</strong> <code>open_website</code> pide al sistema abrir una URL en
+    tu navegador predeterminado, conservando tu sesión. Kaoru no importa directamente cookies ni
+    contraseñas de ese navegador.
+  </li>
+  <li>
+    <strong>Navegador administrado:</strong> búsquedas y flujos verificables usan un perfil Chromium
+    separado y persistente. Si inicias sesión allí, sus cookies quedan en el directorio de datos de
+    Kaoru hasta que lo elimines.
+  </li>
+  <li>
+    <strong>Procesos:</strong> puede listar nombre y PID y solicitar detener un proceso. Revisa el
+    destino: la postcondición de cierre puede no estar verificada.
+  </li>
+  <li>
+    <strong>Cámara:</strong> la herramienta actual consulta estado o abre la aplicación de cámara;
+    no toma fotos ni graba vídeo.
+  </li>
+</ul>
+
+<h2 id="seguridad">6. Almacenamiento y seguridad</h2>
+<p>
+  Memoria, sesiones, telemetría y configuración se guardan en el directorio local
+  <code>userData</code> de Electron. Los embeddings se calculan localmente. Las claves se guardan
+  preferentemente en el almacén seguro del sistema (Keychain, Credential Manager o Secret Service).
+  Si no está disponible, la compatibilidad puede recurrir a <code>.env</code> o
+  <code>config.json</code> en texto legible por el usuario del sistema; protege los permisos del
+  dispositivo y no compartas esos archivos.
+</p>
+<p>
+  Kaoru usa aislamiento de renderer, validación IPC, controles de ruta, permisos y registros sin
+  secretos conocidos. Ningún control elimina por completo el riesgo de vulnerabilidades, extensiones
+  maliciosas, errores del modelo o acceso de otra persona al perfil del sistema operativo.
+</p>
+
+<h2 id="retencion">7. Retención y eliminación</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Dato local</th>
+      <th>Retención actual</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Historial de aplicaciones</td>
+      <td>Poda automática a 30 días.</td>
+    </tr>
+    <tr>
+      <td>Telemetría local</td>
+      <td>Hasta 90 días.</td>
+    </tr>
+    <tr>
+      <td>Logs</td>
+      <td>
+        Archivo activo y una rotación, hasta 5 MiB cada uno; la rotación es por tamaño, no por días.
+      </td>
+    </tr>
+    <tr>
+      <td>Captura ligada al puntero</td>
+      <td>
+        Referencia en memoria de hasta 30 segundos o hasta el primer clic. Una copia enviada a un
+        proveedor se rige por la retención de ese proveedor.
+      </td>
+    </tr>
+    <tr>
+      <td>Memoria y sesiones</td>
+      <td>
+        Hasta que las borres o sean archivadas por las reglas de decaimiento. Archivar es borrado
+        lógico, no eliminación física inmediata.
+      </td>
+    </tr>
+    <tr>
+      <td>Perfil del navegador administrado y checkpoints</td>
+      <td>
+        Persisten en los datos locales hasta limpieza manual o por la función correspondiente.
+      </td>
+    </tr>
+  </tbody>
+</table>
+<p>
+  Puedes pedir a Kaoru olvidar recuerdos, desconectar integraciones y eliminar los datos de la
+  aplicación desde el directorio de datos de tu sistema operativo. Desinstalar la aplicación puede
+  no borrar ese directorio. Haz una copia si necesitas conservar algo y cierra Kaoru antes de borrar
+  archivos. Las copias de seguridad del sistema y los proveedores externos tienen ciclos propios.
+</p>
+
+<h2 id="derechos">8. Derechos y revocación</h2>
+<p>
+  Puedes solicitar acceso, rectificación, cancelación u oposición (derechos ARCO), limitar el uso o
+  revocar consentimiento escribiendo al correo de contacto. Incluye una descripción suficiente de la
+  solicitud; se podrá pedir información razonable para verificar identidad. Como la mayor parte de
+  los datos está en tu dispositivo, también puedes consultarla o eliminarla localmente.
+</p>
+<p>
+  Revoca Google desde
+  <a href="https://myaccount.google.com/permissions">Permisos de tu cuenta de Google</a> y GitHub
+  desde la configuración de aplicaciones autorizadas de esa cuenta. Revocar impide accesos futuros,
+  pero no elimina automáticamente copias ya enviadas a un proveedor o incluidas en respaldos.
+</p>
+
+<h2 id="menores">9. Uso autorizado y menores</h2>
+<p>
+  Usa Kaoru solo en dispositivos, cuentas y espacios para los que tengas autorización. No lo uses
+  para vigilar a otras personas sin su conocimiento y consentimiento. Si el equipo pertenece a una
+  empresa o institución, respeta sus políticas. Kaoru está dirigido a mayores de 18 años o a la
+  mayoría de edad aplicable; no busca recopilar deliberadamente datos de menores.
+</p>
+
+<h2 id="cambios">10. Cambios</h2>
+<p>
+  En esta web pública, la elección de tema claro u oscuro se guarda en localStorage del navegador.
+  No se incorporan analítica ni formularios. Las imágenes, estilos y scripts se sirven desde el
+  propio sitio. El alojamiento procesa las solicitudes necesarias para entregar las páginas; al
+  abrir un enlace externo también se aplican las prácticas del sitio de destino.
+</p>
+<p>
+  Este aviso se actualizará cuando cambien materialmente las capacidades, proveedores o prácticas.
+  La fecha superior identifica la versión vigente. Los cambios relevantes deben comunicarse en el
+  repositorio o en la aplicación antes o al entrar en vigor cuando sea razonablemente posible.
+</p>
+
+<footer>
+  <p>Contacto: <a href="mailto:dregxmoon@gmail.com">dregxmoon@gmail.com</a></p>
+  <p>
+    Referencia normativa:
+    <a href="https://www.diputados.gob.mx/LeyesBiblio/pdf/LFPDPPP.pdf"
+      >LFPDPPP vigente publicada por la Cámara de Diputados</a
+    >.
+  </p>
+</footer>
