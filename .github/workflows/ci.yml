@@ -29,15 +29,15 @@ jobs:
 
       - name: ESLint
         run: npm run lint
-        continue-on-error: true
 
       - name: Typecheck (JSDoc estricto en core/)
         run: npm run typecheck
+        # Hay deuda JSDoc anterior en módulos proactivos fuera de este cambio.
+        # El lint, formato y las regresiones sí bloquean el release.
         continue-on-error: true
 
       - name: Prettier check
         run: npm run format:check
-        continue-on-error: true
 
   test:
     name: Tests (Electron runner)
@@ -65,7 +65,7 @@ jobs:
         run: npm run rebuild
 
       - name: Indexar intenciones (init_vectors.js → data/core.db)
-        run: ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron infrastructure/database/init_vectors.js
+        run: npm run init-db
 
       - name: Verificar generación de la web trilingüe
         run: node scripts/build-website.js --check
@@ -75,9 +75,30 @@ jobs:
 
       - name: Regresión completa (incluye web trilingüe)
         run: npm test
-        # La suite conserva el diagnostico completo, pero la deuda existente
-        # no bloquea los instaladores ni marca como fallido todo el workflow.
-        continue-on-error: true
+
+  test-windows:
+    name: Tests completos · Windows
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependencias y reconstruir módulos nativos
+        run: npm ci
+
+      - name: Indexar intenciones con Electron
+        run: npm run init-db
+
+      - name: Instalar Chromium para pruebas web
+        run: npx playwright install chromium
+
+      - name: Regresión completa con runner portable
+        run: npm test
 
   desktop-contracts:
     name: Desktop automation · ${{ matrix.os }}
@@ -110,6 +131,8 @@ jobs:
           & .\node_modules\electron\dist\electron.exe tests\test_desktop_automation.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & .\node_modules\electron\dist\electron.exe tests\test_desktop_control.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\node_modules\electron\dist\electron.exe tests\test_windows_sandbox.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Smoke test de Windows UI Automation
@@ -158,13 +181,11 @@ jobs:
   build:
     name: Build ${{ matrix.os }} · auto-update
     runs-on: ${{ matrix.os }}
-    needs: [quality, test, e2e-ui]
+    needs: [quality, test, test-windows, desktop-contracts, e2e-ui]
     timeout-minutes: 60
     permissions:
       contents: write
-    # El CD debe producir instaladores aunque una comprobacion de CI reporte
-    # errores en el codigo subido. Los jobs de calidad conservan su resultado.
-    if: ${{ always() && !cancelled() && (github.ref == 'refs/heads/produccion' || startsWith(github.ref, 'refs/tags/v')) }}
+    if: ${{ github.ref == 'refs/heads/produccion' || startsWith(github.ref, 'refs/tags/v') }}
     strategy:
       fail-fast: false
       matrix:
@@ -206,19 +227,39 @@ jobs:
       - name: Instalar dependencias (postinstall descarga Electron + rebuild de nativos)
         run: npm ci
 
-      - name: Empaquetar y publicar (tags) / solo empaquetar (branch)
-        shell: bash
-        run: |
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            npm run publish:${{ matrix.target }}
-          else
-            npm run build:${{ matrix.target }}
-          fi
+      - name: Empaquetar
+        run: npm run build:${{ matrix.target }}
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # macOS sin firma (identity null en build config); nunca intentar
           # firmar/notarizar desde CI sin certificados.
           CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Instalar y probar el release de Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem dist -Filter '*Setup*.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'No se encontró el instalador NSIS' }
+          $installDir = Join-Path $env:RUNNER_TEMP 'KaoruInstalled'
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList @('/S', "/D=$installDir") -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Instalación falló: $($install.ExitCode)" }
+
+          $shim = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\asistente.cmd'
+          if (-not (Test-Path $shim)) { throw 'El instalador no creó asistente.cmd' }
+          $shimText = Get-Content -Raw $shim
+          if ($shimText -notmatch '--workspace.*%CD%') { throw 'asistente.cmd no propaga el workspace' }
+
+          $appExe = Get-ChildItem $installDir -Filter '*.exe' |
+            Where-Object { $_.Name -notmatch 'Uninstall' } | Select-Object -First 1
+          if (-not $appExe) { throw 'No se encontró el ejecutable instalado' }
+          $smoke = Start-Process -FilePath $appExe.FullName -ArgumentList @('--smoke-test', '--workspace', $PWD.Path) -Wait -PassThru
+          if ($smoke.ExitCode -ne 0) { throw "Smoke empaquetado falló: $($smoke.ExitCode)" }
+
+          $uninstaller = Get-ChildItem $installDir -Filter '*Uninstall*.exe' | Select-Object -First 1
+          if (-not $uninstaller) { throw 'No se encontró el desinstalador' }
+          $uninstall = Start-Process -FilePath $uninstaller.FullName -ArgumentList '/S' -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw "Desinstalación falló: $($uninstall.ExitCode)" }
+          if (Test-Path $shim) { throw 'El desinstalador no eliminó asistente.cmd' }
 
       - uses: actions/upload-artifact@v5
         with:
@@ -237,6 +278,12 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: asistente-*
+          path: dist
+          merge-multiple: true
+
       - name: Extraer versión del tag
         id: tag
         run: echo "name=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
@@ -248,3 +295,11 @@ jobs:
           name: Asistente v${{ steps.tag.outputs.name }}
           generate_release_notes: true
           append_body: true
+          files: |
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.dmg
+            dist/*.zip
+            dist/*.exe
+            dist/latest*.yml
+          fail_on_unmatched_files: true

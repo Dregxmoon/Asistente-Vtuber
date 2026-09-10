@@ -17,6 +17,8 @@ const path = require('path');
 
 const DEFAULT_TIMEOUT = 30_000;
 const PROFILE_PREFIX = 'KaoruAgent.OpenClaw';
+const CACHE_VERSION = 2;
+const TOOL_NAMES = ['node.exe', 'npm.cmd', 'npx.cmd', 'git.exe', 'python.exe', 'py.exe'];
 
 /** @typedef {{ ok: boolean, stdout: string, stderr: string, exitCode: number | null, signal: string | null, error?: string }} SandboxResult */
 
@@ -37,6 +39,8 @@ class WindowsSandbox {
     const localData = process.env.LOCALAPPDATA || os.tmpdir();
     this._cacheDir = opts.cacheDir || path.join(localData, 'KaoruAgent', 'sandbox');
     this._helperPath = path.join(this._cacheDir, 'Kaoru.WindowsSandbox.exe');
+    this._metadataPath = path.join(this._cacheDir, 'helper-metadata.json');
+    this._prebuiltHelperPath = path.join(process.resourcesPath || '', 'Kaoru.WindowsSandbox.exe');
     this._compilerSource = path.join(__dirname, 'compile-windows-sandbox.ps1');
     this._compilerScript = path.join(this._cacheDir, 'compile-windows-sandbox.ps1');
     const workspaceId = crypto.createHash('sha256').update(this._cwd).digest('hex').slice(0, 16);
@@ -69,38 +73,63 @@ class WindowsSandbox {
     if (this._platform !== 'win32') return false;
     try {
       fs.mkdirSync(this._cacheDir, { recursive: true });
-      // Node puede leer dentro de app.asar, PowerShell no. Copiar siempre la
-      // fuente confiable empaquetada también evita ejecutar un script cacheado
-      // que otro proceso haya reemplazado.
-      fs.copyFileSync(this._compilerSource, this._compilerScript);
-      const powershell = WindowsSandbox.findPowerShell();
-      if (!powershell) throw new Error('Windows PowerShell 5.1 no está disponible');
 
-      const compiled = await this._runProcess(
-        powershell,
-        [
-          '-NoLogo',
-          '-NoProfile',
-          '-NonInteractive',
-          '-ExecutionPolicy',
-          'Bypass',
-          '-File',
-          this._compilerScript,
-          '-OutputPath',
-          this._helperPath,
-        ],
-        120_000
-      );
-      if (!compiled.ok || !fs.existsSync(this._helperPath)) {
-        throw new Error(compiled.stderr.trim() || 'no se pudo compilar el helper AppContainer');
+      if (!this._cachedHelperIsValid()) {
+        if (fs.existsSync(this._prebuiltHelperPath)) {
+          fs.copyFileSync(this._prebuiltHelperPath, this._helperPath);
+        } else {
+          const powershell = WindowsSandbox.findPowerShell();
+          if (!powershell) throw new Error('Windows PowerShell 5.1 no está disponible');
+          // Node puede leer dentro de app.asar, PowerShell no. Los clones
+          // materializan y compilan la fuente; los releases traen el helper
+          // precompilado por after-pack.js.
+          fs.copyFileSync(this._compilerSource, this._compilerScript);
+          const compiled = await this._runProcess(
+            powershell,
+            [
+              '-NoLogo',
+              '-NoProfile',
+              '-NonInteractive',
+              '-ExecutionPolicy',
+              'Bypass',
+              '-File',
+              this._compilerScript,
+              '-OutputPath',
+              this._helperPath,
+            ],
+            120_000
+          );
+          if (!compiled.ok || !fs.existsSync(this._helperPath)) {
+            throw new Error(compiled.stderr.trim() || 'no se pudo compilar el helper AppContainer');
+          }
+        }
+        this._writeCacheMetadata();
       }
 
-      const probe = await this._runHelper(['cmd.exe', '/d', '/s', '/c', 'exit 0'], {
-        cwd: this._cwd,
-        timeout: 15_000,
-      });
-      if (!probe.ok)
-        throw new Error(probe.error || probe.stderr || 'falló el self-test AppContainer');
+      const marker = path.join(this._cwd, `.kaoru-appcontainer-${process.pid}.tmp`);
+      try {
+        const probe = await this._runHelper(['cmd.exe', '/d', '/s', '/c', `echo ok>"${marker}"`], {
+          cwd: this._cwd,
+          timeout: 15_000,
+        });
+        if (!probe.ok || !fs.existsSync(marker)) {
+          throw new Error(probe.error || probe.stderr || 'falló el self-test AppContainer');
+        }
+      } finally {
+        try {
+          fs.unlinkSync(marker);
+        } catch (_) {}
+      }
+
+      const nodeProbe = await this._runHelper(
+        [process.execPath, '-e', 'process.exit(process.versions.electron ? 0 : 1)'],
+        { cwd: this._cwd, timeout: 15_000 }
+      );
+      if (!nodeProbe.ok) {
+        throw new Error(
+          nodeProbe.error || nodeProbe.stderr || 'Electron no ejecuta Node en AppContainer'
+        );
+      }
 
       this._enabled = true;
       this._reason = null;
@@ -110,6 +139,37 @@ class WindowsSandbox {
       this._reason = error instanceof Error ? error.message : String(error);
       return false;
     }
+  }
+
+  /** @private @param {string} filePath @returns {string} */
+  _hashFile(filePath) {
+    return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+  }
+
+  /** @private @returns {boolean} */
+  _cachedHelperIsValid() {
+    try {
+      const metadata = JSON.parse(fs.readFileSync(this._metadataPath, 'utf8'));
+      return (
+        metadata.version === CACHE_VERSION &&
+        metadata.sourceSha256 === this._hashFile(this._compilerSource) &&
+        metadata.helperSha256 === this._hashFile(this._helperPath)
+      );
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /** @private */
+  _writeCacheMetadata() {
+    const metadata = {
+      version: CACHE_VERSION,
+      sourceSha256: this._hashFile(this._compilerSource),
+      helperSha256: this._hashFile(this._helperPath),
+    };
+    const temporary = `${this._metadataPath}.${process.pid}.tmp`;
+    fs.writeFileSync(temporary, `${JSON.stringify(metadata)}\n`, 'utf8');
+    fs.renameSync(temporary, this._metadataPath);
   }
 
   /**
@@ -140,6 +200,8 @@ class WindowsSandbox {
       Buffer.from(this._cwd, 'utf8').toString('base64'),
       '--cwd64',
       Buffer.from(cwd, 'utf8').toString('base64'),
+      '--readroots64',
+      Buffer.from(WindowsSandbox.toolReadRoots().join('\n'), 'utf8').toString('base64'),
       '--timeout',
       String(timeout),
       '--',
@@ -249,7 +311,29 @@ class WindowsSandbox {
     for (const key of ['SystemRoot', 'SYSTEMROOT', 'WINDIR', 'PATH', 'PATHEXT', 'TEMP', 'TMP']) {
       if (process.env[key] !== undefined) env[key] = process.env[key];
     }
+    env.ELECTRON_RUN_AS_NODE = '1';
     return env;
+  }
+
+  /** @returns {string[]} */
+  static toolReadRoots() {
+    const roots = new Set();
+    /** @param {string} candidate */
+    const add = (candidate) => {
+      try {
+        if (candidate && fs.statSync(candidate).isDirectory())
+          roots.add(fs.realpathSync(candidate));
+      } catch (_) {}
+    };
+    add(path.dirname(process.execPath));
+    for (const entry of String(process.env.PATH || '').split(path.delimiter)) {
+      if (!entry) continue;
+      if (TOOL_NAMES.some((name) => fs.existsSync(path.join(entry, name)))) {
+        add(entry);
+        if (path.basename(entry).toLowerCase() === 'cmd') add(path.dirname(entry));
+      }
+    }
+    return [...roots].slice(0, 24);
   }
 
   /** @param {string} root @param {string} candidate @returns {boolean} */

@@ -8,7 +8,7 @@
  * compilados para el ABI de Electron, no para el node del sistema). Desde el
  * repo:
  *
- *   ELECTRON_RUN_AS_NODE=1 npx electron bin/cli.js chat
+ *   npm run cli -- chat
  *
  * Comandos:
  *   run "<prompt>" [--workspace dir] [--json] [--auto-approve] [--mode fast|smart]
@@ -36,7 +36,7 @@
 if (!process.versions.electron) {
   console.error(
     'Este CLI requiere el Node de Electron (ABI de better-sqlite3). Ejecuta:\n\n' +
-      '  ELECTRON_RUN_AS_NODE=1 npx electron bin/cli.js <comando>'
+      '  npm run cli -- <comando>'
   );
   process.exit(1);
 }

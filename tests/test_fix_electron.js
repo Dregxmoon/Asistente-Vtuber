@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * test_fix_electron.js — reconstrucción graceful de better-sqlite3.
+ * test_fix_electron.js — reconstrucción fiable de better-sqlite3.
  *
  * Verifica:
  *   1. better-sqlite3 está compilado y funcional.
@@ -131,7 +131,10 @@ function testClearErrorMessages() {
   assert(content.includes('better-sqlite3 ya está compilado'), 'Mensaje de módulo listo');
   assert(content.includes('npm run rebuild'), 'Instrucción de rebuild');
   assert(content.includes('npx @electron/rebuild'), 'Instrucción alternativa para Windows');
-  assert(content.includes('memoria en RAM'), 'Mensaje de fallback a RAM');
+  assert(
+    content.includes('instalación se detendrá'),
+    'un rebuild fallido detiene la instalación degradada'
+  );
   assert(content.includes('mismatch de ABI') || content.includes('ABI'), 'Detección de ABI');
 }
 

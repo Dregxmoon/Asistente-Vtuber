@@ -376,13 +376,13 @@ de `@electron/rebuild` (sin depender de `npx` en el PATH). Localmente: `bash scr
 - Node.js ≥ 18 y npm
 - Python 3 con `edge-tts` (solo si se usa síntesis de voz)
 - Sistema operativo: Windows (sensor nativo) o Linux/Hyprland (sensor Wayland)
-- **Sandbox de proceso:** AppContainer en Windows y <code>bwrap</code> en Linux cuando están disponibles. Windows falla cerrado si AppContainer no inicializa, salvo desactivación explícita con <code>OPENCLAW_SANDBOX=0</code>; Linux informa la degradación si <code>bwrap</code> no está disponible. macOS no tiene actualmente aislamiento adicional para OpenClaw.
+- **Sandbox de proceso:** AppContainer en Windows y <code>bwrap</code> en Linux cuando están disponibles. Windows falla cerrado si AppContainer no inicializa, salvo desactivación explícita con <code>OPENCLAW_SANDBOX=0</code>; Linux informa la degradación si <code>bwrap</code> no está disponible. Ambos permiten red y escritura dentro del workspace; AppContainer concede solo lectura a los runtimes detectados. macOS no tiene actualmente aislamiento adicional para OpenClaw.
 
 ### Instalación
 
 ```bash
 npm install            # instala dependencias y electron (postinstall)
-npm run rebuild        # reconstruye módulos nativos (better-sqlite3)
+npm run rebuild        # opcional: fuerza de nuevo el rebuild de better-sqlite3
 cp config.example.json ~/.config/vtuber-overlay/config.json   # Linux
 # o: %APPDATA%/vtuber-overlay/config.json                      # Windows
 ```
@@ -393,7 +393,7 @@ Confirmá que **onnxruntime-node** carga su binding nativo antes de arrancar
 por primera vez:
 
 ```bash
-ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron \
+node scripts/electron-node.js \
   -e "require('onnxruntime-node'); console.log('onnxruntime-node OK')"
 ```
 
@@ -436,13 +436,17 @@ raíz del fallo original: descarga parcial/cortada del prebuild en esa sesión
 
 ### Configuración
 
-El `postinstall` también instala el comando **`asistente`** en tu PATH global
-(symlink `~/.local/bin/asistente` en Linux/macOS, shims `asistente.cmd` en
-Windows) — lánzalo desde cualquier carpeta para abrir/retomar el asistente en
-ese directorio como workspace. Si por permisos/CI no se pudo enlazar, corré
-`npm link` dentro del proyecto.
+Al instalar desde el repositorio, `postinstall` instala el comando
+**`asistente`** en el PATH global (symlink `~/.local/bin/asistente` en
+Linux/macOS; shims en el prefix global de npm en Windows). El instalador NSIS
+de Windows crea además `%LOCALAPPDATA%\Microsoft\WindowsApps\asistente.cmd` y
+lo elimina al desinstalar. Ejecuta `asistente` desde cualquier carpeta para
+abrir Kaoru con esa carpeta como workspace; si Kaoru ya está abierto, la
+instancia existente cambia de workspace y muestra el chat.
 
-### Configuración
+Si el enlace del clone falló por permisos, ejecuta `npm link` dentro del
+proyecto. En Windows, abre una terminal nueva después de instalar para que el
+PATH actualizado quede visible.
 
 En `config.json` (fuente de claves) o `.env` (alternativa):
 
@@ -537,7 +541,7 @@ También expone una **Control API** de diagnóstico en `http://localhost:3131` c
 npm test
 
 # O una suite individual (también requiere el ABI de Electron)
-ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_skills.js
+node scripts/electron-node.js tests/test_skills.js
 
 # Cobertura del núcleo de agente (core/planner + core/decision) con c8
 npm run coverage          # reporte text + lcov
@@ -546,8 +550,8 @@ npm run coverage:check    # además valida umbrales (guard de regresión)
 
 > `better-sqlite3` y `sqlite-vec` están compilados para el **ABI de Electron**, no para el Node
 > del sistema: las suites que tocan memoria/persistencia (indexado en BD y matching semántico)
-> deben correr con `ELECTRON_RUN_AS_NODE=1`. `test_intent_detection` exige haber ejecutado antes
-> `init_vectors.js` (también bajo Electron) para indexar las intenciones en `data/core.db`.
+> corren mediante `scripts/electron-node.js`. `test_intent_detection` exige haber ejecutado antes
+> `npm run init-db` para indexar las intenciones en `data/core.db`.
 
 ---
 

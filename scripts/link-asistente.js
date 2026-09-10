@@ -91,9 +91,7 @@ function installAsistente({
   appRoot = path.join(__dirname, '..'),
   log = () => {},
 }) {
-  if (!fs.existsSync(binDir)) {
-    throw new Error(`directorio de bins no existe: ${binDir}`);
-  }
+  fs.mkdirSync(binDir, { recursive: true });
   const targetJs = path.join(appRoot, 'bin', ASISTENTE_BIN_NAME + '.js');
   if (!fs.existsSync(targetJs)) {
     throw new Error(`binario fuente no existe: ${targetJs}`);

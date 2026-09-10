@@ -8,10 +8,10 @@
   },
   "license": "MIT",
   "scripts": {
-    "start": "ELECTRON_DISABLE_SECURITY_WARNINGS=1 electron . 2>&1 | grep -vE 'Fontconfig warning|invalid (attribute|constant used)'",
+    "start": "electron .",
     "postinstall": "node fix-electron.js && node scripts/link-asistente.js",
     "rebuild": "npx @electron/rebuild -f -w better-sqlite3",
-    "test": "bash tests/run-all.sh",
+    "test": "node tests/run-all.js",
     "coverage": "bash scripts/coverage.sh",
     "coverage:check": "bash scripts/coverage.sh --check",
     "lint": "eslint main.js openclaw-server.js core infrastructure ipc tests benchmarks src --ext .js",
@@ -19,11 +19,12 @@
     "format": "prettier --write \"main.js\" \"openclaw-server.js\" \"{core,infrastructure,ipc,tests,benchmarks,src}/**/*.js\"",
     "format:check": "prettier --check \"main.js\" \"openclaw-server.js\" \"{core,infrastructure,ipc,tests,benchmarks,src}/**/*.js\"",
     "typecheck": "tsc --noEmit",
-    "cli": "ELECTRON_RUN_AS_NODE=1 electron bin/cli.js",
-    "cli:help": "ELECTRON_RUN_AS_NODE=1 electron bin/cli.js help",
-    "bench": "ELECTRON_RUN_AS_NODE=1 electron benchmarks/run.js",
-    "bench:one": "ELECTRON_RUN_AS_NODE=1 electron benchmarks/run.js rename-multiply",
-    "bench:summary": "ELECTRON_RUN_AS_NODE=1 electron benchmarks/summary.js",
+    "init-db": "node scripts/electron-node.js infrastructure/database/init_vectors.js",
+    "cli": "node scripts/electron-node.js bin/cli.js",
+    "cli:help": "node scripts/electron-node.js bin/cli.js help",
+    "bench": "node scripts/electron-node.js benchmarks/run.js",
+    "bench:one": "node scripts/electron-node.js benchmarks/run.js rename-multiply",
+    "bench:summary": "node scripts/electron-node.js benchmarks/summary.js",
     "build": "electron-builder --win --x64",
     "build-portable": "electron-builder --win portable",
     "build:win": "electron-builder --win --x64",
@@ -47,6 +48,7 @@
   "build": {
     "appId": "com.asistente.personal",
     "productName": "Asistente Personal",
+    "afterPack": "scripts/after-pack.js",
     "directories": {
       "output": "dist"
     },
@@ -76,7 +78,8 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "deleteAppDataOnUninstall": false
+      "deleteAppDataOnUninstall": false,
+      "include": "build/installer.nsh"
     },
     "mac": {
       "target": [

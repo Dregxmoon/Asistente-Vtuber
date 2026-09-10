@@ -134,21 +134,11 @@ function testShimEscaping() {
 }
 
 function testErrors() {
-  console.log(C.bold('\n── errores: binDir inexistente / binario faltante ──────────────'));
+  console.log(C.bold('\n── crea binDir / binario faltante ──────────────────────────────'));
 
-  let threw1 = false;
-  try {
-    installAsistente({
-      binDir: path.join(tmpRoot, 'no-existe'),
-      platform: 'linux',
-      appRoot,
-      log: () => {},
-    });
-  } catch (e) {
-    threw1 = true;
-    assert(e.message.includes('no existe'), 'binDir inexistente → error claro', e.message);
-  }
-  assert(threw1, 'binDir inexistente lanza');
+  const newBinDir = path.join(tmpRoot, 'no-existe');
+  installAsistente({ binDir: newBinDir, platform: 'linux', appRoot, log: () => {} });
+  assert(fs.existsSync(path.join(newBinDir, 'asistente')), 'crea binDir cuando aún no existe');
 
   const brokenApp = path.join(tmpRoot, 'app-sin-bin');
   fs.mkdirSync(path.join(brokenApp, 'bin'), { recursive: true });

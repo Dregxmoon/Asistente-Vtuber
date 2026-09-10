@@ -16,6 +16,7 @@
 
 const http = require('http');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { WindowsSandbox } = require('../core/sandbox/WindowsSandbox.js');
 
@@ -226,6 +227,13 @@ function testWindowsLauncherFailClosed() {
   });
   assert(wrapped[0].endsWith('Kaoru.WindowsSandbox.exe'), 'usa el helper nativo');
   assertEqual(wrapped[wrapped.indexOf('--timeout') + 1], '1234', 'propaga timeout');
+  const readRoots = Buffer.from(wrapped[wrapped.indexOf('--readroots64') + 1], 'base64')
+    .toString('utf8')
+    .split('\n');
+  assert(
+    readRoots.includes(fs.realpathSync(path.dirname(process.execPath))),
+    'concede lectura al runtime de Electron'
+  );
   const separator = wrapped.indexOf('--');
   const decoded = wrapped
     .slice(separator + 1)
@@ -262,7 +270,13 @@ function testNativeAppContainerHelper() {
     'Job Object contiene descendientes'
   );
   assert(helper.includes('CREATE_SUSPENDED'), 'asigna el Job Object antes de ejecutar');
-  assert(!helper.includes('internetClient'), 'red denegada por defecto');
+  assert(helper.includes('S-1-15-3-1'), 'concede internetClient igual que el sandbox de Linux');
+  assert(helper.includes('GrantReadAccess'), 'concede solo lectura a runtimes y toolchains');
+  const afterPack = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'after-pack.js'), 'utf8');
+  assert(
+    afterPack.includes('Kaoru.WindowsSandbox.exe'),
+    'el release precompila el helper para acelerar el primer arranque'
+  );
   assert(
     server.includes("_sandboxKind = enabled ? 'appcontainer'"),
     '/health identifica AppContainer'
@@ -271,6 +285,78 @@ function testNativeAppContainerHelper() {
     server.includes('_windowsSandbox.wrap(commandArgs'),
     'el servidor conecta ejecución al helper'
   );
+}
+
+// ── Test 8: prueba real del AppContainer en un runner Windows ───────────────
+
+async function testNativeAppContainerRuntime() {
+  console.log(C.bold('\n── Windows: AppContainer real escribe solo en workspace ──────'));
+  if (process.platform !== 'win32') {
+    assert(true, 'prueba nativa omitida fuera de Windows');
+    return;
+  }
+
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kaoru-appcontainer-test-'));
+  const workspace = path.join(root, 'workspace');
+  const cacheDir = path.join(root, 'cache');
+  const outsideFile = path.join(root, 'outside.txt');
+  fs.mkdirSync(workspace);
+  fs.writeFileSync(outsideFile, 'secret', 'utf8');
+  try {
+    const sandbox = new WindowsSandbox({ cwd: workspace, cacheDir });
+    const initialized = await sandbox.initialize();
+    assert(
+      initialized,
+      'compila, inicia y prueba Electron dentro del AppContainer',
+      sandbox.sandboxReason()
+    );
+    if (!initialized) return;
+
+    const denied = await sandbox._runHelper(
+      ['cmd.exe', '/d', '/s', '/c', `type "${outsideFile}"`],
+      { cwd: workspace, timeout: 15_000 }
+    );
+    assert(!denied.ok, 'deniega lectura de un archivo hermano fuera del workspace');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
+// ── Test 9: releases reutilizan el helper precompilado ──────────────────────
+
+async function testPrebuiltHelperFastPath() {
+  console.log(C.bold('\n── Windows: helper precompilado evita PowerShell ─────────────'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kaoru-prebuilt-test-'));
+  const workspace = path.join(root, 'workspace');
+  const cacheDir = path.join(root, 'cache');
+  const prebuilt = path.join(root, 'Kaoru.WindowsSandbox.exe');
+  fs.mkdirSync(workspace);
+  fs.writeFileSync(prebuilt, 'prebuilt-helper', 'utf8');
+  const sandbox = new WindowsSandbox({ platform: 'win32', cwd: workspace, cacheDir });
+  sandbox._prebuiltHelperPath = prebuilt;
+  sandbox._runHelper = async (args) => {
+    const markerArg = args.find((arg) => arg.includes('.kaoru-appcontainer-'));
+    if (markerArg) {
+      const marker = markerArg.match(/>"([^"]+)"/)?.[1];
+      if (marker) fs.writeFileSync(marker, 'ok', 'utf8');
+    }
+    return { ok: true, stdout: '', stderr: '', exitCode: 0, signal: null };
+  };
+  try {
+    const initialized = await sandbox.initialize();
+    assert(initialized, 'inicializa usando el helper incluido en el release');
+    assertEqual(
+      fs.readFileSync(path.join(cacheDir, 'Kaoru.WindowsSandbox.exe'), 'utf8'),
+      'prebuilt-helper',
+      'copia el helper precompilado al caché validado'
+    );
+    assert(
+      fs.existsSync(path.join(cacheDir, 'helper-metadata.json')),
+      'registra hashes para reutilizarlo en próximos arranques'
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 }
 
 // ── Runner ──────────────────────────────────────────────────────────────
@@ -321,6 +407,18 @@ async function main() {
     testNativeAppContainerHelper();
   } catch (e) {
     console.error(`  ${C.red('✗')} testNativeAppContainerHelper falló: ${e.message}`);
+    failed++;
+  }
+  try {
+    await testNativeAppContainerRuntime();
+  } catch (e) {
+    console.error(`  ${C.red('✗')} testNativeAppContainerRuntime falló: ${e.message}`);
+    failed++;
+  }
+  try {
+    await testPrebuiltHelperFastPath();
+  } catch (e) {
+    console.error(`  ${C.red('✗')} testPrebuiltHelperFastPath falló: ${e.message}`);
     failed++;
   }
 

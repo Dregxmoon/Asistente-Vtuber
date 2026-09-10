@@ -139,6 +139,9 @@ function downloadElectronManual() {
 // ── 3a. Verificar si better-sqlite3 ya está compilado para el ABI de Electron ──
 
 function isBetterSqlite3Ready() {
+  // El postinstall corre con Node del sistema. Que el addon cargue ahí no
+  // demuestra compatibilidad con el ABI de Electron.
+  if (!process.versions.electron) return false;
   try {
     const sqlite3 = require(path.join(__dirname, 'node_modules', 'better-sqlite3'));
     // better-sqlite3 exporta Database directamente o como propiedad.
@@ -160,7 +163,8 @@ function isBetterSqlite3Ready() {
 function rebuildNativeModules() {
   log('info', 'Verificando módulos nativos para Electron...');
 
-  // Pre-check: ¿better-sqlite3 ya funciona?
+  // Solo omitir el rebuild si este script corre bajo Electron y el addon carga
+  // con ese ABI. Durante `npm install` se reconstruye siempre.
   if (isBetterSqlite3Ready()) {
     log('ok', 'better-sqlite3 ya está compilado y listo (ABI compatible)');
     return;
@@ -193,7 +197,7 @@ function rebuildNativeModules() {
     if (!fs.existsSync(rebuildBin)) {
       log('error', 'No se encontró electron-rebuild en node_modules/.bin');
       log('warn', 'Intentando alternativa con node directamente...');
-      tryRebuildViaNode();
+      if (!tryRebuildViaNode()) exitCode = 1;
       return;
     }
 
@@ -204,17 +208,12 @@ function rebuildNativeModules() {
       shell: process.platform === 'win32',
     });
 
-    if (result.status === 0 && isBetterSqlite3Ready()) {
-      log('ok', 'Módulos nativos reconstruidos correctamente — better-sqlite3 funcional');
+    if (result.status === 0) {
+      log('ok', 'better-sqlite3 reconstruido para Electron');
       return;
     }
 
-    if (result.status === 0) {
-      log('warn', '@electron/rebuild terminó con código 0 pero better-sqlite3 no carga');
-      log('warn', 'Posible mismatch de ABI — reintenta con: npm run rebuild');
-    } else {
-      log('error', `@electron/rebuild terminó con código ${result.status}`);
-    }
+    log('error', `@electron/rebuild terminó con código ${result.status}`);
 
     if (result.error) {
       log('error', result.error.message);
@@ -240,14 +239,13 @@ function tryRebuildViaNode() {
       ],
       { cwd: __dirname, stdio: 'inherit', timeout: 180000 }
     );
-    if (result.status === 0 && isBetterSqlite3Ready()) {
+    if (result.status === 0) {
       log('ok', 'Reconstrucción vía node exitosa');
-      return;
+      return true;
     }
   } catch (_) {}
   log('warn', 'Fallback de reconstrucción no disponible');
-  log('warn', 'El asistente puede seguir funcionando sin better-sqlite3 (memoria en RAM).');
-  log('warn', 'Para corregir, ejecuta: npm run rebuild');
+  return false;
 }
 
 function tryFallbackRebuild() {
@@ -261,17 +259,18 @@ function tryFallbackRebuild() {
       ],
       { cwd: __dirname, stdio: 'inherit', timeout: 180000 }
     );
-    if (result.status === 0 && isBetterSqlite3Ready()) {
+    if (result.status === 0) {
       log('ok', 'Fallback de reconstrucción exitoso');
       return;
     }
   } catch (_) {}
 
   log('error', 'No se pudo reconstruir better-sqlite3 con ningún método');
-  log('error', 'El asistente usará memoria en RAM como fallback');
+  log('error', 'La instalación se detendrá para no dejar un runtime degradado');
   log('warn', 'Para corregir permanentemente ejecuta:');
   log('warn', '  npm run rebuild');
   log('warn', 'O en Windows: npx @electron/rebuild -f -w better-sqlite3');
+  exitCode = 1;
 }
 
 // ── Main ────────────────────────────────────────────────────────────

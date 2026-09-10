@@ -79,6 +79,13 @@ namespace KaoruSandbox
         }
 
         [StructLayout(LayoutKind.Sequential)]
+        internal struct SID_AND_ATTRIBUTES
+        {
+            internal IntPtr Sid;
+            internal uint Attributes;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
         internal struct JOBOBJECT_BASIC_LIMIT_INFORMATION
         {
             internal long PerProcessUserTimeLimit;
@@ -203,7 +210,7 @@ namespace KaoruSandbox
     {
         internal IntPtr Sid { get; private set; }
 
-        internal AppContainerProfile(string name, string workspace)
+        internal AppContainerProfile(string name, string workspace, IEnumerable<string> readRoots)
         {
             IntPtr sid;
             int hr = Native.CreateAppContainerProfile(
@@ -222,6 +229,27 @@ namespace KaoruSandbox
 
             Sid = sid;
             GrantWorkspaceAccess(workspace, new SecurityIdentifier(sid));
+            foreach (string readRoot in readRoots)
+                GrantReadAccess(readRoot, new SecurityIdentifier(sid));
+        }
+
+        private static void GrantReadAccess(string directory, SecurityIdentifier sid)
+        {
+            string fullPath = Path.GetFullPath(directory);
+            if (!Directory.Exists(fullPath)) return;
+
+            DirectorySecurity security = Directory.GetAccessControl(fullPath);
+            FileSystemRights rights = FileSystemRights.ReadAndExecute |
+                FileSystemRights.ListDirectory | FileSystemRights.Read;
+            if (HasRule(security, sid, rights)) return;
+            FileSystemAccessRule rule = new FileSystemAccessRule(
+                sid,
+                rights,
+                InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
+                PropagationFlags.None,
+                AccessControlType.Allow);
+            security.SetAccessRule(rule);
+            Directory.SetAccessControl(fullPath, security);
         }
 
         private static void GrantWorkspaceAccess(string workspace, SecurityIdentifier sid)
@@ -231,15 +259,36 @@ namespace KaoruSandbox
                 throw new DirectoryNotFoundException("Workspace not found: " + fullPath);
 
             DirectorySecurity security = Directory.GetAccessControl(fullPath);
+            FileSystemRights rights = FileSystemRights.Modify | FileSystemRights.ReadAndExecute |
+                FileSystemRights.ListDirectory | FileSystemRights.Read | FileSystemRights.Write;
+            if (HasRule(security, sid, rights)) return;
             FileSystemAccessRule rule = new FileSystemAccessRule(
                 sid,
-                FileSystemRights.Modify | FileSystemRights.ReadAndExecute |
-                    FileSystemRights.ListDirectory | FileSystemRights.Read | FileSystemRights.Write,
+                rights,
                 InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
                 PropagationFlags.None,
                 AccessControlType.Allow);
             security.SetAccessRule(rule);
             Directory.SetAccessControl(fullPath, security);
+        }
+
+        private static bool HasRule(
+            DirectorySecurity security,
+            SecurityIdentifier sid,
+            FileSystemRights requiredRights)
+        {
+            AuthorizationRuleCollection rules = security.GetAccessRules(
+                true,
+                true,
+                typeof(SecurityIdentifier));
+            foreach (AuthorizationRule authorizationRule in rules)
+            {
+                FileSystemAccessRule rule = authorizationRule as FileSystemAccessRule;
+                if (rule == null || rule.AccessControlType != AccessControlType.Allow) continue;
+                if (!sid.Equals(rule.IdentityReference)) continue;
+                if ((rule.FileSystemRights & requiredRights) == requiredRights) return true;
+            }
+            return false;
         }
 
         public void Dispose()
@@ -312,6 +361,8 @@ namespace KaoruSandbox
             Native.PROCESS_INFORMATION process = new Native.PROCESS_INFORMATION();
             IntPtr attributeList = IntPtr.Zero;
             IntPtr capabilitiesBuffer = IntPtr.Zero;
+            IntPtr internetClientSid = IntPtr.Zero;
+            IntPtr capabilityArray = IntPtr.Zero;
             IntPtr job = IntPtr.Zero;
             try
             {
@@ -323,6 +374,7 @@ namespace KaoruSandbox
                 string profileName = options["--profile"];
                 string workspace = Decode(options["--workspace64"]);
                 string cwd = Decode(options["--cwd64"]);
+                string readRootsValue = Decode(options["--readroots64"]);
                 uint timeout = UInt32.Parse(options["--timeout"]);
                 string fullWorkspace = Path.GetFullPath(workspace).TrimEnd(Path.DirectorySeparatorChar) +
                     Path.DirectorySeparatorChar;
@@ -336,7 +388,13 @@ namespace KaoruSandbox
                 for (int i = commandIndex; i < args.Length; i++) command.Add(Decode(args[i]));
                 if (command.Count == 0) throw new ArgumentException("Empty command");
 
-                using (AppContainerProfile profile = new AppContainerProfile(profileName, workspace))
+                List<string> readRoots = new List<string>();
+                foreach (string readRoot in readRootsValue.Split(new char[] { '\n' },
+                    StringSplitOptions.RemoveEmptyEntries))
+                    readRoots.Add(readRoot.TrimEnd('\r'));
+
+                using (AppContainerProfile profile =
+                    new AppContainerProfile(profileName, workspace, readRoots))
                 {
                     IntPtr attributeSize = IntPtr.Zero;
                     Native.InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref attributeSize);
@@ -346,6 +404,25 @@ namespace KaoruSandbox
 
                     Native.SECURITY_CAPABILITIES capabilities = new Native.SECURITY_CAPABILITIES();
                     capabilities.AppContainerSid = profile.Sid;
+
+                    // Linux conserva la red dentro de bubblewrap. Conceder la
+                    // capacidad equivalente evita que npm, git y los MCP de red
+                    // fallen únicamente en Windows; el acceso a tools sigue
+                    // pasando por el gate de permisos de Kaoru.
+                    SecurityIdentifier internetClient = new SecurityIdentifier("S-1-15-3-1");
+                    byte[] internetClientBytes = new byte[internetClient.BinaryLength];
+                    internetClient.GetBinaryForm(internetClientBytes, 0);
+                    internetClientSid = Marshal.AllocHGlobal(internetClientBytes.Length);
+                    Marshal.Copy(internetClientBytes, 0, internetClientSid, internetClientBytes.Length);
+                    Native.SID_AND_ATTRIBUTES internetCapability =
+                        new Native.SID_AND_ATTRIBUTES();
+                    internetCapability.Sid = internetClientSid;
+                    internetCapability.Attributes = 0x00000004;
+                    capabilityArray = Marshal.AllocHGlobal(
+                        Marshal.SizeOf(typeof(Native.SID_AND_ATTRIBUTES)));
+                    Marshal.StructureToPtr(internetCapability, capabilityArray, false);
+                    capabilities.Capabilities = capabilityArray;
+                    capabilities.CapabilityCount = 1;
                     capabilitiesBuffer = Marshal.AllocHGlobal(
                         Marshal.SizeOf(typeof(Native.SECURITY_CAPABILITIES)));
                     Marshal.StructureToPtr(capabilities, capabilitiesBuffer, false);
@@ -437,6 +514,8 @@ namespace KaoruSandbox
                     Marshal.FreeHGlobal(attributeList);
                 }
                 if (capabilitiesBuffer != IntPtr.Zero) Marshal.FreeHGlobal(capabilitiesBuffer);
+                if (capabilityArray != IntPtr.Zero) Marshal.FreeHGlobal(capabilityArray);
+                if (internetClientSid != IntPtr.Zero) Marshal.FreeHGlobal(internetClientSid);
             }
         }
     }

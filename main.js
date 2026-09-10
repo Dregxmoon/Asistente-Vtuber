@@ -17,6 +17,20 @@ const { URL } = require('url');
 const { spawnSync } = require('child_process');
 const crypto = require('crypto');
 
+/** @param {string[]} argv @returns {string | null} */
+function _workspaceFromArgv(argv) {
+  for (let i = 0; i < argv.length; i++) {
+    const arg = String(argv[i]);
+    if (arg.startsWith('--workspace=')) return path.resolve(arg.slice('--workspace='.length));
+    if (arg === '--workspace' && argv[i + 1]) return path.resolve(String(argv[i + 1]));
+  }
+  return null;
+}
+
+const REQUESTED_WORKSPACE = _workspaceFromArgv(process.argv);
+const PACKAGED_SMOKE_TEST = process.argv.includes('--smoke-test');
+if (REQUESTED_WORKSPACE) process.env.ASISTENTE_WORKSPACE = REQUESTED_WORKSPACE;
+
 const Core = require('./core/Core.js');
 const KeychainManager = require('./infrastructure/keychain/KeychainManager.js');
 const SafeStorageCrypto = require('./infrastructure/config/SafeStorageCrypto.js');
@@ -27,6 +41,89 @@ const { createSharedState } = require('./ipc/state.js');
 const logger = require('./core/observability/Logger.js');
 
 app.setName('vtuber-overlay');
+
+let _coreReady = false;
+let _pendingWorkspace = null;
+const _hasSingleInstanceLock = app.requestSingleInstanceLock({
+  workspace: REQUESTED_WORKSPACE,
+});
+if (!_hasSingleInstanceLock) app.exit(0);
+
+/** @param {string | null} workspace */
+function _activateLaunchRequest(workspace) {
+  if (workspace) {
+    if (_coreReady) {
+      Core.setActiveWorkspace(workspace).catch((error) =>
+        logger.warn('workspace', `no se pudo activar desde el comando asistente: ${error.message}`)
+      );
+    } else {
+      _pendingWorkspace = workspace;
+    }
+  }
+  if (app.isReady()) createChatWindow();
+}
+
+/** @param {number} ms @returns {Promise<void>} */
+function _delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** @param {Electron.BrowserWindow | null} window @returns {Promise<void>} */
+function _waitForWindow(window) {
+  if (!window || window.isDestroyed() || !window.webContents.isLoadingMainFrame()) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout cargando ventana')), 30_000);
+    window.webContents.once('did-finish-load', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+    window.webContents.once('did-fail-load', (_event, code, description) => {
+      clearTimeout(timer);
+      reject(new Error(`renderer ${code}: ${description}`));
+    });
+  });
+}
+
+async function _runPackagedSmokeTest() {
+  let exitCode = 0;
+  try {
+    await Promise.all([_waitForWindow(S.mainWindow), _waitForWindow(S.chatWindow)]);
+    const graph = Core.getGraph();
+    if (!graph || graph.usingFallback || !graph._db) {
+      throw new Error('better-sqlite3 no abrió la base persistente');
+    }
+
+    const deadline = Date.now() + (process.platform === 'win32' ? 150_000 : 30_000);
+    let status = await Core.getOpenClawStatus();
+    while (!status.available && Date.now() < deadline) {
+      await _delay(500);
+      status = await Core.getOpenClawStatus();
+    }
+    if (!status.available) throw new Error('OpenClaw no inició');
+    if (process.platform === 'win32' && status.sandbox !== true) {
+      throw new Error(status.sandboxReason || 'AppContainer no está activo');
+    }
+    console.log('KAORU_PACKAGED_SMOKE_OK');
+  } catch (error) {
+    exitCode = 1;
+    console.error(`KAORU_PACKAGED_SMOKE_FAILED: ${error.message}`);
+  } finally {
+    // El smoke vive en un proceso efímero de CI. app.exit evita que el
+    // shutdown normal espere MCP/LSP y vuelva indeterminista el ExitCode que
+    // debe observar Start-Process -Wait.
+    app.exit(exitCode);
+  }
+}
+
+app.on('second-instance', (_event, argv, _workingDirectory, additionalData) => {
+  const fromData =
+    additionalData && typeof additionalData.workspace === 'string'
+      ? additionalData.workspace
+      : null;
+  _activateLaunchRequest(fromData || _workspaceFromArgv(argv));
+});
 
 // Fase 1: webSecurity pasó a true en todas las ventanas (las libs de
 // pixi/live2d ya se sirven locales desde node_modules, sin CDN). El modelo
@@ -1121,6 +1218,14 @@ app.whenReady().then(() => {
   );
 
   Core.init(app);
+  _coreReady = true;
+  if (_pendingWorkspace) {
+    const workspace = _pendingWorkspace;
+    _pendingWorkspace = null;
+    Core.setActiveWorkspace(workspace).catch((error) =>
+      logger.warn('workspace', `no se pudo activar al iniciar: ${error.message}`)
+    );
+  }
 
   if (global.__mcpOAuthSetup) global.__mcpOAuthSetup(app);
 
@@ -1267,6 +1372,8 @@ app.whenReady().then(() => {
   });
 
   _autoInitProject();
+
+  if (PACKAGED_SMOKE_TEST) void _runPackagedSmokeTest();
 
   // Atajo global de salida con fallback: si Ctrl/Cmd+Shift+Q está tomado por
   // otra app, se intenta Alt+Shift+Q antes de rendirse (el usuario siempre

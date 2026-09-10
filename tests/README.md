@@ -49,13 +49,13 @@ flowchart LR
 Cada archivo de `tests/` es una suite ejecutable de forma independiente:
 
 ```bash
-ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/<suite>.js
+node scripts/electron-node.js tests/<suite>.js
 ```
 
 Para correr todas a la vez:
 
 ```bash
-npm test     # = bash tests/run-all.sh
+npm test     # runner portable: Linux, macOS y Windows
 ```
 
 > **Cierra el asistente antes de la regresión completa:** las suites `test_server_security` e
@@ -65,7 +65,8 @@ npm test     # = bash tests/run-all.sh
 > **Importante (ABI de Electron):** `better-sqlite3` y `sqlite-vec` están compilados para el ABI de
 > Electron, no para el Node del sistema. Bajo `node` del sistema, `StateGraph` cae a memoria en RAM y
 > la persistencia real no se verifica. Las suites de memoria, estado, sensores y motor proactivo
-> **deben** correr con el Node de Electron (`ELECTRON_RUN_AS_NODE=1`).
+> **deben** correr con el Node de Electron; `npm test` y `scripts/electron-node.js` configuran el
+> entorno correcto en cualquier sistema operativo.
 
 La salida de `npm test` es la fuente de verdad para el número de suites y assertions. Este documento
 mantiene el mapa por contratos, sin copiar cifras que cambian cada vez que se agrega cobertura.
