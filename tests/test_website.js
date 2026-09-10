@@ -4,6 +4,7 @@
 const assert = require('assert');
 const fs = require('fs');
 const http = require('http');
+const os = require('os');
 const path = require('path');
 const { chromium } = require('playwright');
 
@@ -152,6 +153,9 @@ async function main() {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await page.goto(`${base}/guide.html`);
     await page.locator('[data-copy]').click();
+    await page.waitForFunction(
+      () => document.querySelector('.copy-status')?.textContent === 'Copiado'
+    );
     check(
       (await page.locator('.copy-status').textContent()) === 'Copiado',
       'copy commands reports success'
@@ -184,18 +188,24 @@ async function main() {
       for (const image of document.images) image.loading = 'eager';
     });
     await page.waitForFunction(() => [...document.images].every((image) => image.complete));
-    await page.screenshot({ path: '/tmp/kaoru-landing-desktop.png', fullPage: true });
+    await page.screenshot({
+      path: path.join(os.tmpdir(), 'kaoru-landing-desktop.png'),
+      fullPage: true,
+    });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`${base}/ja/index.html`);
     await page.evaluate(() => {
       for (const image of document.images) image.loading = 'eager';
     });
     await page.waitForFunction(() => [...document.images].every((image) => image.complete));
-    await page.screenshot({ path: '/tmp/kaoru-landing-mobile.png', fullPage: true });
+    await page.screenshot({
+      path: path.join(os.tmpdir(), 'kaoru-landing-mobile.png'),
+      fullPage: true,
+    });
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(`${base}/en/privacy.html`);
     await page.locator('#theme-toggle').click();
-    await page.screenshot({ path: '/tmp/kaoru-landing-privacy.png' });
+    await page.screenshot({ path: path.join(os.tmpdir(), 'kaoru-landing-privacy.png') });
     console.log(`Resultado: ${passed} passed  0 failed`);
   } finally {
     if (browser) await browser.close();

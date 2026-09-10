@@ -134,6 +134,7 @@ async function main() {
   const limited = listSessionsLikeCore(graph, 1);
   assert(limited.length === 1, 'limit funciona (1 sesión)');
 
+  graph.close();
   fs.rmSync(dir, { recursive: true, force: true });
 
   console.log(C.bold('\n════════════════════════════════════════════════════════'));

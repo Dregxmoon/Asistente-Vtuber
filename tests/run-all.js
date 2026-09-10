@@ -93,7 +93,9 @@ async function main() {
       totalFailed += reportedFailed || 1;
       failedSuites.push(suite);
       console.log(`  ✘  ${summary || 'sin resumen'}   (exit ${result.code})`);
-      console.log(clean.split(/\r?\n/).slice(-8).join('\n'));
+      // El detalle completo permite diagnosticar fallos que solo se reproducen
+      // en un runner de otro sistema operativo, especialmente Windows.
+      console.log(clean.trimEnd());
     }
   }
 

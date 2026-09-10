@@ -50,11 +50,13 @@ function withPlatform(platform, fn) {
 function testToFileUri() {
   console.log(C.bold('\n── _toFileUri: formato de URI cross-platform ────────────────────'));
 
-  // Caso Linux (comportamiento real en este runner)
-  withPlatform('linux', () => {
-    const uri = _toFileUri('/tmp/lsp-tests-ws/main.ts');
-    assert(uri === 'file:///tmp/lsp-tests-ws/main.ts', 'linux: file:// + path absoluto', uri);
-  });
+  // El módulo `path` conserva la semántica del SO al arrancar; esta comprobación
+  // POSIX solo puede representar una ruta local real en un host POSIX.
+  if (ORIGINAL_PLATFORM !== 'win32')
+    withPlatform('linux', () => {
+      const uri = _toFileUri('/tmp/lsp-tests-ws/main.ts');
+      assert(uri === 'file:///tmp/lsp-tests-ws/main.ts', 'linux: file:// + path absoluto', uri);
+    });
 
   // Caso Windows: drive + backslashes → file:///C:/Users/... (forward slashes)
   withPlatform('win32', () => {
@@ -78,10 +80,11 @@ function testToFileUri() {
 function testFromFileUri() {
   console.log(C.bold('\n── _fromFileUri: vuelta del URI a ruta local ─────────────────────'));
 
-  withPlatform('linux', () => {
-    const p = _fromFileUri('file:///tmp/lsp-tests-ws/main.ts');
-    assert(p === '/tmp/lsp-tests-ws/main.ts', 'linux: recupera el path absoluto', p);
-  });
+  if (ORIGINAL_PLATFORM !== 'win32')
+    withPlatform('linux', () => {
+      const p = _fromFileUri('file:///tmp/lsp-tests-ws/main.ts');
+      assert(p === '/tmp/lsp-tests-ws/main.ts', 'linux: recupera el path absoluto', p);
+    });
 
   withPlatform('win32', () => {
     const p = _fromFileUri('file:///C:/Users/panfilo/repo/src/main.ts');
