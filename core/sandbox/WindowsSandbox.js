@@ -192,6 +192,14 @@ class WindowsSandbox {
       throw new Error(`cwd fuera del workspace permitido: ${cwd}`);
     }
     const timeout = Math.max(1, Math.min(opts.timeout || DEFAULT_TIMEOUT, 120_000));
+    const normalizedArgs = commandArgs.slice();
+    if (normalizedArgs[0]?.toLowerCase() === 'cmd.exe') {
+      const systemRoot = process.env.SystemRoot || process.env.SYSTEMROOT;
+      normalizedArgs[0] =
+        process.env.ComSpec ||
+        process.env.COMSPEC ||
+        (systemRoot ? path.join(systemRoot, 'System32', 'cmd.exe') : normalizedArgs[0]);
+    }
     return [
       this._helperPath,
       '--profile',
@@ -205,7 +213,7 @@ class WindowsSandbox {
       '--timeout',
       String(timeout),
       '--',
-      ...commandArgs.map((arg) => Buffer.from(String(arg), 'utf8').toString('base64')),
+      ...normalizedArgs.map((arg) => Buffer.from(String(arg), 'utf8').toString('base64')),
     ];
   }
 
@@ -308,7 +316,23 @@ class WindowsSandbox {
   static minimalWindowsEnv() {
     /** @type {NodeJS.ProcessEnv} */
     const env = {};
-    for (const key of ['SystemRoot', 'SYSTEMROOT', 'WINDIR', 'PATH', 'PATHEXT', 'TEMP', 'TMP']) {
+    for (const key of [
+      'SystemRoot',
+      'SYSTEMROOT',
+      'WINDIR',
+      'ComSpec',
+      'COMSPEC',
+      'PATH',
+      'PATHEXT',
+      'TEMP',
+      'TMP',
+      'ProgramFiles',
+      'ProgramFiles(x86)',
+      'ProgramData',
+      'USERPROFILE',
+      'APPDATA',
+      'LOCALAPPDATA',
+    ]) {
       if (process.env[key] !== undefined) env[key] = process.env[key];
     }
     env.ELECTRON_RUN_AS_NODE = '1';

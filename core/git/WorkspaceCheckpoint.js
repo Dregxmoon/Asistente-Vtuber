@@ -66,6 +66,19 @@ function relFrom(fromAbs, toAbs) {
   }
 }
 
+/** Normaliza alias de rutas de Windows (8.3, casing) cuando el path existe. */
+function canonicalPath(filePath) {
+  try {
+    return fs.realpathSync.native(filePath);
+  } catch (_) {
+    try {
+      return path.join(fs.realpathSync.native(path.dirname(filePath)), path.basename(filePath));
+    } catch (_) {
+      return path.resolve(filePath);
+    }
+  }
+}
+
 /** @param {unknown} e */
 function errMsg(e) {
   return e instanceof Error ? e.message : String(e);
@@ -118,7 +131,7 @@ class WorkspaceCheckpoint {
     this._captured = true;
     try {
       const repoRoot = await this.git.getRepoRoot(this.cwd);
-      this._repoRoot = repoRoot ? path.resolve(repoRoot) : null;
+      this._repoRoot = repoRoot ? canonicalPath(repoRoot) : null;
       if (!this._repoRoot) {
         // Sin repo git: revert por snapshots de los paths tocados. Siempre es
         // viable si el agente muta a través del hook (que es lo que garantiza
@@ -140,7 +153,7 @@ class WorkspaceCheckpoint {
       this._baselineRef = stash;
       for (const u of status.untracked || []) {
         try {
-          this._untrackedAtBaseline.add(path.resolve(this._repoRoot, u));
+          this._untrackedAtBaseline.add(canonicalPath(path.resolve(this._repoRoot, u)));
         } catch (_) {
           /* path inválido */
         }
@@ -169,7 +182,7 @@ class WorkspaceCheckpoint {
     if (!this.canRevert) return;
 
     for (const rel of relPaths) {
-      const abs = path.isAbsolute(rel) ? rel : path.resolve(this.cwd, rel);
+      const abs = canonicalPath(path.isAbsolute(rel) ? rel : path.resolve(this.cwd, rel));
       if (this._snapshots.has(abs)) continue;
       if (this._created.has(abs)) continue;
       let existed = false;
@@ -264,7 +277,7 @@ class WorkspaceCheckpoint {
           // hook (p. ej. vía code_execution / run_command): se registran como
           // "creados por la tarea" para que el revert también los elimine.
           for (const u of status.untracked || []) {
-            const abs = path.resolve(this._repoRoot, u);
+            const abs = canonicalPath(path.resolve(this._repoRoot, u));
             if (this._untrackedAtBaseline.has(abs)) continue;
             if (this._snapshots.has(abs)) continue;
             if (this._created.has(abs)) continue;

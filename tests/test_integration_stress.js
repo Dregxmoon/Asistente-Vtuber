@@ -284,7 +284,7 @@ async function testServerAuth() {
       apiKey
     );
     assert(r2.status === 200, 'Key correcta → 200');
-    assert(r2.body.result.stdout.trim() === 'hi', 'echo hi funciona sin shell');
+    assert(r2.body.result.stdout.includes('git version'), 'git funciona sin shell');
 
     const r3 = await post({ tool: 'exec', input: { command: 'git --version' } }, 'wrong-key');
     assert(r3.status === 401, 'Key inválida → 401');
@@ -574,7 +574,7 @@ async function testExecAutoShell() {
     const redirectTarget = path.join(process.cwd(), 'tests', '_auto-shell.txt');
     const redirectCommand =
       process.platform === 'win32'
-        ? `echo test>"${redirectTarget}" && type "${redirectTarget}"`
+        ? 'echo test>tests\\_auto-shell.txt && type tests\\_auto-shell.txt'
         : `echo test > "${redirectTarget}" && cat "${redirectTarget}"`;
     const r2 = await post({
       tool: 'exec',

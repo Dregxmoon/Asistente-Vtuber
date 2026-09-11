@@ -774,14 +774,16 @@ const HANDLERS = {
     // interactivo SÍ necesita el pipe para su propio input).
     let stdinValue = input.stdin != null ? String(input.stdin) : null;
     let args;
-    let nodeEval = null;
-    if (input.shell !== true && stdinValue == null) {
-      const ev = _extractNodeEvalScript(command);
-      if (ev && !_scriptReadsStdin(ev.script)) nodeEval = ev;
-    }
+    const nodeEval = input.shell !== true ? _extractNodeEvalScript(command) : null;
     if (nodeEval) {
-      stdinValue = nodeEval.script;
-      args = _rewriteToolchainCommand([nodeEval.bin, '-']);
+      if (stdinValue == null && !_scriptReadsStdin(nodeEval.script)) {
+        stdinValue = nodeEval.script;
+        args = _rewriteToolchainCommand([nodeEval.bin, '-']);
+      } else {
+        // El script necesita su propio stdin. Pasarlo como un argumento directo
+        // evita que cmd.exe interprete sus comillas y saltos de línea.
+        args = _rewriteToolchainCommand([nodeEval.bin, '-e', nodeEval.script]);
+      }
     } else if (input.shell === true || _needsShellCommand(command)) {
       // Shell real: lo pide el llamador (`shell: true`) o se detecta solo cuando
       // el comando necesita un shell para interpretarse (`cd`/`&&`/pipes/

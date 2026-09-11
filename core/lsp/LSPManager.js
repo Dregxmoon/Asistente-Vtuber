@@ -231,6 +231,33 @@ class _LSPInstance {
 
     return new Promise((resolve, reject) => {
       let started = false;
+      let initTimer = null;
+      /** @param {Error} error */
+      const failLaunch = async (error) => {
+        if (started) return;
+        started = true;
+        if (initTimer) clearTimeout(initTimer);
+        this._process = null;
+        this._started = false;
+        this._rejectAllPending(error.message);
+        if (retriesLeft <= 0) {
+          reject(error);
+          return;
+        }
+        try {
+          logger.info(
+            'LSPManager',
+            `[lsp:${this._languageKey}] ${config.command} no inició — ejecutando instalación: ${config.installCmd}`
+          );
+          await this._runInstall(config.installCmd);
+          if (this._stopping) throw new Error('LSP server stopped durante la instalación');
+          resolve(await this._doStart(workspacePath, { retriesLeft: retriesLeft - 1 }));
+        } catch (installError) {
+          const message =
+            installError instanceof Error ? installError.message : String(installError);
+          reject(new Error(`auto-install falló (${config.installCmd}): ${message}`));
+        }
+      };
       let proc;
       try {
         const spawnArgs =
@@ -260,32 +287,7 @@ class _LSPInstance {
             `[lsp:${this._languageKey}] instalalo con: ${config.installCmd}`
           );
         }
-        this._process = null;
-        this._started = false;
-        this._rejectAllPending(err.message);
-        if (started) return;
-
-        if (retriesLeft > 0) {
-          started = true;
-          try {
-            logger.info(
-              'LSPManager',
-              `[lsp:${this._languageKey}] ${config.command} no existe — ejecutando instalación: ${config.installCmd}`
-            );
-            await this._runInstall(config.installCmd);
-            if (this._stopping) {
-              reject(new Error('LSP server stopped durante la instalación'));
-              return;
-            }
-            resolve(await this._doStart(workspacePath, { retriesLeft: retriesLeft - 1 }));
-          } catch (e2) {
-            reject(new Error(`auto-install falló (${config.installCmd}): ${e2.message}`));
-          }
-          return;
-        }
-
-        started = true;
-        reject(err);
+        await failLaunch(err);
       });
 
       proc.stdout.on('data', (data) => {
@@ -315,7 +317,14 @@ class _LSPInstance {
         } catch {}
       });
 
-      proc.on('exit', (code) => this._handleExit(code));
+      proc.on('exit', (code) => {
+        if (this._process !== proc) return;
+        if (!started && code !== 0) {
+          void failLaunch(new Error(`${config.command}: LSP server exited with code ${code}`));
+          return;
+        }
+        this._handleExit(code);
+      });
 
       // Send initialize request
       // G.1: pyright y otros servers push-based DEJAN de publicar
@@ -401,7 +410,7 @@ class _LSPInstance {
 
       // Timeout safety (LSP.0: por-server — java/heavy necesita más de 15s)
       const initTimeoutMs = this._initTimeoutMs;
-      const initTimer = setTimeout(() => {
+      initTimer = setTimeout(() => {
         if (!started) {
           started = true;
           reject(new Error(`LSP server did not initialize within ${initTimeoutMs / 1000}s`));
