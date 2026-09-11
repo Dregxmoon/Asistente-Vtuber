@@ -117,7 +117,17 @@ const TASK_PATTERNS = [
     patterns: [
       new RegExp('ejecuta(r|)\\s+' + ART + '\\s+(comando|script|orden|programa)', 'i'),
       new RegExp('corre(r|)\\s+' + ART + '\\s+(comando|script|orden|programa)', 'i'),
-      new RegExp('(corre|ejecuta|lanza|inicia|arranca|instala|desinstala|compila)\\s+', 'i'),
+      // NOTA (Fase A4): antes este catch-all incluía también 'lanza|inicia|
+      // arranca' sin exigir objeto alguno ("lanza ", "inicia ", "arranca ").
+      // Eso significaba que CUALQUIER frase con esos verbos —incluidas las
+      // de abrir una app/juego, p.ej. "abre steam y lanza el juego de
+      // ajedrez"— sumaba peso 8 a SHELL, superando el peso 7 de SYSTEM y
+      // desviando la tarea al dominio de terminal. 'lanza/inicia/arranca'
+      // son, en español coloquial, tan o más comunes para "abrir una
+      // aplicación" que para "ejecutar un comando de shell"; se retiran de
+      // aquí y su caso de shell real ("ejecuta un comando/script") ya está
+      // cubierto por los dos patrones específicos de arriba.
+      new RegExp('(corre|ejecuta|instala|desinstala|compila)\\s+', 'i'),
       /terminal/i,
       /(bash|shell|zsh|sh|cmd|powershell|consola)/i,
       /npm\s+(install|run|start|build|test|publish|init|add|remove|update|audit|lint|format)/i,
@@ -167,6 +177,23 @@ const TASK_PATTERNS = [
       /cierra\s+(el|la|este)\s+(programa|aplicación|ventana|proceso|navegador|explorador|terminal)/i,
       /abre\s+(el|la|este)\s+(programa|aplicación|ventana|configuración|panel|navegador|terminal)/i,
       /(?:abre|ábreme|abrir|lanza|inicia)\s+(?:firefox|chrome|chromium|brave|edge|steam|discord|spotify|code|vs\s*code)\b/i,
+      // Fase A4 — patrón genérico "abre/lanza/inicia/arranca + <app libre>":
+      // antes SOLO la lista fija de arriba (firefox|chrome|...) activaba el
+      // dominio system al abrir una app; "abre mi libreoffice writer" no
+      // matcheaba NADA y el dominio quedaba null (ver TODO #4 del plan de
+      // autonomía). El lookahead negativo evita robarle la clasificación a
+      // dominios ya cubiertos con más peso (archivo/carpeta → filesystem=9,
+      // repo/código/comando → git/code/shell) cuando también aplican; si
+      // ninguno de esos aplica, esto es lo que permite que CUALQUIER
+      // aplicación o sitio nuevo, no solo los predefinidos, se reconozca
+      // como tarea de escritorio.
+      new RegExp(
+        '(?:abre|ábreme|abrir|lanza|inicia|arranca)\\s+(?:mi|tu|su|el|la|un|una)?\\s*' +
+          '(?!(?:archivo|fichero|documento|carpeta|directorio|repo\\b|repositorio|' +
+          'c[oó]digo|script|comando|orden|terminal|consola|sesi[oó]n)\\b)' +
+          '[a-záéíóúñü0-9][\\wáéíóúñü.\\-]{1,60}',
+        'i'
+      ),
       /configura\s+(el|la|las|los)\s+(sistema|red|wifi|bluetooth|pantalla|sonido|teclado)/i,
       /variables?\s+de\s+entorno/i,
       /(path|ruta)\s+del\s+sistema/i,
