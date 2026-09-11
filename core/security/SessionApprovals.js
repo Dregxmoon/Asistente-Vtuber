@@ -237,6 +237,84 @@ function approvalPattern(action) {
   return `tool:${tool}`;
 }
 
+/**
+ * Patrón de tarea completa (D1): UNA aprobación cubre todos los pasos de una
+ * tarea multi-paso ("¿abro Amazon y busco el manga?") en vez de un card por
+ * clic. Formato `task:<tipo>:<destino>` (p.ej. `task:shop-lookup:amazon`).
+ * Acotado por tipo+destino: no es un permiso general.
+ * @param {unknown} task tipo de tarea (shop-lookup, office-writer, media-play...)
+ * @param {unknown} target destino (tienda, app, sitio)
+ * @returns {string|null}
+ */
+function taskApprovalPattern(task, target) {
+  const normalizedTask = String(task || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+  const normalizedTarget = String(target || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .slice(0, 80);
+  if (!normalizedTask || !normalizedTarget) return null;
+  return `task:${normalizedTask}:${normalizedTarget}`;
+}
+
+// Tools que una aprobación de tarea puede cubrir: observación, navegación,
+// interacción UI y apertura/reproducción. Excluidas a propósito: process_stop
+// (termina procesos), subidas/descargas del navegador (escriben archivos) y
+// todo lo que no sea desktop/web (exec, write, edit, git, mcp...).
+const TASK_SCOPED_TOOLS = new Set([
+  'list_apps',
+  'launch_app',
+  'open_website',
+  'play_media',
+  'desktop_snapshot',
+  'desktop_screenshot',
+  'pointer_click',
+  'window_list',
+  'window_focus',
+  'ui_get_state',
+  'ui_wait',
+  'ui_click',
+  'ui_type',
+  'ui_press',
+  'ui_select',
+  'ui_scroll',
+  'window_close',
+  'desktop_capabilities',
+  'process_list',
+  'camera_status',
+  'open_camera',
+  'browser',
+  'web_search',
+  'websearch',
+  'webfetch',
+]);
+
+/**
+ * ¿Esta acción queda cubierta por un scope de tarea aprobado? Exige las tres:
+ * scope con formato válido, scope aprobado en sesión y tool dentro del
+ * conjunto cubierto. Fuera de eso, el flujo normal de aprobación por tool.
+ * @param {{tool?: string, params?: Record<string, unknown>}|null|undefined} action
+ * @param {unknown} taskScope patrón `task:<tipo>:<destino>` o null
+ * @returns {boolean}
+ */
+function isTaskScopeApproved(action, taskScope) {
+  if (typeof taskScope !== 'string' || !taskScope.startsWith('task:')) return false;
+  const parts = taskScope.split(':');
+  if (parts.length !== 3 || !parts[1] || !parts[2]) return false;
+  if (!action || typeof action.tool !== 'string') return false;
+  if (!TASK_SCOPED_TOOLS.has(action.tool)) return false;
+  if (action.tool === 'browser' && action.params && typeof action.params === 'object') {
+    const browserAction = String(action.params.action || 'navigate').toLowerCase();
+    if (['upload', 'download', 'dialog'].includes(browserAction)) return false;
+  }
+  return isApproved(taskScope);
+}
+
 /** @param {string|null} pattern */
 function isApproved(pattern) {
   return Boolean(pattern) && _sessionApprovals.has(pattern);
@@ -251,4 +329,12 @@ function resetApprovals() {
   _sessionApprovals.clear();
 }
 
-module.exports = { approvalPattern, isApproved, addApproval, resetApprovals };
+module.exports = {
+  approvalPattern,
+  taskApprovalPattern,
+  isTaskScopeApproved,
+  TASK_SCOPED_TOOLS,
+  isApproved,
+  addApproval,
+  resetApprovals,
+};

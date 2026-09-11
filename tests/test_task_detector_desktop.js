@@ -78,8 +78,41 @@ assertDomain(
   'sitio conocido sigue siendo web, no system (empate resuelto a favor de web)'
 );
 
+console.log('\n── P0-2: contexto web reclasifica system→web (sin listas de sitios) ──');
+assertDomain(
+  'abre amazon y busca si está disponible el manga el canto de la noche 18',
+  'web',
+  'caso guía manga: contexto web (busca/disponible/manga) reclasifica'
+);
+assertDomain(
+  'abre la tienda y revisa el precio del tomo 18',
+  'web',
+  'tienda/precio/tomo reclasifican a web'
+);
+assertDomain(
+  'abre https://www.amazon.es y dime si hay stock',
+  'web',
+  'URL explícita es contexto web'
+);
+assertDomain(
+  'abre amazon',
+  'system',
+  '"abre amazon" a secas sigue siendo system: sin contexto web no se adivina (el resolver lo abre igual)'
+);
+assertDomain(
+  'abre mi libreoffice writer y escribe un ensayo sobre la conquista de américa',
+  'system',
+  'el ensayo no trae marcadores web: sigue system'
+);
+assertDomain(
+  'abre el archivo de configuración de la tienda',
+  'filesystem',
+  'un marcador web no roba a filesystem cuando pesa más'
+);
+
 console.log('\n── Sigue siendo una tarea real (no cae a chat) ──');
 assertIsTask('abre mi libreoffice writer y escribe un ensayo sobre la conquista de américa');
+assertIsTask('abre amazon y busca si está disponible el manga el canto de la noche 18');
 
 console.log(`\nResultado: ${passed} passed  ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

@@ -229,6 +229,12 @@ const TOOL_SCHEMAS = [
         type: 'string',
         description: 'external (predeterminado, sesión personal) o managed (aislado y verificable)',
       },
+      {
+        name: 'needsVerification',
+        type: 'boolean',
+        description:
+          'true cuando hay que leer o comprobar algo dentro de la página; fuerza managed',
+      },
     ],
     highImpact: true,
   },

@@ -382,6 +382,8 @@ function register(_ctx) {
   );
 
   // ── ASR: transcribe un WAV (PCM 16k mono) con Vosk vía subproceso Python ──
+  // El idioma lo decide el renderer (preferencia de voz o navigator.language);
+  // AsrClient resuelve models/vosk-<lang>/ con fallback a español.
   ipcMain.handle('chat-asr-stream', (_e, args = {}) => {
     if (!_ctx || !_ctx.PYTHON_BIN) {
       return Promise.reject(new Error('Python no disponible'));
@@ -394,6 +396,36 @@ function register(_ctx) {
       logger.warn('chat-handlers', '[chat] ASR falló:', errMsg(e));
       throw e;
     });
+  });
+
+  // ── Idioma: una sola fuente de verdad (LanguageProfile) para renderer ──
+  // La voz TTS y el ASR mutan según el usuario sin listas por idioma en la UI:
+  // el renderer pregunta por el texto que va a hablar/transcribir y recibe
+  // { code, name, ttsVoice, asrLang, locale }.
+  ipcMain.handle('chat-detect-language', (_e, args = {}) => {
+    try {
+      const { detectLanguage, localeFor } = require('../core/grounding/LanguageProfile.js');
+      const detection = detectLanguage(args.text || '', { override: args.override || null });
+      const derived = localeFor(detection.code);
+      return {
+        code: detection.code,
+        name: detection.name,
+        confidence: detection.confidence,
+        ttsVoice: derived.ttsVoice,
+        asrLang: derived.asrModel.replace(/^vosk-/, ''),
+        locale: derived.locale,
+      };
+    } catch (e) {
+      logger.warn('chat-handlers', '[chat] detección de idioma falló:', errMsg(e));
+      return {
+        code: 'es',
+        name: 'español',
+        confidence: 0,
+        ttsVoice: 'es-MX-DaliaNeural',
+        asrLang: 'es',
+        locale: 'es-MX',
+      };
+    }
   });
 
   // ── LLM: estado + configuración + llamada simple con abort ───────────────

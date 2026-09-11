@@ -226,6 +226,55 @@ function register(ctx) {
           });
         },
 
+        // D1b: UNA card para toda la tarea (task:<tipo>:<destino>). El loop la
+        // propone una sola vez por run ante la primera acción desktop/web; si
+        // se aprueba, el resto del run corre sin cards por clic. Reusa el
+        // MISMO canal agent-approval-needed con campos extra (taskScope, task,
+        // target): un renderer viejo lo muestra como card normal de la primera
+        // acción y el loop degrada a cards por clic — nada se rompe.
+        onTaskApprovalNeeded: async (proposal) => {
+          controller.noteProgress({
+            phase: 'approval',
+            tool: `task:${proposal.task}`,
+            status: 'waiting',
+          });
+          if (isApproved(proposal.pattern)) return true;
+          if (!S.chatWindow || S.chatWindow.isDestroyed()) return false;
+          return new Promise((resolve) => {
+            const actionId = `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+            sendToChat('agent-approval-needed', {
+              actionId,
+              tool: proposal.firstAction?.tool || 'task',
+              params: {},
+              description:
+                `¿Hago toda esta tarea? ${proposal.task} → ${proposal.target} ` +
+                `(una aprobación cubre todos los pasos; lo destructivo siempre pide aparte)`,
+              taskScope: proposal.pattern,
+              task: proposal.task,
+              target: proposal.target,
+              diff: null,
+            });
+            let settled = false;
+            const handler = (e2, { id, approved, always }) => {
+              if (id !== actionId) return;
+              clearTimeout(timer);
+              if (settled) return;
+              settled = true;
+              ipcMain.removeListener('agent-approval-response', handler);
+              if (approved && always) addApproval(proposal.pattern);
+              resolve(approved);
+            };
+            ipcMain.on('agent-approval-response', handler);
+            const timer = setTimeout(() => {
+              if (settled) return;
+              settled = true;
+              ipcMain.removeListener('agent-approval-response', handler);
+              sendToChat('agent-approval-expired', { actionId });
+              resolve({ approved: false, reason: 'timeout' });
+            }, approvalTimeoutMs);
+          });
+        },
+
         onProgress: (progress) => {
           controller.noteProgress(progress);
           sendToChat('agent-progress', { ...progress, runId });

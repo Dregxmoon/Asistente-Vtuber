@@ -37,16 +37,34 @@ function _setModelRoot(root) {
  */
 
 /**
- * Resuelve la ruta del modelo Vosk. Devuelve null si no existe ninguno.
+ * Idiomas con modelo Vosk conocido. Tabla de datos (sufijos de carpeta), no
+ * lógica por idioma: cualquier código distinto de estos cae al español.
+ */
+const ASR_MODEL_LANGS = new Set(['es', 'en', 'pt', 'fr', 'de', 'it', 'ja']);
+
+/**
+ * Resuelve la ruta del modelo Vosk para un idioma. Devuelve null si no existe
+ * ninguno. Orden: modelo del idioma pedido → español (default de Kaoru).
  * @param {string} [appRoot]
+ * @param {string} [lang] código ISO (default 'es')
  * @returns {string|null}
  */
-function resolveAsrModel(appRoot = APP_ROOT) {
-  const candidates = [
+function resolveAsrModel(appRoot = APP_ROOT, lang = 'es') {
+  const code = ASR_MODEL_LANGS.has(String(lang || '').toLowerCase())
+    ? String(lang).toLowerCase()
+    : 'es';
+  const candidates =
+    code === 'es'
+      ? []
+      : [
+          path.join(appRoot, 'models', `vosk-${code}`),
+          path.join(appRoot, 'models', `vosk-model-small-${code}-0.22`),
+        ];
+  candidates.push(
     path.join(appRoot, 'models', 'vosk-es'),
     path.join(appRoot, 'models', 'vosk-model-small-es-0.42'),
-    path.join(appRoot, 'models', 'vosk-model-es-0.42'),
-  ];
+    path.join(appRoot, 'models', 'vosk-model-es-0.42')
+  );
   for (const c of candidates) {
     try {
       if (fs.existsSync(c)) return c;
@@ -70,11 +88,11 @@ function transcribeWav({ pythonBin, wav, lang = 'es', modelPath }) {
       reject(new Error('pythonBin requerido'));
       return;
     }
-    const model = modelPath || resolveAsrModel(_modelRoot);
+    const model = modelPath || resolveAsrModel(_modelRoot, lang);
     if (!model) {
       reject(
         new Error(
-          'Modelo Vosk no encontrado — descargalo en models/vosk-es/ (ej. vosk-model-small-es-0.42)'
+          `Modelo Vosk no encontrado para "${lang}" — descargalo en models/vosk-${lang}/ (o usa models/vosk-es/)`
         )
       );
       return;

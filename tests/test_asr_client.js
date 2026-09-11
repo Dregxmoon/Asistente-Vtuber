@@ -73,6 +73,30 @@ function testResolveAsrModel() {
   assert(fromScratch === null, 'models/ vacío → null');
 }
 
+function testResolveAsrModelPerLang() {
+  console.log(C.bold('\n── resolveAsrModel: por idioma con fallback a español ──────'));
+
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'asr-model-'));
+  fs.mkdirSync(path.join(base, 'models', 'vosk-es'), { recursive: true });
+  fs.mkdirSync(path.join(base, 'models', 'vosk-en'), { recursive: true });
+  assert(
+    AsrClient.resolveAsrModel(base, 'en') === path.join(base, 'models', 'vosk-en'),
+    'lang=en con models/vosk-en/ → ese modelo'
+  );
+  assert(
+    AsrClient.resolveAsrModel(base, 'ja') === path.join(base, 'models', 'vosk-es'),
+    'lang=ja sin modelo japonés → fallback español (sigue funcionando)'
+  );
+  assert(
+    AsrClient.resolveAsrModel(base, 'xx') === path.join(base, 'models', 'vosk-es'),
+    'código desconocido → fallback español, nunca null si hay es'
+  );
+  assert(
+    AsrClient.resolveAsrModel(base) === path.join(base, 'models', 'vosk-es'),
+    'sin lang → español (default de Kaoru, sin regresión)'
+  );
+}
+
 function testPythonBinRequired() {
   console.log(C.bold('\n── transcribeWav: pythonBin requerido ───────────────────────'));
 
@@ -237,6 +261,7 @@ function testSpawnThrows() {
 
 async function main() {
   testResolveAsrModel();
+  testResolveAsrModelPerLang();
   await testPythonBinRequired();
   await testModelMissing();
   await testTranscribeSuccess();

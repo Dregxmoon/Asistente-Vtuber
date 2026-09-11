@@ -121,7 +121,7 @@ jobs:
 
       - name: Contratos JS de escritorio (Linux)
         if: runner.os == 'Linux'
-        run: ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_desktop_automation.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_desktop_control.js
+        run: ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_desktop_automation.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_desktop_control.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_website_resolver.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_task_detector_desktop.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_structured_parser_bilingual.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_task_approvals.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_desktop_task_e2e.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_language_profile.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_multilingual_inference.js
 
       - name: Contratos JS de escritorio (Windows)
         if: runner.os == 'Windows'
@@ -131,6 +131,20 @@ jobs:
           & .\node_modules\electron\dist\electron.exe tests\test_desktop_automation.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & .\node_modules\electron\dist\electron.exe tests\test_desktop_control.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\node_modules\electron\dist\electron.exe tests\test_website_resolver.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\node_modules\electron\dist\electron.exe tests\test_task_detector_desktop.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\node_modules\electron\dist\electron.exe tests\test_structured_parser_bilingual.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\node_modules\electron\dist\electron.exe tests\test_task_approvals.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\node_modules\electron\dist\electron.exe tests\test_desktop_task_e2e.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\node_modules\electron\dist\electron.exe tests\test_language_profile.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\node_modules\electron\dist\electron.exe tests\test_multilingual_inference.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & .\node_modules\electron\dist\electron.exe tests\test_windows_sandbox.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -34,6 +34,46 @@ const {
   capabilityPermissionTool,
 } = require('../desktop/DesktopCapabilities.js');
 const {
+  isTaskScopeApproved,
+  taskApprovalPattern,
+  addApproval,
+} = require('../security/SessionApprovals.js');
+
+/**
+ * Deriva una propuesta de tarea `task:<tipo>:<destino>` desde tool+params.
+ * Intencionalmente SIN parsear texto ni idioma: el destino ya viene
+ * estructurado en los params (target/app/query/host). Devuelve null cuando la
+ * acción no describe una tarea proponible (y el loop usa cards por clic).
+ * @param {{tool?: string, params?: Record<string, unknown>}} action
+ * @returns {{task: string, target: string, pattern: string}|null}
+ */
+function _proposeTaskScope(action) {
+  if (!action || typeof action.tool !== 'string') return null;
+  const params = action.params && typeof action.params === 'object' ? action.params : {};
+  const str = (value) => String(value || '').trim();
+  /** @type {[string, string]|null} */
+  let kind = null;
+  if (action.tool === 'launch_app' && str(params.app)) {
+    kind = ['app-task', str(params.app)];
+  } else if (action.tool === 'open_website' && str(params.target)) {
+    kind = ['web-task', str(params.target).slice(0, 80)];
+  } else if (action.tool === 'play_media' && str(params.query)) {
+    kind = ['media-play', str(params.query).slice(0, 80)];
+  } else if (action.tool === 'browser' && str(params.url)) {
+    try {
+      kind = ['web-task', new URL(str(params.url)).hostname];
+    } catch (_) {
+      kind = null;
+    }
+  } else if (['desktop_snapshot', 'window_list', 'desktop_screenshot'].includes(action.tool)) {
+    kind = ['desktop-task', str(params.application || params.sourceName) || 'desktop'];
+  }
+  if (!kind) return null;
+  const pattern = taskApprovalPattern(kind[0], kind[1]);
+  if (!pattern) return null;
+  return { task: kind[0], target: kind[1], pattern };
+}
+const {
   MutationJournal,
   isMutatingAction,
   isSuccessfulMutationResult,
@@ -669,6 +709,37 @@ Las acciones que cambian la página deben repetir sessionId, pageId y
 expectedOrigin exactamente como fueron observados. Después de cada acción,
 observa otra vez antes de decidir la siguiente.
 
+## Regla de modo: verificar ⇒ managed (C4)
+
+\`open_website\` tiene dos modos con consecuencias distintas:
+- \`CONTROL: external\` abre el navegador PERSONAL del usuario y Kaoru queda
+  CIEGA (no ve ni puede leer la página). Úsalo SOLO para "solo ábrelo".
+- \`CONTROL: managed\` (o la tool \`browser\` con mode=managed) usa el Chromium
+  propio y VERIFICABLE de Kaoru. Úsalo SIEMPRE que debas leer, buscar o
+  comprobar algo DENTRO de la página (precio, disponibilidad, texto, video).
+Si la petición incluye "busca", "dime si", "verifica", "está disponible" o
+"reproduce", NUNCA uses external: no podrías cumplirla.
+
+## Receta: buscar un producto y verificar disponibilidad (shop-lookup)
+
+Para "abre <tienda> y dime si <producto> está disponible / a qué precio":
+1. \`open_website\` con el nombre de la tienda (se resuelve solo, no necesita URL).
+2. \`browser\` mode=managed: snapshot → type en el buscador → click buscar.
+3. \`browser\` get_text del resultado (precio/disponibilidad) y snapshot si hace falta.
+4. Responde citando la evidencia (precio + URL). Si la página pide CAPTCHA o
+   login, informa y deja el navegador abierto para continuar manual: nunca
+   inventes disponibilidad.
+
+## Receta: escribir en una app de escritorio (office-writer)
+
+Para "abre <app> y escribe <texto>":
+1. \`list_apps\` si no conoces el nombre exacto → \`launch_app\`.
+2. Espera la ventana (\`window_list\`/\`desktop_snapshot\`) antes de actuar.
+3. Escribe por bloques con \`ui_type\` sobre la referencia observada y verifica
+   con \`ui_get_state\`/\`ui_wait\` (expected con el texto esperado).
+4. Guarda y confirma el archivo en disco cuando aplique; si algo no se pudo
+   verificar, dilo explícitamente en el cierre.
+
 \`\`\`action
 ACCIÓN: mcp_call | SERVIDOR: filesystem | HERRAMIENTA: list_directory | PARAMS: {"path": "."}
 \`\`\`
@@ -735,6 +806,11 @@ El resto del texto se mostrará al usuario.
     pasó. No afirmes que algo se "verificó" si la última ejecución real de la
     verificación terminó en error y no hubo un reintento exitoso — si no se
     pudo comprobar, decilo, no lo des por sentado.
+12. SI TE FALTA UN DATO, PREGUNTA UNA COSA CONCRETA (en el idioma del
+    usuario) en vez de adivinar: qué tienda, dónde guardar, cuál de las
+    opciones que te devolvió una herramienta. Si el error de una herramienta
+    lista candidatos ("Vi estas opciones: ..."), ofrécelos tal cual. Una
+    pregunta curiosa y precisa vale más que tres acciones adivinadas.
 
 ## Verificar lógica JS sin shell
 
@@ -1016,6 +1092,9 @@ class AgentLoop {
     const signal = opts.signal || null;
     this._signal = signal;
     this._steeringApplied = 0;
+    // D1b: propuesta de tarea completa, una sola vez por run.
+    this._taskScope = null;
+    this._taskScopeProposed = false;
     // Instrumentación por-run: acumuladores que se emiten al terminar (ver
     // _emitRunMetrics en run()). Por-instancia: los subagentes son otro
     // AgentLoop, así sus métricas no contaminan las del run padre.
@@ -1174,6 +1253,29 @@ class AgentLoop {
       max: systemBudget,
       tailSections: TAIL_SECTIONS,
     });
+
+    // ── Idioma de respuesta (multilenguaje por inferencia) ────────────────
+    // Se anexa DESPUÉS del truncado para garantizar su supervivencia: es una
+    // línea, no compite por presupuesto. El protocolo de tools no cambia (la
+    // línea lo dice explícitamente); solo mutan las palabras hacia el usuario.
+    this._responseLanguage =
+      opts.responseLanguage && typeof opts.responseLanguage === 'object'
+        ? opts.responseLanguage
+        : null;
+    if (this._responseLanguage) {
+      try {
+        const { responseLanguageLine, localeFor } = require('../grounding/LanguageProfile.js');
+        agentPrompt += '\n\n' + responseLanguageLine(this._responseLanguage);
+        const derived = localeFor(this._responseLanguage.code);
+        const BrowserBridge = require('./BrowserBridge.js');
+        if (typeof BrowserBridge.setDefaultLocale === 'function') {
+          BrowserBridge.setDefaultLocale(derived.locale);
+        }
+        if (this._bridge && typeof this._bridge.setLocaleHints === 'function') {
+          this._bridge.setLocaleHints(derived.tldHints);
+        }
+      } catch (_) {}
+    }
 
     // ── Fase de plan explícito (mejora de calidad) ─────────────────────────
     // Toda tarea smart de la ruta de producción recibe un plan ANTES de
@@ -1945,7 +2047,68 @@ class AgentLoop {
           }
         }
 
-        if (permissionAction === 'ask' && requiresApproval && opts.onApprovalNeeded) {
+        // D1b: propuesta de tarea completa (UNA vez por run). Ante la primera
+        // acción desktop/web que exige aprobación, se propone
+        // task:<tipo>:<destino> vía opts.onTaskApprovalNeeded. Si se aprueba,
+        // el scope cubre el resto del run (cero cards más); si no hay handler
+        // o se rechaza/expira, sigue el flujo clásico por clic. La propuesta
+        // sale de tool+params (estructurado), nunca del idioma del mensaje.
+        if (
+          permissionAction === 'ask' &&
+          requiresApproval &&
+          !this._taskScope &&
+          !this._taskScopeProposed &&
+          typeof opts.onTaskApprovalNeeded === 'function'
+        ) {
+          const proposal = _proposeTaskScope(action);
+          if (proposal) {
+            this._taskScopeProposed = true;
+            try {
+              const scopeDecision = await opts.onTaskApprovalNeeded({
+                ...proposal,
+                firstAction: { tool: action.tool },
+              });
+              const scopeObj =
+                scopeDecision !== null && typeof scopeDecision === 'object' ? scopeDecision : null;
+              const scopeApproved = scopeObj ? Boolean(scopeObj.approved) : Boolean(scopeDecision);
+              if (scopeApproved) {
+                addApproval(proposal.pattern);
+                this._taskScope = proposal.pattern;
+                logger.info(
+                  'AgentLoop',
+                  `[agent-loop] tarea aprobada de una vez: ${proposal.pattern}`
+                );
+              }
+            } catch (e) {
+              logger.warn('AgentLoop', `[agent-loop] propuesta de tarea falló: ${e.message}`);
+            }
+          }
+        }
+        const effectiveTaskScope = this._taskScope || opts.taskScope || null;
+
+        // D1: aprobación por tarea completa. Si el run trae un taskScope
+        // (`task:<tipo>:<destino>`) ya aprobado en sesión y la acción cae
+        // dentro de las tools cubiertas, se ejecuta sin card por clic. Todo
+        // lo demás (exec, escritura de archivos, process_stop, uploads...)
+        // sigue el flujo normal de aprobación por tool.
+        const taskScopeCovered =
+          permissionAction === 'ask' &&
+          requiresApproval &&
+          isTaskScopeApproved(action, effectiveTaskScope);
+        if (taskScopeCovered) {
+          logger.info(
+            'AgentLoop',
+            `[agent-loop] tool "${action.tool}" cubierta por scope de tarea ${effectiveTaskScope}`
+          );
+          this._metrics.trackApproval(true);
+        }
+
+        if (
+          permissionAction === 'ask' &&
+          requiresApproval &&
+          !taskScopeCovered &&
+          opts.onApprovalNeeded
+        ) {
           const decision = await opts.onApprovalNeeded(action);
           // onApprovalNeeded puede devolver boolean (true/false) o un objeto
           // rico { approved, reason }. El caso reason === 'timeout' distingue
@@ -1970,7 +2133,12 @@ class AgentLoop {
             };
             continue;
           }
-        } else if (requiresApproval && !opts.onApprovalNeeded && permissionAction !== 'allow') {
+        } else if (
+          requiresApproval &&
+          !taskScopeCovered &&
+          !opts.onApprovalNeeded &&
+          permissionAction !== 'allow'
+        ) {
           iterationHistory.push({
             role: 'user',
             content: `[Herramienta "${action.tool}" requiere aprobación pero no hay handler — BLOQUEADA. Continúa sin ella o informa que no puedes ejecutarla.]`,

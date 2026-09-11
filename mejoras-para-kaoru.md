@@ -3,12 +3,28 @@
 > Auditoría viva del proyecto (código, conexiones, APIs, TODOs).
 > Objetivo: que Kaoru sea una asistente de verdad — con control total, curiosa,
 > kawaii y tierna — y que **ninguna tarea dependa de links o páginas predefinidas**.
-> Ejemplo guía: *"abre mi LibreOffice Writer y escribe un ensayo sobre la conquista
-> de América"* debe funcionar de punta a punta sin atajos hardcodeados.
+> Ejemplo guía: _"abre mi LibreOffice Writer y escribe un ensayo sobre la conquista
+> de América"_ debe funcionar de punta a punta sin atajos hardcodeados.
 >
-> **Estado de esta revisión:** Fase A1 (resolver universal) y A4 (dominio desktop
-> genérico) ya implementadas en código con tests verdes. El resto del plan sigue
-> vigente y se amplía abajo con mejoras profundas de nivel top-tier (§7).
+> **Estado de esta revisión (rama testing):** implementado y verificado con tests
+> verdes **y en vivo** (esta máquina: 70 apps, AT-SPI activo, Chromium real) —
+> A1+A4 originales más P0 (resolver compartido `WebsiteResolver` con
+> scoring+caché, paridad bridge/control, dominio web por contexto, fix
+> "está disponible el manga"), P1 (B2: 42 frases desktop ES+EN indexadas en
+> `data/core.db`; B3: parser bilingüe), P2 (C4: política managed + recetas en el
+> prompt; C2/C3: skills `shop-lookup` y `office-writer`; D1: aprobación por
+> tarea con card única IPC), E4 (e2e con mocks ES/EN/Linux/Windows), 5 skills de
+> OpenCode en `.opencode/skills/` y **multilenguaje por inferencia**:
+> `LanguageProfile` (detección por turno), fusión intent→task por embeddings
+> (EN sin regex inglés), protocolo canónico neutral en el serializer, guard
+> `needsVerification`, locale dinámico del navegador, voz/ASR por idioma,
+> clarificación con candidatos, **fallback Bing RSS** (Google/DDG bloquean
+> scraping en vivo; probado: `amazon → amazon.com.mx` en 2.9s reales) y
+> **nombres de apps localizados** (`Name[es]` + aliases: "calculadora" encuentra
+> Calculator). Criterio cumplido: typecheck sin errores nuevos, ESLint limpio,
+> 230/230 en `test_agent_loop`, regresión vecina verde. Hallazgo honesto: frases
+> EN largas y compuestas diluyen los embeddings (0.32, no detecta) — pendiente
+> B1 (modelo multilingüe) + más frases compuestas.
 
 ---
 
@@ -36,20 +52,20 @@ Usuario (chat / voz / overlay Live2D)
 
 ### Conexiones y APIs externas (estado real)
 
-| Área | Qué hay | Archivo responsable |
-|---|---|---|
-| LLM (8 + 1) | groq (primary), gemini, openai, anthropic, xai, nvidia, huggingface, deepseek + `codex-cli` | `core/llm/catalog.js`, `LLMProvider.js`, `CodexCliProvider.js` |
-| Auth LLM | env → Keychain del SO → `config.llm.apiKeys`; solo booleanos, nunca se loguean keys | `LLMProvider._getApiKey`, `infrastructure/keychain/` |
-| Fallback LLM | primary → fallback con 3 reintentos, backoff+jitter, degradación temporal | `LLMProvider._callWithFallback` |
-| GitHub | repos, issues, PRs, Actions | `ipc/github-handlers.js`, `core/git/GitManager.js` |
-| Google Workspace | Calendar, Gmail, Drive, Docs, Sheets, Tasks, Contacts vía OAuth local | `core/connectors/GoogleWorkspace.js`, `OAuthCallbackServer.js`, `ConnectorRegistry.js` |
-| MCP | servidores stdio (`npx -y`) + HTTP-streamable, tools namespaced `mcp.servidor.tool` | `core/mcp/MCPManager.js`, `config.mcp.servers[]` |
-| Voz | ASR local Vosk español (`models/vosk-es/`) + TTS por `tts_stream.py` (6 emociones) | `core/voice/AsrClient.js`, `asr_stream.py`, `tts_stream.py` |
-| Servidor tools | exec/read/write/edit/grep/webfetch/websearch, rate-limit, `UrlGuard`, anti-inyección | `openclaw-server.js` (`OPENCLAW_PORT`, `OPENCLAW_API_KEY` fail-closed) |
-| Navegador propio | Chromium Playwright: `background` (headless) + `managed` (visible y verificable) | `core/planner/BrowserBridge.js` |
-| Escritorio | apps, ventanas AT-SPI2/UIA, captura, puntero, teclado, procesos, cámara (sin captura silenciosa) | `core/desktop/` |
-| Skills | `code-review`, `git-workflow`, `testing-patterns` (muy de código, nada de escritorio) | `skills/`, `core/skills/` |
-| Memoria | StateGraph sqlite + embeddings locales (sqlite-vec, all-MiniLM-L6-v2) | `core/memory/`, `infrastructure/database/` |
+| Área             | Qué hay                                                                                          | Archivo responsable                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| LLM (8 + 1)      | groq (primary), gemini, openai, anthropic, xai, nvidia, huggingface, deepseek + `codex-cli`      | `core/llm/catalog.js`, `LLMProvider.js`, `CodexCliProvider.js`                         |
+| Auth LLM         | env → Keychain del SO → `config.llm.apiKeys`; solo booleanos, nunca se loguean keys              | `LLMProvider._getApiKey`, `infrastructure/keychain/`                                   |
+| Fallback LLM     | primary → fallback con 3 reintentos, backoff+jitter, degradación temporal                        | `LLMProvider._callWithFallback`                                                        |
+| GitHub           | repos, issues, PRs, Actions                                                                      | `ipc/github-handlers.js`, `core/git/GitManager.js`                                     |
+| Google Workspace | Calendar, Gmail, Drive, Docs, Sheets, Tasks, Contacts vía OAuth local                            | `core/connectors/GoogleWorkspace.js`, `OAuthCallbackServer.js`, `ConnectorRegistry.js` |
+| MCP              | servidores stdio (`npx -y`) + HTTP-streamable, tools namespaced `mcp.servidor.tool`              | `core/mcp/MCPManager.js`, `config.mcp.servers[]`                                       |
+| Voz              | ASR local Vosk español (`models/vosk-es/`) + TTS por `tts_stream.py` (6 emociones)               | `core/voice/AsrClient.js`, `asr_stream.py`, `tts_stream.py`                            |
+| Servidor tools   | exec/read/write/edit/grep/webfetch/websearch, rate-limit, `UrlGuard`, anti-inyección             | `openclaw-server.js` (`OPENCLAW_PORT`, `OPENCLAW_API_KEY` fail-closed)                 |
+| Navegador propio | Chromium Playwright: `background` (headless) + `managed` (visible y verificable)                 | `core/planner/BrowserBridge.js`                                                        |
+| Escritorio       | apps, ventanas AT-SPI2/UIA, captura, puntero, teclado, procesos, cámara (sin captura silenciosa) | `core/desktop/`                                                                        |
+| Skills           | `code-review`, `git-workflow`, `testing-patterns` (muy de código, nada de escritorio)            | `skills/`, `core/skills/`                                                              |
+| Memoria          | StateGraph sqlite + embeddings locales (sqlite-vec, all-MiniLM-L6-v2)                            | `core/memory/`, `infrastructure/database/`                                             |
 
 ### TODOs / deuda (hallazgo honesto)
 
@@ -85,7 +101,7 @@ Antes todo destino nuevo exigía tocar código:
 
 > **Nada hardcodeado. Todo resuelto en runtime.**
 > `entender → resolver → abrir en el modo correcto → observar → actuar →
-> verificar → informar`, para Amazon, YouTube, Spotify, juegos o apps con la
+verificar → informar`, para Amazon, YouTube, Spotify, juegos o apps con la
 > misma tubería. Regla: si hay que LEER/VERIFICAR algo dentro → siempre `managed`,
 > nunca `external` (ciego).
 
@@ -93,7 +109,7 @@ Antes todo destino nuevo exigía tocar código:
 
 ## 3. Caso guía: LibreOffice Writer + ensayo
 
-*"Abre mi LibreOffice Writer y escribe un ensayo sobre la conquista de América"*
+_"Abre mi LibreOffice Writer y escribe un ensayo sobre la conquista de América"_
 
 ### Qué ya existe
 
@@ -119,13 +135,13 @@ Antes todo destino nuevo exigía tocar código:
 
 ## 4. Personalidad: kawaii, tierna, curiosa, presente
 
-| Dónde vive | Qué hace hoy |
-|---|---|
-| `core/identity/identity.json` | Alma vtuber kawaii, energía 90%, catchphrases, traits, `forbidden_phrases`, conductas ante duda/error/sorpresa |
-| `core/identity/MoodEngine.js` + `identity.dynamics.json` | Moods con histéresis y decaimiento, alimentado por progreso del agente |
-| `core/behavior/BehaviorModel.js` | Tonos (empathic/curious/playful/focused), longitud y urgencia |
-| `core/behavior/Gesture*.js` | 23 gestos Live2D con alias ES/EN/中文/日本語, `llmDriven:true` |
-| TTS (6 emociones) | Comparte vocabulario emocional con los gestos |
+| Dónde vive                                               | Qué hace hoy                                                                                                   |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `core/identity/identity.json`                            | Alma vtuber kawaii, energía 90%, catchphrases, traits, `forbidden_phrases`, conductas ante duda/error/sorpresa |
+| `core/identity/MoodEngine.js` + `identity.dynamics.json` | Moods con histéresis y decaimiento, alimentado por progreso del agente                                         |
+| `core/behavior/BehaviorModel.js`                         | Tonos (empathic/curious/playful/focused), longitud y urgencia                                                  |
+| `core/behavior/Gesture*.js`                              | 23 gestos Live2D con alias ES/EN/中文/日本語, `llmDriven:true`                                                 |
+| TTS (6 emociones)                                        | Comparte vocabulario emocional con los gestos                                                                  |
 
 ### Mejoras propuestas (personalidad × autonomía)
 
@@ -143,40 +159,68 @@ Antes todo destino nuevo exigía tocar código:
 
 ### Fase A — Quitar lo hardcodeado
 
-- [x] A1. Resolver destinos genérico (bridge; pendiente portarlo a
-      `DesktopControl` directo + caché + scoring de relevancia).
-- [ ] A2. `SITE_ALIASES`/`APP_ALIASES` como caché de atajos, no lista blanca.
+- [x] A1. Resolver destinos genérico: `core/desktop/WebsiteResolver.js`
+      compartido (URL → alias → búsqueda con scoring + caché TTL + UrlGuard),
+      usado por `OpenClawBridge` y `DesktopControl` (`test_website_resolver.js`).
+- [x] A2. Alias como atajos: el resolver los trata como shortcut; el fallback
+      genérico es lo que da el 100% (sin ampliar listas a mano).
 - [ ] A3. Generalizar `play_media` (hoy YouTube-only) a Spotify/otros.
-- [x] A4. Dominio desktop genérico (pendiente contraparte web genérica).
+- [x] A4. Dominio desktop genérico + contraparte web por contexto
+      (`WEB_HINTS_RE`, `test_task_detector_desktop.js`) + fix "está disponible".
 
-### Fase B — Multilingüe sin pila por idioma
+### Fase B — Multilingüe por inferencia (sin ramas por idioma)
+
+Principio implementado: el idioma vive solo en el texto del usuario y la
+respuesta final; tools, protocolo y decisiones usan interlingua canónica en
+inglés. Cero `if idioma == X` en el código.
 
 - [ ] B1. Embeddings multilingües (`paraphrase-multilingual-MiniLM-L12-v2`).
-- [ ] B2. Poblar `intent_catalog` con frases desktop/ofimática/navegación ES+EN.
-- [ ] B3. Parser bilingüe (`ACTION/TARGET/APP` además de `ACCIÓN/SITIO`).
-- [ ] B4. IDs canónicos en inglés interno; español solo presentación.
+- [x] B2. 42 frases desktop ES+EN indexadas (`init_vectors.js` + `data/core.db`
+      220→262; verificado con `--test`: ES medium, EN high).
+- [x] B3. Parser bilingüe (`TARGET/APPLICATION/WINDOW/NAME`,
+      `test_structured_parser_bilingual.js`).
+- [x] B4. `LanguageProfile` (`core/grounding/LanguageProfile.js`): detección por
+      turno (scripts Unicode genéricos + stopwords mínimos de detección),
+      override de preferencias, `localeFor` (locale/voz/ASR/TLDs en una tabla).
+- [x] B5. Fusión intent→task por embeddings (`fuseTaskIntent` en
+      `core/core/context.js`): "open amazon" es tarea web sin regex inglés.
+- [x] B6. Protocolo canónico neutral en `GroqSerializer` (nota
+      `TOOL PROTOCOL (canonical)` + ejemplos EN; ES conservados como aliases) y
+      línea de idioma de respuesta por turno (llega a `AgentLoop` vía
+      `opts.responseLanguage`, sobrevive al truncado).
+- [x] B7. Voz y locale que mutan con el usuario: `chat-detect-language` (IPC),
+      voz TTS por texto, ASR `models/vosk-<lang>/` con fallback español,
+      `BrowserBridge.setDefaultLocale` por run.
+- [x] B8. Guard `needsVerification` (schema + parser + bridge fuerzan managed) y
+      `localeHints` en el scoring del resolver (su tienda, su país).
+- [x] B9. Clarificación curiosa: el resolver devuelve candidatos en el error y
+      la regla 12 del loop ordena preguntar UNA cosa concreta en su idioma.
 
 ### Fase C — Skills de tarea
 
 - [ ] C1. `desktop-task`: observar → actuar → verificar (universal).
-- [ ] C2. `office-writer`: lanzar → esperar → escribir por bloques → guardar.
-- [ ] C3. `shop-lookup`: buscar → `get_text` precio/stock → responder con evidencia.
-- [ ] C4. Política external-vs-managed en el prompt ("verificar ⇒ managed").
+- [x] C2. `skills/office-writer/SKILL.md`: lanzar → esperar → bloques → guardar.
+- [x] C3. `skills/shop-lookup/SKILL.md`: buscar → `get_text` → evidencia.
+- [x] C4. Política "verificar ⇒ managed" + recetas en `AGENT_LOOP_SYSTEM`.
 
 ### Fase D — Autonomía con seguridad
 
-- [ ] D1. Aprobación por tarea (`task:<tipo>:<destino>`), no por clic.
-- [ ] D2. Estrategia CAPTCHA/bloqueo visible + continuar manual.
-- [ ] D3. Plan B sin AT-SPI (Wayland: captura + `pointer_click` + re-observar) y
-      sin `.desktop` (binario directo).
-- [ ] D4. Documentos a archivo (ODT/MD) + verificación en disco.
+- [x] D1. Aprobación por tarea (`task:<tipo>:<destino>`, `TASK_SCOPED_TOOLS`,
+      `opts.taskScope` en `AgentLoop`; `test_task_approvals.js`: 0 cards vs 2) + propuesta automática una vez por run (`opts.onTaskApprovalNeeded`,
+      derivada de tool+params sin idioma) + card única en IPC
+      (`agent-approval-needed` con `taskScope`, compatible hacia atrás;
+      `test_multilingual_inference.js`).
+- [x] D2. Parcial: receta shop-lookup + honestidad ante CAPTCHA en prompt y
+      skill; falta `handoff` estructurado con retomar.
+- [ ] D3. Plan B sin AT-SPI (Wayland) y sin `.desktop`.
+- [ ] D4. Generación de documentos a archivo (ODT/MD) + verificación en disco.
 
 ### Fase E — Presencia kawaii
 
 - [ ] E1. Progreso narrado + gestos en tareas desktop.
 - [ ] E2. Claims honestos en desktop.
 - [ ] E3. Pregunta curiosa única ante ambigüedad.
-- [ ] E4. Tests e2e Writer y shop-lookup con mocks.
+- [x] E4. Tests e2e con mocks (`test_desktop_task_e2e.js`: ES/EN/Linux/Windows).
 
 ---
 
@@ -193,15 +237,14 @@ Antes todo destino nuevo exigía tocar código:
 
 ## 7. Mejoras profundas nivel top-tier (nuevo)
 
-Lo anterior lleva a Kaoru al 100% de *tareas*. Esto la lleva al nivel de
-*software top-tier*: fiable, rápida, segura y adorable incluso cuando todo sale mal.
+Lo anterior lleva a Kaoru al 100% de _tareas_. Esto la lleva al nivel de
+_software top-tier_: fiable, rápida, segura y adorable incluso cuando todo sale mal.
 
 ### 7.1 Orquestación y planificación (cerebro ejecutivo)
 
 - [ ] **T1. Planificador multi-paso con replanificación.** Hoy `AgentLoop` (máx
       25–40 iteraciones) improvisa paso a paso. Un plan explícito
-      (`plan.steps[]` con dependencias, criterios de éxito y plan B por paso)
-      + replan ante fallo verificado evita martillar el mismo error y permite
+      (`plan.steps[]` con dependencias, criterios de éxito y plan B por paso) + replan ante fallo verificado evita martillar el mismo error y permite
       "abre Amazon, compara tomo 18 en 3 tiendas y avísame del más barato".
 - [ ] **T2. Descomposición automática.** Detectar tareas compuestas
       ("abre X **y** haz Y **y** avísame") y partirlas en subtareas con su propia
@@ -363,6 +406,6 @@ Lo anterior lleva a Kaoru al 100% de *tareas*. Esto la lleva al nivel de
 
 ---
 
-*Documento vivo: A1/A4 hechos con tests verdes (`test_website_resolver.js`,
+_Documento vivo: A1/A4 hechos con tests verdes (`test_website_resolver.js`,
 `test_task_detector_desktop.js`). Siguiente valor máximo: patrón web genérico
-(§2) + skill `shop-lookup` (C3) para cerrar el ejemplo del manga de punta a punta.* 💫
+(§2) + skill `shop-lookup` (C3) para cerrar el ejemplo del manga de punta a punta._ 💫

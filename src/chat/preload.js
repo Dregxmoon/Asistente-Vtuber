@@ -116,6 +116,7 @@ const INVOKE_ALLOWLIST = new Set([
   'chat-list-gestures',
   'chat-tts-stream',
   'chat-asr-stream',
+  'chat-detect-language',
   'chat-llm-state',
   'chat-context-status',
   'chat-llm-configure',
@@ -218,6 +219,11 @@ const ttsStream = (args = {}) => ipcRenderer.invoke('chat-tts-stream', args);
 // ASR: transcribe un WAV (PCM 16k mono) en main con Vosk y devuelve el texto.
 const asrStream = (args = {}) => ipcRenderer.invoke('chat-asr-stream', args);
 
+// Idioma: detecta en main (LanguageProfile, misma fuente que el pipeline) el
+// idioma de un texto y devuelve { code, ttsVoice, asrLang, locale }. La voz y
+// el ASR mutan según el usuario, sin listas por idioma en el renderer.
+const detectLanguage = (args = {}) => ipcRenderer.invoke('chat-detect-language', args);
+
 contextBridge.exposeInMainWorld('assistant', {
   // IPC con whitelist de canales: el renderer (o un script comprometido) no
   // puede invocar canales internos fuera de la allowlist local.
@@ -265,6 +271,7 @@ contextBridge.exposeInMainWorld('assistant', {
   // preview de HTML crudo). Este preload ya no lo expone.
   ttsStream,
   asrStream,
+  detectLanguage,
 
   // Módulos core SOLO como bridge acotado (funciones concretas por dominio),
   // nunca los módulos completos. Los métodos que la página usa en SÍNCRONO

@@ -296,7 +296,10 @@ const IDENTITY_QUESTION_PATTERNS = [
   /descr[ií]bete|pres[eé]ntate/i,
   /cu[eé]ntame\s+(de|sobre)\s+ti/i,
   /qu[eé]\s+tipo\s+de\s+(asistente|ia|inteligencia|sistema)\s+eres/i,
-  /est[aá]s?\s+(ah[ií]|listo|disponible|conectado)/i,
+  // Solo segunda persona ("¿estás disponible?"): con "s?" opcional, la tercera
+  // persona ("estÁ disponible el manga") colaba como saludo/identidad y una
+  // tarea shop-lookup caía a isTask=false. "estás/estas" exigen la ese final.
+  /est[aá]s\s+(ah[ií]|listo|disponible|conectado)/i,
   /(eres|ser[aá]s)\s+como\s+/i,
 ];
 
@@ -449,6 +452,38 @@ function _detectDomainAndGoal(text) {
   };
 }
 
+// P0-2 — marcadores de dominio web (señales genéricas, NO destinos).
+// El patrón genérico A4 clasifica "abre <cualquier cosa>" como system; cuando
+// el texto además habla de web (tienda, precio, disponibilidad, URL, ...), el
+// dominio correcto es web aunque el sitio no esté en ninguna lista. Esto NO es
+// una lista de sitios: "amazon" a secas sigue siendo system (el resolver lo
+// abre igual); solo el contexto web reclasifica.
+const WEB_HINTS_RE =
+  /\b(tienda|p[aá]gina\s+web|sitio\s+web|navegador|url\b|en\s+l[íi]nea|online)\b|https?:|www\.|\.(com|es|mx|org|net|io)\b|\b(precio|disponible|disponibilidad|carrito|comprar|compra|manga|tomo|oferta|env[íi]o|stock)\b/i;
+
+/**
+ * Reclasifica system→web cuando el texto trae contexto web y ningún otro
+ * dominio ganó con más peso. Determinista y acotada: solo actúa sobre el
+ * patrón genérico A4, nunca sobre alias fijos ya resueltos.
+ * @param {{domain: {id: string}|null, matchedDomains: Array<{domain: {id: string}, weight: number}>}} result
+ * @param {string} text
+ * @returns {boolean} true si reclasificó
+ */
+function _reclassifyWebHint(result, text) {
+  if (!result || !result.domain || result.domain.id !== 'system') return false;
+  if (!WEB_HINTS_RE.test(text)) return false;
+  const systemEntry = (result.matchedDomains || []).find(
+    (entry) => entry.domain && entry.domain.id === 'system'
+  );
+  const systemWeight = systemEntry ? systemEntry.weight : 0;
+  const stronger = (result.matchedDomains || []).some(
+    (entry) => entry.domain && entry.domain.id !== 'system' && entry.weight > systemWeight
+  );
+  if (stronger) return false;
+  result.domain = DOMAINS.WEB;
+  return true;
+}
+
 function detect(text) {
   if (!text || typeof text !== 'string' || text.trim().length === 0) {
     return { isTask: false, confidence: 'none', domain: null, goal: null, specificity: null };
@@ -540,6 +575,8 @@ function detect(text) {
     };
   }
 
+  const reclassified = _reclassifyWebHint(result, text);
+
   const specificity =
     result.matchedDomains.length > 2
       ? 'specific'
@@ -553,7 +590,10 @@ function detect(text) {
     domain: result.domain,
     goal: result.goal,
     specificity,
-    _debug: { matchedDomains: result.matchedDomains },
+    _debug: {
+      matchedDomains: result.matchedDomains,
+      ...(reclassified ? { reclassified: 'system→web (marcadores web)' } : {}),
+    },
   };
 }
 
@@ -561,4 +601,5 @@ module.exports = {
   detect,
   DOMAINS,
   TASK_PATTERNS,
+  WEB_HINTS_RE,
 };

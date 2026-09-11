@@ -87,10 +87,22 @@ async function stopMicRecording() {
   }
   const wav = encodeWavPcm(merged, ctx ? ctx.sampleRate : 16000);
   setAgentState('working', 'Transcribiendo...');
+  // El modelo ASR sigue al usuario: preferencia guardada → idioma del
+  // navegador → español. Sin listas por idioma: el código del modelo lo
+  // resuelve AsrClient en main (models/vosk-<lang>/ con fallback).
+  let asrLang = 'es';
+  try {
+    asrLang =
+      localStorage.getItem('kaoru-voice-lang') ||
+      String(navigator.language || 'es')
+        .split('-')[0]
+        .toLowerCase() ||
+      'es';
+  } catch {}
   try {
     const pythonBin = await getPythonBin();
     if (!pythonBin) throw new Error('No se encontró Python — STT no disponible');
-    return await assistant.asrStream({ pythonBin, wav: new Uint8Array(wav), lang: 'es' });
+    return await assistant.asrStream({ pythonBin, wav: new Uint8Array(wav), lang: asrLang });
   } finally {
     if (getAgentState() === 'working') setAgentState('idle', 'Listo');
   }

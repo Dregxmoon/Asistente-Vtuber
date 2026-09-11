@@ -128,10 +128,21 @@ async function speak(text) {
   const spokenText = cleanForTTS(text);
   if (chatGestureEngine && chatGestureEngine.enabled)
     chatGestureEngine.setEmotion(chatDetectEmotion(spokenText));
+  // La voz muta según el idioma del texto (inferido en main, misma fuente que
+  // el pipeline): sin listas por idioma aquí. Si falla, el handler usa ja-JP.
+  let voice;
+  let speechLang = 'ja-JP';
+  try {
+    const detected = await assistant.detectLanguage({ text: spokenText });
+    if (detected && detected.ttsVoice) voice = detected.ttsVoice;
+    if (detected && detected.locale) speechLang = detected.locale;
+  } catch {}
   try {
     const pythonBin = await getPythonBin();
     if (!pythonBin) throw new Error('No se encontró un intérprete de Python — TTS no disponible');
-    const u8 = await assistant.ttsStream({ pythonBin, text: spokenText });
+    const u8 = await assistant.ttsStream(
+      voice ? { pythonBin, text: spokenText, voice } : { pythonBin, text: spokenText }
+    );
     if (generation !== _speechGeneration) return;
     // NO usar WebAudio decodeAudioData: en Chromium 28 el decoder nativo
     // (AsyncAudioDecoder → AudioBuffer::AudioBuffer(AudioBus*)) crashea con
@@ -156,7 +167,7 @@ async function speak(text) {
   } catch {
     if (generation !== _speechGeneration) return;
     const utt = new SpeechSynthesisUtterance(spokenText);
-    utt.lang = 'ja-JP';
+    utt.lang = speechLang;
     utt.pitch = 1.3;
     utt.rate = 1.05;
     await new Promise((r) => {
