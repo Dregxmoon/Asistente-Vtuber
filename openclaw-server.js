@@ -1233,6 +1233,7 @@ function respond(res, code, data) {
 }
 
 async function handleTool(body) {
+  await _sandboxInitPromise;
   const tool = body.tool;
   const input = body.input || {};
 

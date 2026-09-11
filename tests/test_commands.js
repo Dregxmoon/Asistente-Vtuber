@@ -1,5 +1,7 @@
 'use strict';
 
+const path = require('path');
+
 const C = {
   green: (s) => `\x1b[32m${s}\x1b[0m`,
   red: (s) => `\x1b[31m${s}\x1b[0m`,
@@ -237,7 +239,7 @@ function testExport() {
 
   return execute('/export', ctx).then((r) => {
     assert(!r.error, 'export sin error');
-    assert(r.result.includes('exports/'), 'export menciona ruta');
+    assert(r.result.includes(`exports${path.sep}`), 'export menciona ruta');
     assert(r.result.includes('.md'), 'export es .md');
     assert(!r.result.includes('error'), 'export no contiene error');
   });

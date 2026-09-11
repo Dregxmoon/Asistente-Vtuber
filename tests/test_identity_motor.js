@@ -39,6 +39,8 @@ function assertIncludes(text, substring, label) {
 const path = require('path');
 const fs = require('fs');
 const FIXTURES = path.join(__dirname, 'fixtures', 'identity');
+const readSnapshot = (name) =>
+  fs.readFileSync(path.join(FIXTURES, name), 'utf-8').replace(/\r\n/g, '\n');
 
 const { getIdentity } = require('../core/identity/IdentityStore.js');
 const {
@@ -59,7 +61,7 @@ const {
 // ── Test 1: Fase A — builder completo byte a byte ─────────────────────────────
 function testFullSnapshotByteIdentical() {
   console.log(C.bold('\n── Fase A: serializeIdentity byte a byte ───────────────'));
-  const snapshot = fs.readFileSync(path.join(FIXTURES, 'full.txt'), 'utf-8');
+  const snapshot = readSnapshot('full.txt');
   const out = serializeIdentity(/** @type {any} */ (getIdentity()));
 
   assert(
@@ -81,7 +83,7 @@ function testFullSnapshotByteIdentical() {
 // ── Test 2: Fase A — builder minimal byte a byte ──────────────────────────────
 function testMinimalSnapshotByteIdentical() {
   console.log(C.bold('\n── Fase A: serializeMinimal byte a byte ────────────────'));
-  const snapshot = fs.readFileSync(path.join(FIXTURES, 'minimal.txt'), 'utf-8');
+  const snapshot = readSnapshot('minimal.txt');
   const out = serializeMinimal(/** @type {any} */ (getIdentity()));
 
   assert(
@@ -97,7 +99,7 @@ function testMinimalSnapshotByteIdentical() {
 function testGroqSerializerUsesSharedBuilder() {
   console.log(C.bold('\n── Fase A: GroqSerializer usa IdentitySerializer ───────'));
   _debug_resetMoodEngine();
-  const snapshot = fs.readFileSync(path.join(FIXTURES, 'full.txt'), 'utf-8');
+  const snapshot = readSnapshot('full.txt');
   const { GroqSerializer } = require('../core/grounding/serializers/GroqSerializer.js');
   const serializer = new GroqSerializer();
 
@@ -115,7 +117,7 @@ function testGroqSerializerUsesSharedBuilder() {
 // ── Test 4: Fase A — GroundingMinimo consume el builder único ────────────────
 function testGroundingMinimoUsesSharedBuilder() {
   console.log(C.bold('\n── Fase A: GroundingMinimo usa IdentitySerializer ──────'));
-  const snapshot = fs.readFileSync(path.join(FIXTURES, 'minimal.txt'), 'utf-8');
+  const snapshot = readSnapshot('minimal.txt');
   const GM = require('../core/llm/GroundingMinimo.js');
   const ctx = GM.buildContext([{ role: 'user', content: 'hola' }]);
   const firstSection = ctx.systemPrompt.split('\n# CONTEXTO ACTUAL')[0];

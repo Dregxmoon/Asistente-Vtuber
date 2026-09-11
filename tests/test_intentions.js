@@ -48,11 +48,12 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 function testStore() {
   console.log(C.bold('\nTest 1: IntentionsStore — stack de intenciones activas'));
   const { graph, dir } = makeGraph();
+  const workspace = path.resolve('/projects/kaoru-agent');
 
   const a = graph.createIntention({
     sessionId: 's1',
     goal: 'Refactorizar el modulo auth',
-    workspace: '/projects/kaoru-agent',
+    workspace,
     steps: [{ description: 'leer auth.js' }],
   });
   const b = graph.createIntention({
@@ -74,7 +75,7 @@ function testStore() {
   );
   const scoped = graph.listActiveIntentions({
     limit: 10,
-    workspace: '/projects/kaoru-agent',
+    workspace,
   });
   assert(scoped.length === 1 && scoped[0].id === a, 'el stack se puede aislar por workspace');
 
@@ -94,7 +95,7 @@ function testStore() {
   assert(reloaded.length === 2, 'las intenciones sobreviven al reinicio');
   assert(reloaded[0].goal === 'Escribir tests de intenciones', 'el orden del stack persiste');
   assert(
-    reloaded.find((item) => item.id === a)?.workspace === '/projects/kaoru-agent',
+    reloaded.find((item) => item.id === a)?.workspace === workspace,
     'el alcance de workspace persiste con la intención'
   );
 

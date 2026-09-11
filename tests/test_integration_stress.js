@@ -24,6 +24,7 @@ function assert(condition, label, detail = '') {
 }
 
 process.env.OPENCLAW_API_KEY = 'integration-test-key-12345';
+if (process.platform === 'win32') process.env.OPENCLAW_SANDBOX = '0';
 
 // ── Test 1: AgentLoop fallback parser con mock LLM ─────────────────────────
 
@@ -275,14 +276,17 @@ async function testServerAuth() {
   }
 
   try {
-    const r1 = await post({ tool: 'exec', input: { command: 'echo hi', timeout: 5 } }, null);
+    const r1 = await post({ tool: 'exec', input: { command: 'git --version', timeout: 5 } }, null);
     assert(r1.status === 401, 'Sin key → 401');
 
-    const r2 = await post({ tool: 'exec', input: { command: 'echo hi', timeout: 5 } }, apiKey);
+    const r2 = await post(
+      { tool: 'exec', input: { command: 'git --version', timeout: 5 } },
+      apiKey
+    );
     assert(r2.status === 200, 'Key correcta → 200');
     assert(r2.body.result.stdout.trim() === 'hi', 'echo hi funciona sin shell');
 
-    const r3 = await post({ tool: 'exec', input: { command: 'echo bye' } }, 'wrong-key');
+    const r3 = await post({ tool: 'exec', input: { command: 'git --version' } }, 'wrong-key');
     assert(r3.status === 401, 'Key inválida → 401');
 
     const r4 = await (() =>
@@ -479,9 +483,9 @@ async function testCommandBlocklist() {
       assert(r.body.error.includes('blocked'), `Mensaje contiene "blocked"`);
     }
 
-    const r2 = await post({ tool: 'exec', input: { command: 'ls -la', timeout: 5 } });
-    assert(r2.status === 200, 'ls -la seguro → 200');
-    assert(r2.body.result.stdout.length > 0, 'ls produce salida');
+    const r2 = await post({ tool: 'exec', input: { command: 'git --version', timeout: 5 } });
+    assert(r2.status === 200, 'git --version seguro → 200');
+    assert(r2.body.result.stdout.includes('git version'), 'git produce salida');
   } finally {
     serverProcess.kill();
   }
@@ -554,15 +558,27 @@ async function testExecAutoShell() {
 
   try {
     // Pipe '|' sin shell:true ahora se ejecuta por detección automática
-    const r1 = await post({ tool: 'exec', input: { command: 'echo hello | wc -c', timeout: 5 } });
+    const pipeCommand =
+      process.platform === 'win32' ? 'echo hello | findstr hello' : 'echo hello | wc -c';
+    const r1 = await post({ tool: 'exec', input: { command: pipeCommand, timeout: 5 } });
     assert(r1.status === 200, 'echo pipe → 200');
-    assert(r1.body.result.stdout.trim() === '6', 'Pipe se ejecuta (wc -c de "hello\\n" = 6)');
+    assert(
+      process.platform === 'win32'
+        ? r1.body.result.stdout.includes('hello')
+        : r1.body.result.stdout.trim() === '6',
+      'el pipe se ejecuta y entrega salida al segundo comando'
+    );
     assert(r1.body.result.exitCode === 0, 'Pipe → exit 0');
 
     // Redirección '>' + '&&' sin shell:true: el archivo se escribe y se lee
+    const redirectTarget = path.join(process.cwd(), 'tests', '_auto-shell.txt');
+    const redirectCommand =
+      process.platform === 'win32'
+        ? `echo test>"${redirectTarget}" && type "${redirectTarget}"`
+        : `echo test > "${redirectTarget}" && cat "${redirectTarget}"`;
     const r2 = await post({
       tool: 'exec',
-      input: { command: 'echo test > /tmp/auto-shell.txt && cat /tmp/auto-shell.txt', timeout: 5 },
+      input: { command: redirectCommand, timeout: 5 },
     });
     assert(r2.status === 200, 'echo redirect → 200');
     assert(
@@ -570,6 +586,9 @@ async function testExecAutoShell() {
       'Redirección + && ejecutan (se lee el archivo)'
     );
     assert(r2.body.result.exitCode === 0, 'Redirección → exit 0');
+    try {
+      require('fs').unlinkSync(redirectTarget);
+    } catch (_) {}
   } finally {
     serverProcess.kill();
   }

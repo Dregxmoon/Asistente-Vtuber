@@ -230,7 +230,18 @@ namespace KaoruSandbox
             Sid = sid;
             GrantWorkspaceAccess(workspace, new SecurityIdentifier(sid));
             foreach (string readRoot in readRoots)
-                GrantReadAccess(readRoot, new SecurityIdentifier(sid));
+            {
+                try
+                {
+                    GrantReadAccess(readRoot, new SecurityIdentifier(sid));
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // Algunas entradas opcionales de PATH (por ejemplo las de
+                    // WindowsApps) no permiten modificar su ACL. Las raíces
+                    // realmente necesarias quedan cubiertas por el self-test.
+                }
+            }
         }
 
         private static void GrantReadAccess(string directory, SecurityIdentifier sid)

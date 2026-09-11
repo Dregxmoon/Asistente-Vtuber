@@ -188,6 +188,7 @@ function spawnCodex(command, args, prompt, cwd, outputPath, opts) {
  * @param {{signal?: AbortSignal, onToken?: (token: string) => void, timeoutMs?: number}} opts
  */
 async function callCodexCli(messages, systemPrompt, mode, tools = [], opts = {}) {
+  if (opts.signal?.aborted) throw abortError();
   const command = findCodexCommand();
   if (!command) throw new Error('Codex CLI no está instalado o no aparece en PATH');
   const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'kaoru-codex-'));

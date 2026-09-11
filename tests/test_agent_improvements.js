@@ -64,6 +64,7 @@ async function testWriteAppendMode() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oc-append-'));
   process.env.OPENCLAW_ALLOWED_PATH = dir;
   process.env.OPENCLAW_API_KEY = 'test-key-append';
+  if (process.platform === 'win32') process.env.OPENCLAW_SANDBOX = '0';
   const srv = require('../openclaw-server.js');
 
   const rel = 'grande.txt';

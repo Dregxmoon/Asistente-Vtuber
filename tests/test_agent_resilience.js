@@ -26,11 +26,13 @@ function assert(condition, label, detail = '') {
 }
 
 async function testMutationJournal() {
-  const cwd = '/tmp/project';
+  const cwd = path.join(os.tmpdir(), 'project');
+  const output = path.join(cwd, 'src', 'out.js');
+  const child = path.join(cwd, 'child.js');
   const action = { tool: 'exec', params: { command: 'printf x > src/out.js' } };
   assert(isMutatingAction(action), 'exec con redirección cuenta como mutación');
   assert(
-    extractMutationPaths(action, cwd)[0] === '/tmp/project/src/out.js',
+    extractMutationPaths(action, cwd)[0] === output,
     'extrae la ruta de una redirección antes de ejecutar'
   );
   assert(
@@ -39,9 +41,9 @@ async function testMutationJournal() {
   );
   const journal = new MutationJournal({ cwd });
   journal.record({ ok: true, tool: 'exec' }, action);
-  journal.merge({ files: ['/tmp/project/child.js'], entries: [{ tool: 'write' }] });
+  journal.merge({ files: [child], entries: [{ tool: 'write' }] });
   assert(journal.toJSON().count === 2, 'fusiona las mutaciones de un subagente');
-  assert(journal.files.has('/tmp/project/child.js'), 'conserva archivos del subagente');
+  assert(journal.files.has(child), 'conserva archivos del subagente');
 }
 
 async function testVerificationMatrix() {

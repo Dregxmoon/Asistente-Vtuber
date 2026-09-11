@@ -117,7 +117,8 @@ class WorkspaceCheckpoint {
     if (this._captured) return;
     this._captured = true;
     try {
-      this._repoRoot = await this.git.getRepoRoot(this.cwd);
+      const repoRoot = await this.git.getRepoRoot(this.cwd);
+      this._repoRoot = repoRoot ? path.resolve(repoRoot) : null;
       if (!this._repoRoot) {
         // Sin repo git: revert por snapshots de los paths tocados. Siempre es
         // viable si el agente muta a través del hook (que es lo que garantiza

@@ -95,10 +95,11 @@ class PermissionManager {
     if (!VALID_ACTIONS.has(action)) {
       throw new Error(`Acción de permiso inválida: ${action}`);
     }
-    const id = `${tool}:${rulePath || ''}`;
+    const normalizedPath = rulePath ? path.resolve(rulePath) : '';
+    const id = `${tool}:${normalizedPath}`;
     const idx = this._rules.findIndex((r) => r.id === id);
     const previous = idx >= 0 ? this._rules[idx] : null;
-    const rule = /** @type {PermissionRule} */ ({ id, tool, path: rulePath || '', action });
+    const rule = /** @type {PermissionRule} */ ({ id, tool, path: normalizedPath, action });
     if (idx >= 0) this._rules[idx] = rule;
     else this._rules.push(rule);
     this._save();
@@ -117,7 +118,7 @@ class PermissionManager {
    * @returns {boolean} true si se eliminó una regla
    */
   removeRule({ tool = '*', path: rulePath = '' }) {
-    const id = `${tool}:${rulePath || ''}`;
+    const id = `${tool}:${rulePath ? path.resolve(rulePath) : ''}`;
     const before = this._rules.length;
     this._rules = this._rules.filter((r) => r.id !== id);
     if (this._rules.length !== before) {
@@ -143,13 +144,19 @@ class PermissionManager {
    */
   check({ tool, path: targetPath = '', defaultAction = this._defaultAction }) {
     const t = tool || '';
-    const tp = targetPath ? path.resolve(targetPath) : '';
+    /** @param {string} value */
+    const normalize = (value) => {
+      const resolved = path.resolve(value);
+      return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+    };
+    const tp = targetPath ? normalize(targetPath) : '';
 
     /** @param {string} rulePath */
     const matches = (rulePath) => {
       if (!rulePath) return true; // regla global
       if (!tp) return false; // no hay path objetivo, regla de path no aplica
-      return tp === rulePath || tp.startsWith(rulePath.endsWith('/') ? rulePath : rulePath + '/');
+      const normalizedRule = normalize(rulePath);
+      return tp === normalizedRule || tp.startsWith(`${normalizedRule}${path.sep}`);
     };
 
     const candidates = this._rules.filter(

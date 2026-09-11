@@ -3,6 +3,9 @@
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { _LSPInstance, _toFileUri } = require('../core/lsp/LSPManager.js');
+
+const TEST_WORKSPACE = path.join(os.tmpdir(), 'lsp-tests-ws');
 
 const C = {
   green: (s) => `\x1b[32m${s}\x1b[0m`,
@@ -29,11 +32,10 @@ function assert(condition, label, detail = '') {
 
 // Instancia LSP real (JSON-RPC) con _send capturado en vez de un proceso real.
 function createInstance(serverConfig) {
-  const { _LSPInstance } = require('../core/lsp/LSPManager.js');
   const inst = new _LSPInstance(serverConfig, serverConfig.languageId || 'typescript');
   const sent = [];
   inst._send = (msg) => sent.push(msg);
-  inst._workspacePath = '/tmp/lsp-tests-ws';
+  inst._workspacePath = TEST_WORKSPACE;
   return { inst, sent };
 }
 
@@ -87,7 +89,7 @@ function testWorkspaceFolders() {
   const resp = sent[0];
   assert(resp.id === 2, 'Respuesta con el id del request');
   assert(
-    Array.isArray(resp.result) && resp.result[0]?.uri === 'file:///tmp/lsp-tests-ws',
+    Array.isArray(resp.result) && resp.result[0]?.uri === _toFileUri(TEST_WORKSPACE),
     'Devuelve el workspace folder con el root',
     JSON.stringify(resp.result)
   );
@@ -133,8 +135,8 @@ async function testWaitForDiagnostics() {
   console.log(C.bold('\n── Test 4: waitForDiagnostics espera el push fresco con debounce ────'));
 
   const { inst } = createInstance(TS_CONFIG);
-  const filePath = '/tmp/lsp-tests-ws/main.ts';
-  const uri = `file://${filePath}`;
+  const filePath = path.join(TEST_WORKSPACE, 'main.ts');
+  const uri = _toFileUri(filePath);
 
   // Push inicial (viejo): no debería resolver el wait todavía (debounce aplica
   // solo a pushes recibidos durante el wait).
@@ -173,8 +175,8 @@ async function testWaitForDiagnosticsTimeout() {
   console.log(C.bold('\n── Test 5: waitForDiagnostics timeout → cache sin colgarse ────────'));
 
   const { inst } = createInstance(TS_CONFIG);
-  const filePath = '/tmp/lsp-tests-ws/other.ts';
-  const uri = `file://${filePath}`;
+  const filePath = path.join(TEST_WORKSPACE, 'other.ts');
+  const uri = _toFileUri(filePath);
 
   // Cache previa (p.ej. un push de antes)
   inst._diagnostics.set(uri, [
@@ -199,8 +201,8 @@ async function testPublishDiagnosticsCachesAndEmits() {
   console.log(C.bold('\n── Test 6: publishDiagnostics actualiza cache + emite evento ──────'));
 
   const { inst } = createInstance(TS_CONFIG);
-  const filePath = '/tmp/lsp-tests-ws/emit.ts';
-  const uri = `file://${filePath}`;
+  const filePath = path.join(TEST_WORKSPACE, 'emit.ts');
+  const uri = _toFileUri(filePath);
 
   const events = [];
   inst._emitter.on('diagnostics', (u, d) => events.push({ u, d }));
@@ -228,13 +230,13 @@ async function testHover() {
   console.log(C.bold('\n── Test 7: hover → request + resultado plano (LSP.3) ─────────────'));
 
   const { inst, sent } = createInstance(TS_CONFIG);
-  const filePath = '/tmp/lsp-tests-ws/main.ts';
+  const filePath = path.join(TEST_WORKSPACE, 'main.ts');
 
   const hoverPromise = inst.hover(filePath, 2, 3);
   await new Promise((r) => setImmediate(r)); // dejar que hover llegue a _request
   const req = sent.find((m) => m.method === 'textDocument/hover');
   assert(req, 'Envió textDocument/hover', `sent: ${JSON.stringify(sent.map((m) => m.method))}`);
-  assert(req.params.textDocument.uri === `file://${filePath}`, 'uri correcta');
+  assert(req.params.textDocument.uri === _toFileUri(filePath), 'uri correcta');
   assert(
     req.params.position.line === 2 && req.params.position.character === 3,
     'posición correcta'
@@ -260,7 +262,7 @@ async function testRename() {
   console.log(C.bold('\n── Test 8: rename → workspace edits sin aplicar (LSP.3) ───────────'));
 
   const { inst, sent } = createInstance(TS_CONFIG);
-  const filePath = '/tmp/lsp-tests-ws/main.ts';
+  const filePath = path.join(TEST_WORKSPACE, 'main.ts');
 
   let threw = null;
   try {
@@ -282,7 +284,7 @@ async function testRename() {
     id: req.id,
     result: {
       changes: {
-        [`file://${filePath}`]: [
+        [_toFileUri(filePath)]: [
           {
             range: { start: { line: 4, character: 5 }, end: { line: 4, character: 18 } },
             newText: 'nuevoNombre',
@@ -308,8 +310,8 @@ async function testCodeActions() {
   console.log(C.bold('\n── Test 9: codeActions → request + normalización (LSP.3) ─────────'));
 
   const { inst, sent } = createInstance(TS_CONFIG);
-  const filePath = '/tmp/lsp-tests-ws/main.ts';
-  inst._diagnostics.set(`file://${filePath}`, [
+  const filePath = path.join(TEST_WORKSPACE, 'main.ts');
+  inst._diagnostics.set(_toFileUri(filePath), [
     { severity: 1, message: 'fixable', range: { start: { line: 1, character: 0 } } },
   ]);
 
@@ -359,7 +361,7 @@ async function testRecoveryRestart() {
   };
   const inst = new _LSPInstance(config, 'typescript');
   inst._send = () => {};
-  inst._workspacePath = '/tmp/lsp-tests-ws';
+  inst._workspacePath = TEST_WORKSPACE;
 
   let startCalls = 0;
   let reopenCalls = 0;
@@ -373,7 +375,7 @@ async function testRecoveryRestart() {
   inst._reopenAfterRestart = async () => {
     reopenCalls++;
   };
-  inst._openedDocs.set('file:///tmp/lsp-tests-ws/a.ts', 1);
+  inst._openedDocs.set(_toFileUri(path.join(TEST_WORKSPACE, 'a.ts')), 1);
 
   // Crash 1 → programa reinicio (intento 1)
   inst._handleExit(1);
@@ -427,7 +429,7 @@ async function testRecoveryStableReset() {
   };
   const inst = new _LSPInstance(config, 'typescript');
   inst._send = () => {};
-  inst._workspacePath = '/tmp/lsp-tests-ws';
+  inst._workspacePath = TEST_WORKSPACE;
 
   let startCalls = 0;
   inst.start = async () => {
@@ -470,7 +472,7 @@ async function testRecoveryStopCancels() {
   };
   const inst = new _LSPInstance(config, 'typescript');
   inst._send = () => {};
-  inst._workspacePath = '/tmp/lsp-tests-ws';
+  inst._workspacePath = TEST_WORKSPACE;
 
   let startCalls = 0;
   inst.start = async () => {
@@ -566,7 +568,7 @@ function testUtf8Framing() {
 async function testDocumentChangesRename() {
   console.log(C.bold('\n── Test 15: rename acepta documentChanges ──────────────────────'));
   const { inst, sent } = createInstance(TS_CONFIG);
-  const filePath = '/tmp/lsp-tests-ws/main.ts';
+  const filePath = path.join(TEST_WORKSPACE, 'main.ts');
   const promise = inst.rename(filePath, 0, 1, 'renamed');
   await new Promise((resolve) => setImmediate(resolve));
   const req = sent.find((message) => message.method === 'textDocument/rename');
@@ -576,7 +578,7 @@ async function testDocumentChangesRename() {
     result: {
       documentChanges: [
         {
-          textDocument: { uri: `file://${filePath}`, version: 7 },
+          textDocument: { uri: _toFileUri(filePath), version: 7 },
           edits: [
             {
               range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
@@ -594,7 +596,7 @@ async function testDocumentChangesRename() {
 async function testAdvancedSemanticRequests() {
   console.log(C.bold('\n── Test 16: requests semánticos avanzados ─────────────────────'));
   const { inst, sent } = createInstance(TS_CONFIG);
-  const filePath = '/tmp/lsp-tests-ws/main.ts';
+  const filePath = path.join(TEST_WORKSPACE, 'main.ts');
 
   const implementation = inst.goToImplementation(filePath, 1, 2);
   await new Promise((resolve) => setImmediate(resolve));
@@ -603,7 +605,7 @@ async function testAdvancedSemanticRequests() {
   inst._handleMessage({
     jsonrpc: '2.0',
     id: req.id,
-    result: [{ uri: `file://${filePath}`, range: {} }],
+    result: [{ uri: _toFileUri(filePath), range: {} }],
   });
   assert((await implementation).length === 1, 'normaliza implementaciones');
 
@@ -629,7 +631,7 @@ async function testAdvancedSemanticRequests() {
   inst._handleMessage({
     jsonrpc: '2.0',
     id: req.id,
-    result: [{ name: 'fn', uri: `file://${filePath}` }],
+    result: [{ name: 'fn', uri: _toFileUri(filePath) }],
   });
   await new Promise((resolve) => setImmediate(resolve));
   req = sent.at(-1);

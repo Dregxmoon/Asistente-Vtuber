@@ -1016,7 +1016,7 @@ async function testMCPCallClassicRouting() {
   const mockLLM = createMockLLM([
     `Voy a listar el directorio del proyecto.
 \`\`\`action
-ACCIÓN: mcp_call | SERVIDOR: filesystem | HERRAMIENTA: list_directory | PARAMS: {"path": "${projectCwd}"}
+ACCIÓN: mcp_call | SERVIDOR: filesystem | HERRAMIENTA: list_directory | PARAMS: ${JSON.stringify({ path: projectCwd })}
 \`\`\``,
     'Listado listo.',
   ]);

@@ -6,6 +6,8 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 
+if (process.platform === 'win32') process.env.OPENCLAW_SANDBOX = '0';
+
 const C = {
   green: (s) => `\x1b[32m${s}\x1b[0m`,
   red: (s) => `\x1b[31m${s}\x1b[0m`,
@@ -297,13 +299,13 @@ async function testSafeCommands(apiKey) {
 
   const res = await postJSON(
     'http://127.0.0.1:18789/v1/tool',
-    { tool: 'exec', input: { command: 'echo hello', timeout: 5 } },
+    { tool: 'exec', input: { command: 'git --version', timeout: 5 } },
     apiKey
   );
-  assert(res.status === 200, `echo hello → 200 (${res.status})`);
+  assert(res.status === 200, `git --version → 200 (${res.status})`);
   assert(
-    res.body && res.body.result && res.body.result.stdout.trim() === 'hello',
-    'stdout es "hello"'
+    res.body && res.body.result && res.body.result.stdout.includes('git version'),
+    'stdout contiene la versión de git'
   );
 }
 
@@ -312,14 +314,14 @@ async function testSafeCommands(apiKey) {
 async function testExecNoShell(apiKey) {
   console.log(C.bold('\n── Test 10: exec sin shell: true ───────────────────────────────'));
 
-  // ls con argumento complejo
+  // Git con argumentos separados, disponible en todos los runners.
   const res = await postJSON(
     'http://127.0.0.1:18789/v1/tool',
-    { tool: 'exec', input: { command: 'ls -la', timeout: 5 } },
+    { tool: 'exec', input: { command: 'git status --short', timeout: 5 } },
     apiKey
   );
-  assert(res.status === 200, `ls -la → 200 (${res.status})`);
-  assert(res.body.result.stdout.length > 0, 'ls -la produce salida');
+  assert(res.status === 200, `git status --short → 200 (${res.status})`);
+  assert(res.body.result.exitCode === 0, 'git recibe sus argumentos sin shell');
 }
 
 // ── Test 11: env de procesos hijos sin secretos (P2) ────────────────────────

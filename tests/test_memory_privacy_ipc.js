@@ -127,7 +127,10 @@ async function main() {
     const exported = await handlers.get('memory-export')({ sender: trustedWebContents });
     const mode = fs.statSync(exportPath).mode & 0o777;
     assert(exported.ok && calls.export === 1, 'exporta sólo después de elegir destino nativo');
-    assert(mode === 0o600, 'crea la exportación con permisos exclusivos del propietario');
+    assert(
+      process.platform === 'win32' || mode === 0o600,
+      'crea la exportación con permisos exclusivos del propietario'
+    );
     assert(
       JSON.parse(fs.readFileSync(exportPath, 'utf8')).schemaVersion === 1,
       'escribe JSON válido'

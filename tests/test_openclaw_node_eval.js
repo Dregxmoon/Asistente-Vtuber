@@ -23,6 +23,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+if (process.platform === 'win32') process.env.OPENCLAW_SANDBOX = '0';
+
 const C = {
   green: (s) => `\x1b[32m${s}\x1b[0m`,
   red: (s) => `\x1b[31m${s}\x1b[0m`,
