@@ -101,18 +101,19 @@ function register(ctx) {
     };
   });
 
-  // Fase Q: /model id <modelo> [fast|smart] persiste el modelo elegido por
-  // proveedor+modo en config.json (llm.providers[id].model[modo]) sin tocar keys.
-  ipcMain.handle('set-llm-model', (e, { provider, mode, model, reasoningEffort }) => {
-    if (!provider || !model || !['fast', 'smart'].includes(mode)) return false;
+  // Fase Q: persiste el modelo elegido por proveedor en config.json
+  // (llm.providers[id].model, UN solo modelo) sin tocar keys.
+  ipcMain.handle('set-llm-model', (e, { provider, model, reasoningEffort }) => {
+    if (!provider || !model) return false;
     if (reasoningEffort != null && !['low', 'medium', 'high'].includes(reasoningEffort)) {
       return false;
     }
     const currentCfg = loadConfig();
     const providers = { ...(currentCfg.llm?.providers || {}) };
+    // UN solo modelo por proveedor (migra formato legacy {fast,smart}).
     providers[provider] = {
       ...(providers[provider] || {}),
-      model: { ...(providers[provider]?.model || {}), [mode]: model },
+      model,
       reasoningEffort: {
         ...(providers[provider]?.reasoningEffort || {}),
         ...(reasoningEffort ? { [model]: reasoningEffort } : {}),
@@ -129,7 +130,7 @@ function register(ctx) {
       })
     );
     ctx.Core.reloadLLMConfig();
-    logger.info('config-handlers', `[config] modelo ${provider}/${mode} → ${model}`);
+    logger.info('config-handlers', `[config] modelo ${provider} → ${model}`);
     return true;
   });
 
@@ -219,14 +220,10 @@ function register(ctx) {
       const newProviders = { ...(currentCfg.llm?.providers || {}) };
       const meta = LLMProvider.getProviderMeta(providerId) || {};
       const activeModel =
-        (LLMProvider.getAvailableProviders() || []).find((p) => p.id === providerId)?.activeModel ||
-        {};
+        (LLMProvider.getAvailableProviders() || []).find((p) => p.id === providerId)?.model || null;
       newProviders[providerId] = {
         ...(newProviders[providerId] || {}),
-        model: {
-          ...((newProviders[providerId] && newProviders[providerId].model) || {}),
-          ...activeModel,
-        },
+        ...(activeModel ? { model: activeModel } : {}),
       };
 
       const keychainActive = !!useKeychain && ctx.KeychainManager.isAvailable();

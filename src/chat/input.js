@@ -332,8 +332,8 @@ input.addEventListener('input', () => {
 });
 // ── Browser de modelos inline (/model): TODOS los modelos, empresa debajo ────
 // Al escribir /model el div del input se expande y lista los modelos del
-// catálogo + models.dev (favoritos primero). Enter usa el modelo en Charla,
-// Ctrl+Enter en Agente (provider ya conectado); si no, expande la fila para
+// catálogo + models.dev (favoritos primero). Enter usa el modelo elegido
+// (sirve para charla y agente); si no está conectado, expande la fila para
 // pegar la API key y conectar. Esc cierra.
 const modelBrowser = document.getElementById('model-browser');
 const modelBrowserList = document.getElementById('model-browser-list');
@@ -402,15 +402,13 @@ function _mbrRowHtml(m, i, byId, favs) {
         ${
           connected
             ? `<div class="mbr-actions">
-               <button class="mbr-btn" data-act="use" data-mode="fast">Usar en Charla</button>
-               <button class="mbr-btn" data-act="use" data-mode="smart">Usar en Agente</button>
+               <button class="mbr-btn" data-act="use">Usar</button>
              </div>`
             : p.connectable === false
               ? '<div style="font-size:10px;color:#f59e0b;font-family:var(--font-mono)">No conectable automáticamente.</div>'
               : `<input class="mbr-key" type="password" placeholder="${escapeHtml(p.name)} API key" autocomplete="off" />
              <div class="mbr-actions">
-               <button class="mbr-btn" data-act="connect" data-mode="fast">Conectar y usar en Charla</button>
-               <button class="mbr-btn" data-act="connect" data-mode="smart">Conectar y usar en Agente</button>
+               <button class="mbr-btn" data-act="connect">Conectar y usar</button>
              </div>`
         }
       </div>`
@@ -504,36 +502,19 @@ function _mbrRender() {
   if (_browserExpanded && !_browserRows.some((r) => _mbrKey(r) === _mbrKey(_browserExpanded))) {
     _browserExpanded = null;
   }
-  const connected = (_pickerData.providers || []).filter((p) => p.hasKey).length;
-  const total = _pickerData.models.length;
-  const hidden = _pickerData.remoteHidden || null;
-  const hiddenNote =
-    hidden && hidden.providers > 0
-      ? ` (+${hidden.providers} remotos ocultos: ${_pickerData.providers.length} empresas)`
-      : '';
   const toggleBtn = document.getElementById('mbr-toggle-all');
   toggleBtn.style.display = q ? 'none' : 'inline-block';
   toggleBtn.textContent = _browserShowAll ? 'ver solo conectados' : 'ver todos los proveedores';
-  const pl = (n, s, p) => `${n} ${n === 1 ? s : p}`;
-  if (q) {
-    modelBrowserCount.textContent = `${pl(rows.length, 'modelo', 'modelos')} de ${total} modelos${hiddenNote}`;
-  } else if (_browserShowAll) {
-    modelBrowserCount.textContent = `${pl(total, 'modelo', 'modelos')}${hiddenNote}`;
-  } else {
-    modelBrowserCount.textContent = `${pl(connected, 'proveedor conectado', 'proveedores conectados')}${hiddenNote}`;
-  }
+  modelBrowserCount.textContent = '';
   modelBrowserList.innerHTML = groups
     .map((g) => _mbrGroupHtml(g.providerId, byId.get(g.providerId) || {}, g.models, byId, favs))
     .join('');
   if (q) {
-    modelBrowserStatus.textContent =
-      rows.length > _browserRows.length
-        ? `mostrando ${_browserRows.length} de ${rows.length} — escribí para filtrar`
-        : '↑↓ navegar · Enter Charla · Ctrl+Enter Agente · Esc cerrar';
+    modelBrowserStatus.textContent = '↑↓ navegar · Enter usar · Esc cerrar';
   } else if (_browserShowAll) {
-    modelBrowserStatus.textContent = `catálogo completo (${total} modelos) · ↑↓ navegar · Enter usar · Esc cerrar`;
+    modelBrowserStatus.textContent = '↑↓ navegar · Enter usar · Esc cerrar';
   } else {
-    modelBrowserStatus.textContent = `escribí para buscar entre ${total} modelos · ↑↓ navegar · Enter usar · Esc cerrar`;
+    modelBrowserStatus.textContent = '↑↓ navegar · Enter usar · Esc cerrar';
   }
   modelBrowserStatus.style.color = 'var(--text-secondary)';
 }
@@ -576,13 +557,11 @@ function _mbrToggleExpand(row) {
   if (keyInput) keyInput.focus();
 }
 
-async function _mbrApplyConnected(row, mode) {
-  const role = (_pickerData.roles && _pickerData.roles[mode]) || mode;
+async function _mbrApplyConnected(row) {
   const effortSelect = modelBrowserList.querySelector('.mbr-effort-select');
   const reasoningEffort = effortSelect ? effortSelect.value : row.reasoningEffort;
   await ipcRenderer.invoke('set-llm-model', {
     provider: row.providerId,
-    mode,
     model: row.modelId,
     reasoningEffort,
   });
@@ -591,14 +570,14 @@ async function _mbrApplyConnected(row, mode) {
     ipcRenderer.send('set-provider', { provider: row.providerId });
   }
   await loadLLMConfig();
-  modelBrowserStatus.textContent = `✓ ${row.label} activo en ${role}`;
+  modelBrowserStatus.textContent = `✓ ${row.label} activo`;
   modelBrowserStatus.style.color = '#10b981';
   input.value = '';
   input.style.height = 'auto';
   setTimeout(_mbrHide, 700);
 }
 
-async function _mbrConnectAndUse(row, mode) {
+async function _mbrConnectAndUse(row) {
   const keyInput = modelBrowserList.querySelector('.mbr-key');
   const apiKey = keyInput ? keyInput.value.trim() : '';
   if (!apiKey) {
@@ -612,7 +591,6 @@ async function _mbrConnectAndUse(row, mode) {
     providerId: row.providerId,
     apiKey,
     modelId: row.modelId,
-    mode,
     useKeychain: document.getElementById('use-keychain').checked,
   });
   if (!res.ok) {
@@ -624,7 +602,6 @@ async function _mbrConnectAndUse(row, mode) {
   if (effortSelect) {
     await ipcRenderer.invoke('set-llm-model', {
       provider: row.providerId,
-      mode,
       model: row.modelId,
       reasoningEffort: effortSelect.value,
     });
@@ -636,10 +613,9 @@ async function _mbrConnectAndUse(row, mode) {
   input.style.height = 'auto';
 }
 
-function _mbrEnter(row, agent) {
+function _mbrEnter(row) {
   const p = _providerById().get(row.providerId) || {};
-  const mode = agent ? 'smart' : 'fast';
-  if (p.hasKey) _mbrApplyConnected(row, mode);
+  if (p.hasKey) _mbrApplyConnected(row);
   else _mbrToggleExpand(row);
 }
 
@@ -657,13 +633,13 @@ input.addEventListener('keydown', (e) => {
     }
     if (e.key === 'Enter' && !e.shiftKey) {
       // Enter usa la fila seleccionada (o la primera si no hay selección).
-      // Si se escribió un comando directo (/model <provider> <modelo> [rol])
+      // Si se escribió un comando directo (/model <provider> <modelo>)
       // se deja pasar para que lo procese el comando.
       const row = _browserSel >= 0 ? _browserRows[_browserSel] : _browserRows[0];
       const isDirect = _browserQuery.split(/\s+/).length >= 2;
       if (row && (_browserSel >= 0 || !isDirect)) {
         e.preventDefault();
-        _mbrEnter(row, e.ctrlKey || e.metaKey);
+        _mbrEnter(row);
         return;
       }
       if (_browserSel >= 0) {
@@ -756,7 +732,7 @@ modelBrowserList.addEventListener('mousedown', async (e) => {
   const btn = e.target.closest('.mbr-btn');
   if (btn) {
     const row = _browserExpanded;
-    if (row) await _mbrConnectAndUse(row, btn.dataset.mode);
+    if (row) await _mbrConnectAndUse(row);
     return;
   }
   const rowEl = e.target.closest('.model-browser-row');
@@ -768,7 +744,7 @@ modelBrowserList.addEventListener('mousedown', async (e) => {
   const p = _providerById().get(row.providerId) || {};
   if (p.hasKey && Array.isArray(row.effortOptions) && row.effortOptions.length > 0) {
     _mbrToggleExpand(row);
-  } else if (p.hasKey) await _mbrApplyConnected(row, 'fast');
+  } else if (p.hasKey) await _mbrApplyConnected(row);
   else _mbrToggleExpand(row);
 });
 

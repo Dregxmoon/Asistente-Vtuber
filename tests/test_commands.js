@@ -135,7 +135,7 @@ function testModel() {
       free: true,
       hasKey: true,
       models: { fast: 'llama-3.1-8b-instant', smart: 'llama-3.3-70b-versatile' },
-      activeModel: { fast: 'llama-3.1-8b-instant', smart: 'llama-3.3-70b-versatile' },
+      model: 'llama-3.3-70b-versatile',
       catalog: ['llama-3.1-8b-instant', 'llama-3.3-70b-versatile'],
     },
     {
@@ -144,7 +144,7 @@ function testModel() {
       free: true,
       hasKey: false,
       models: { fast: 'gemini-2.0-flash', smart: 'gemini-2.0-flash' },
-      activeModel: { fast: 'gemini-2.0-flash', smart: 'gemini-2.0-flash' },
+      model: 'gemini-2.0-flash',
       catalog: ['gemini-2.0-flash', 'gemini-2.5-pro'],
     },
   ];

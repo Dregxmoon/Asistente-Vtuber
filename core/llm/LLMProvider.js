@@ -508,12 +508,25 @@ function _getModels(providerId) {
 // Resuelve el modelo efectivo para un provider+modo. Prioridad:
 // 1. modelo elegido por el usuario (config/env: providers[id].model[modo])
 // 2. modelo por defecto del provider (def.models[modo])
+/**
+ * UN solo modelo por proveedor (sin roles charla/agente): el elegido sirve
+ * para todo. `mode` se conserva en la firma porque dirige timeouts e
+ * historial, pero NO elige modelo. Migra el formato legacy
+ * `model: {fast, smart}` (gana smart, si no fast).
+ */
 function _resolveModel(providerId, mode) {
   const def = _registry.get(providerId);
   if (!def) return null;
-  const override = _config.providers?.[providerId]?.model?.[mode];
-  if (override && typeof override === 'string' && override.trim()) return override.trim();
-  return def.models?.[mode] || null;
+  const stored = _config.providers?.[providerId]?.model;
+  if (typeof stored === 'string' && stored.trim()) return stored.trim();
+  if (stored && typeof stored === 'object') {
+    for (const key of ['smart', 'fast']) {
+      const legacy = stored[key];
+      if (typeof legacy === 'string' && legacy.trim()) return legacy.trim();
+    }
+  }
+  void mode;
+  return def.models?.smart || def.models?.fast || null;
 }
 
 // Catálogo de modelos disponibles para un provider: el refrescado vía API
@@ -2136,7 +2149,7 @@ function getAvailableProviders() {
     // Fase catálogo: metadata por modelo (label, contexto, tools, visión,
     // coste) para que la UI recomiende y advierta sin IDs crudos.
     modelMeta: p.modelMeta || {},
-    activeModel: { fast: _resolveModel(p.id, 'fast'), smart: _resolveModel(p.id, 'smart') },
+    model: _resolveModel(p.id),
   }));
 }
 
@@ -2384,8 +2397,7 @@ function getModelPickerData() {
     roles: ROLE_LABELS,
     active: {
       provider: getActiveProvider(),
-      fast: getActiveModel('fast'),
-      smart: getActiveModel('smart'),
+      model: getActiveModel(),
     },
     favorites,
     providers,
@@ -2401,10 +2413,11 @@ function getModelPickerData() {
  * conexión de models.dev (mapeo npm→tipo + baseURL). Guarda la key en el
  * llavero si está disponible; si no, en _config.providers[id].apiKey (el IPC
  * handler persiste en config.json y recarga).
- * @param {{providerId: string, apiKey?: string, modelId?: string, mode?: 'fast'|'smart'}} opts
+ * @param {{providerId: string, apiKey?: string, modelId?: string, mode?: string}} opts
+ *   (`mode` legacy se acepta y se ignora: un modelo sirve para todo).
  * @returns {{ok: boolean, error?: string, provider?: object}}
  */
-function connectProvider({ providerId, apiKey, modelId, mode } = {}) {
+function connectProvider({ providerId, apiKey, modelId } = {}) {
   if (!providerId) return { ok: false, error: 'provider requerido' };
   let def = _registry.get(providerId);
   const remote = getRemoteProvider(providerId);
@@ -2470,15 +2483,8 @@ function connectProvider({ providerId, apiKey, modelId, mode } = {}) {
 
   const model = modelId || def.models?.smart || def.models?.fast || null;
   if (model) {
-    const prev = {
-      ...((_config.providers[providerId] && _config.providers[providerId].model) || {}),
-    };
-    if (mode === 'fast' || mode === 'smart') prev[mode] = model;
-    else {
-      prev.fast = model;
-      prev.smart = model;
-    }
-    _config.providers[providerId] = { ...(_config.providers[providerId] || {}), model: prev };
+    // UN solo modelo por proveedor (`mode` se acepta por compat y se ignora).
+    _config.providers[providerId] = { ...(_config.providers[providerId] || {}), model };
   }
 
   if (_getApiKey(providerId)) _config.provider = providerId;
@@ -2490,8 +2496,7 @@ function connectProvider({ providerId, apiKey, modelId, mode } = {}) {
       name: def.name,
       type: def.type,
       hasKey: !!_getApiKey(providerId),
-      fast: _resolveModel(providerId, 'fast'),
-      smart: _resolveModel(providerId, 'smart'),
+      model: _resolveModel(providerId),
     },
   };
 }

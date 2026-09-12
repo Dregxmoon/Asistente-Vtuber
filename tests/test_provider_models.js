@@ -78,23 +78,28 @@ function testCatalogs() {
 function testActiveModel() {
   console.log(C.bold('\n── Test 2: activeModel con override por usuario ───────────────'));
 
-  // Sin override → el default del provider
+  // Sin override → el default del provider (un solo modelo)
   LLMProvider.configure({ llm: { provider: 'groq' } });
   let p = LLMProvider.getAvailableProviders().find((x) => x.id === 'groq');
-  assert(p.activeModel.fast === 'llama-3.1-8b-instant', 'groq fast = default');
-  assert(p.activeModel.smart === 'llama-3.3-70b-versatile', 'groq smart = default');
+  assert(p.model === 'llama-3.3-70b-versatile', 'groq usa un solo modelo (default smart)');
 
-  // Con override → gana el elegido por el usuario
+  // Con override string → gana el elegido por el usuario
   LLMProvider.configure({
-    llm: { providers: { groq: { model: { fast: 'llama-3.3-70b-versatile' } } } },
+    llm: { providers: { groq: { model: 'llama-3.1-8b-instant' } } },
   });
   p = LLMProvider.getAvailableProviders().find((x) => x.id === 'groq');
-  assert(p.activeModel.fast === 'llama-3.3-70b-versatile', 'groq fast = override del usuario');
-  assert(p.activeModel.smart === 'llama-3.3-70b-versatile', 'groq smart = default (sin override)');
+  assert(p.model === 'llama-3.1-8b-instant', 'groq usa el override del usuario');
+
+  // Formato legacy {fast,smart} → migra (smart gana)
+  LLMProvider.configure({
+    llm: { providers: { groq: { model: { fast: 'llama-3.1-8b-instant' } } } },
+  });
+  p = LLMProvider.getAvailableProviders().find((x) => x.id === 'groq');
+  assert(p.model === 'llama-3.1-8b-instant', 'legacy {fast} migra');
 
   // _resolveModel interno coincide con el override
   const resolved = LLMProvider._debug_resolveModel('groq', 'fast');
-  assert(resolved === 'llama-3.3-70b-versatile', '_resolveModel respeta el override');
+  assert(resolved === 'llama-3.1-8b-instant', '_resolveModel respeta el override');
 }
 
 // ── Test 3: listModels ────────────────────────────────────────────────────────

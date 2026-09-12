@@ -64,22 +64,17 @@ function testCatalogMetadata() {
         (m.context > 0 || (p.id === 'codex-cli' && m.context === 0));
       if (!validContext) metaErrors++;
     }
-    // Los defaults de cada rol deben existir en el catálogo y tener tools.
-    const active = p.activeModel || {};
-    if (active.fast && !ids.includes(active.fast)) defaultErrors++;
-    if (active.smart && !ids.includes(active.smart)) defaultErrors++;
-    if (active.smart && meta[active.smart] && !meta[active.smart].tools) defaultErrors++;
+    // El modelo único debe existir en el catálogo y tener tools.
+    const active = p.model || p.activeModel?.smart || p.activeModel?.fast || null;
+    if (active && !ids.includes(active)) defaultErrors++;
+    if (active && meta[active] && !meta[active].tools) defaultErrors++;
   }
   assert(
     metaErrors === 0,
     'toda la metadata es válida (label/context/tools)',
     `errores: ${metaErrors}`
   );
-  assert(
-    defaultErrors === 0,
-    'defaults por rol existen y smart tiene tools',
-    `errores: ${defaultErrors}`
-  );
+  assert(defaultErrors === 0, 'modelo único existe y tiene tools', `errores: ${defaultErrors}`);
 }
 
 // ── Test 2: getModelMeta / getProviderMeta ───────────────────────────────────
@@ -160,7 +155,7 @@ function _mockProviders() {
           cost: { in: 1, out: 2 },
         },
       },
-      activeModel: { fast: 'modelo-chat', smart: 'modelo-agent' },
+      model: 'modelo-agent',
     },
     {
       id: 'prov-b',
@@ -183,7 +178,7 @@ function _mockProviders() {
           cost: { in: 0, out: 0 },
         },
       },
-      activeModel: { fast: 'gratis-chat', smart: 'gratis-agent' },
+      model: 'gratis-agent',
     },
     {
       id: 'prov-sin-key',
@@ -193,7 +188,7 @@ function _mockProviders() {
       modelMeta: {
         'x-agent': { label: 'X Agent', tools: true, vision: false, free: false },
       },
-      activeModel: { fast: 'x-agent', smart: 'x-agent' },
+      model: 'x-agent',
     },
   ];
 }

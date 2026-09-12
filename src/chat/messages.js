@@ -177,7 +177,7 @@ function updateHeaderModel() {
     return;
   }
   const p = LLMProvider.getAvailableProviders().find((x) => x.id === active);
-  const model = p?.activeModel?.smart || p?.models?.smart || '';
+  const model = p?.model || p?.activeModel?.smart || p?.models?.smart || '';
   el.textContent = model ? `${p.id}/${model}` : p.id;
   el.title = `${p?.name || active} · ${p?.free ? 'gratis' : 'pago'}`;
 }
@@ -312,11 +312,9 @@ function _expandedPanel() {
     return `<div class="picker-expanded">
       ${effortControl}
       <div class="picker-exp-actions">
-        <button class="picker-btn" data-act="use" data-mode="fast">Usar en Charla</button>
-        <button class="picker-btn" data-act="use" data-mode="smart">Usar en Agente</button>
+        <button class="picker-btn" data-act="use">Usar</button>
         <button class="picker-btn ghost" data-act="fav">${isFav ? '★ Quitar favorito' : '☆ Favorito'}</button>
-      </div>
-    </div>`;
+      </div>`;
   }
   const env = (p.env && p.env[0]) || 'API key';
   return `<div class="picker-expanded">
@@ -326,10 +324,9 @@ function _expandedPanel() {
       p.connectable === false
         ? `<div class="picker-warn">No conectable automáticamente. Usá /provider add.</div>`
         : `<input class="picker-key-input" type="password" placeholder="${escapeHtml(p.name)} ${escapeHtml(env)}" autocomplete="off" />
-         <div class="picker-exp-actions">
-           <button class="picker-btn" data-act="connect" data-mode="fast">Conectar y usar en Charla</button>
-           <button class="picker-btn" data-act="connect" data-mode="smart">Conectar y usar en Agente</button>
-         </div>`
+          <div class="picker-exp-actions">
+            <button class="picker-btn" data-act="connect">Conectar y usar</button>
+          </div>`
     }
   </div>`;
 }
@@ -422,7 +419,9 @@ async function _searchRemote(query) {
         known.add(p.id);
       }
       for (const m of p.models || []) {
-        if (!_picker.data.models.some((x) => x.providerId === m.providerId && x.modelId === m.modelId)) {
+        if (
+          !_picker.data.models.some((x) => x.providerId === m.providerId && x.modelId === m.modelId)
+        ) {
           _picker.data.models.push(m);
         }
       }
@@ -514,15 +513,13 @@ function _toggleExpandProvider(p) {
   _renderPickerList();
 }
 
-async function _useModel(m, mode) {
+async function _useModel(m) {
   const p = _providerMap().get(m.providerId) || {};
-  const role = (_picker.data.roles && _picker.data.roles[mode]) || mode;
   const effortSelect = pickerList.querySelector('.picker-effort-select');
   const reasoningEffort = effortSelect ? effortSelect.value : m.reasoningEffort;
   if (p.hasKey) {
     await ipcRenderer.invoke('set-llm-model', {
       provider: m.providerId,
-      mode,
       model: m.modelId,
       reasoningEffort,
     });
@@ -531,7 +528,7 @@ async function _useModel(m, mode) {
       ipcRenderer.send('set-provider', { provider: m.providerId });
     }
     await loadLLMConfig();
-    pickerStatus.textContent = `✓ ${m.label} activo en ${role}`;
+    pickerStatus.textContent = `✓ ${m.label} activo`;
     pickerStatus.style.color = '#10b981';
     setTimeout(closePicker, 700);
     return;
@@ -549,7 +546,6 @@ async function _useModel(m, mode) {
     providerId: m.providerId,
     apiKey,
     modelId: m.modelId,
-    mode,
     useKeychain: document.getElementById('use-keychain').checked,
   });
   if (!res.ok) {
@@ -560,14 +556,13 @@ async function _useModel(m, mode) {
   if (reasoningEffort) {
     await ipcRenderer.invoke('set-llm-model', {
       provider: m.providerId,
-      mode,
       model: m.modelId,
       reasoningEffort,
     });
     m.reasoningEffort = reasoningEffort;
   }
   await loadLLMConfig();
-  pickerStatus.textContent = `✓ ${m.label} conectado y activo en ${role}`;
+  pickerStatus.textContent = `✓ ${m.label} conectado y activo`;
   pickerStatus.style.color = '#10b981';
   setTimeout(closePicker, 700);
 }
@@ -700,10 +695,10 @@ pickerModal.addEventListener('keydown', (e) => {
 pickerList.addEventListener('click', async (e) => {
   const btn = e.target.closest('.picker-btn');
   if (btn) {
-    const { act, mode } = btn.dataset;
+    const { act } = btn.dataset;
     const row = _picker.view[_picker.selected];
-    if (act === 'use' && row && _picker.mode === 'models') await _useModel(row, mode);
-    else if (act === 'connect' && row && _picker.mode === 'models') await _useModel(row, mode);
+    if (act === 'use' && row && _picker.mode === 'models') await _useModel(row);
+    else if (act === 'connect' && row && _picker.mode === 'models') await _useModel(row);
     else if (act === 'fav' && row && _picker.mode === 'models') await _toggleFav(row);
     else if (act === 'connect-provider') await _connectProvider(_picker.expanded);
     return;

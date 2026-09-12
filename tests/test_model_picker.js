@@ -308,8 +308,8 @@ function testConnectProvider() {
   assert(openrouter.provider && openrouter.provider.hasKey === true, 'openrouter tiene key');
   assert(openrouter.provider && openrouter.provider.type === 'openai', 'tipo mapeado a openai');
   assert(
-    openrouter.provider && openrouter.provider.fast === 'openrouter/auto',
-    'modelo asignado a charla'
+    openrouter.provider && openrouter.provider.model === 'openrouter/auto',
+    'modelo único asignado'
   );
 
   const data = LLMProvider.getModelPickerData();
@@ -330,10 +330,10 @@ function testConnectProvider() {
   assert(anthropic.ok === true, 'anthropic conecta', JSON.stringify(anthropic.error));
   assert(
     anthropic.provider &&
-      typeof anthropic.provider.smart === 'string' &&
-      anthropic.provider.smart.length > 0,
-    'anthropic resuelve un modelo smart',
-    JSON.stringify(anthropic.provider && anthropic.provider.smart)
+      typeof anthropic.provider.model === 'string' &&
+      anthropic.provider.model.length > 0,
+    'anthropic resuelve un modelo',
+    JSON.stringify(anthropic.provider && anthropic.provider.model)
   );
 
   // provider remoto (sin built-in) sin modelo → default al primer modelo del
@@ -341,9 +341,9 @@ function testConnectProvider() {
   const mistral = LLMProvider.connectProvider({ providerId: 'mistral', apiKey: 'x' });
   assert(mistral.ok === true, 'mistral conecta', JSON.stringify(mistral.error));
   assert(
-    mistral.provider && mistral.provider.smart === 'mistral-large-latest',
+    mistral.provider && mistral.provider.model === 'mistral-large-latest',
     'provider remoto sin modelo → primer modelo del catálogo',
-    JSON.stringify(mistral.provider && mistral.provider.smart)
+    JSON.stringify(mistral.provider && mistral.provider.model)
   );
 
   // SDK nicho sin endpoint → rechazo controlado (no toca el registry).

@@ -15,7 +15,7 @@ const LLMProvider = require('./LLMProvider.js');
  * @property {boolean} hasKey
  * @property {boolean} [free]
  * @property {Record<string, import('./catalog.js').ModelMeta>} [modelMeta]
- * @property {{fast?: string, smart?: string}} [activeModel]
+ * @property {string} [model] modelo único activo
  */
 
 /**
@@ -107,14 +107,9 @@ function recommend(task, providers) {
     if (!p.hasKey) continue;
     /** @type {Record<string, import('./catalog.js').ModelMeta>} */
     const meta = p.modelMeta || {};
-    /** @type {{fast?: string, smart?: string}} */
-    const active = p.activeModel || {};
-    // Preferencia: modelo activo del rol → el otro rol → cualquier catálogo.
-    const candidates = [
-      active[spec.mode],
-      active[spec.mode === 'fast' ? 'smart' : 'fast'],
-      ...Object.keys(meta),
-    ];
+    // Preferencia: modelo único activo → catálogo.
+    const activeModel = typeof p.model === 'string' && p.model ? p.model : null;
+    const candidates = [activeModel, ...Object.keys(meta)];
     const seen = new Set();
     let pick = null;
     for (const id of candidates) {
