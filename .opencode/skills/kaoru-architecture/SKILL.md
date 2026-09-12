@@ -15,7 +15,10 @@ Runtime: Electron 28 (main + 2 windows, `contextIsolation:true`). Pure CommonJS
 src/chat/ → ipc/agent-run → Core.runAgent → core/core/context.js:buildContext()
   1. BehaviorModel.evaluate()      → tone/length/urgency (core/behavior/)
   2. IntentDetector.detect()       → tool intent via local embeddings + sqlite-vec
-  3. TaskDetector.detect()         → isTask/domain/confidence (core/task/TaskDetector.js)
+  3. TaskDetector.detect()         → isTask/domain/confidence (core/task/TaskDetector.js, regex ES-first)
+     → fuseTaskIntent()            → tool→domain fusion (no new regex per language)
+     → IntentClassifier.classify() → embedding domain classifier when regex is weak (regex stays as fallback)
+     → IntentArbitrator.arbitrate()→ opt-in LLM judge for gray-zone/negation (8s timeout, null fallback)
   4. GroundingEngine.buildContext()→ system prompt (serializers per provider)
   5. ToolResolver.resolveToolset() → toolset: Skill > MCP > OpenClaw precedence
 → AgentLoop.run()                  → LLM → tool → real result → LLM (max 25-40 iters)

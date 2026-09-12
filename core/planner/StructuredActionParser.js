@@ -93,8 +93,14 @@ const ACTION_TO_TOOL = {
   launch_app: 'launch_app',
   open_website: 'open_website',
   play_media: 'play_media',
+  personal_browser_detect: 'personal_browser_detect',
+  personal_browser_link: 'personal_browser_link',
+  personal_browser_status: 'personal_browser_status',
+  personal_browser_close: 'personal_browser_close',
+  personal_browser_login: 'personal_browser_login',
   desktop_snapshot: 'desktop_snapshot',
   desktop_screenshot: 'desktop_screenshot',
+  ocr_query: 'ocr_query',
   pointer_click: 'pointer_click',
   window_list: 'window_list',
   window_focus: 'window_focus',
@@ -164,9 +170,21 @@ function _buildDescription(action, fields) {
     case 'open_website':
       return `Abrir sitio: ${f.SITIO || f.TARGET || f.URL || '?'}`;
     case 'play_media':
-      return `Reproducir en ${f.SERVICIO || 'YouTube'}: ${f.QUERY || '?'}`;
+      return `Reproducir en ${f.SERVICIO || 'YouTube'}: ${f.CANAL || f.CHANNEL || f.QUERY || '?'}`;
+    case 'personal_browser_detect':
+      return 'Detectar el navegador que usa el usuario';
+    case 'personal_browser_link':
+      return `Vincular navegador personal: ${f.NAVEGADOR || f.BROWSER || f.APLICACIÓN || 'detectado'}`;
+    case 'personal_browser_status':
+      return 'Consultar vínculo del navegador personal';
+    case 'personal_browser_close':
+      return 'Desconectar navegador personal';
+    case 'personal_browser_login':
+      return `Login guiado en: ${f.SITIO || f.TARGET || f.URL || '?'}`;
     case 'desktop_snapshot':
       return `Observar escritorio: ${f.APLICACIÓN || f.APLICACION || f.APP || f.APPLICATION || 'todas las ventanas'}`;
+    case 'ocr_query':
+      return `Localizar por OCR: ${f.QUERY || f.VALOR || f.TEXTO || '?'}`;
     case 'desktop_screenshot':
       return `Capturar escritorio: ${f.VENTANA || f.NOMBRE || 'pantalla principal'}`;
     case 'pointer_click':
@@ -560,9 +578,27 @@ function _buildParams(action, fields, userGoal, projectCwd) {
     case 'play_media':
       return {
         query: fields.QUERY,
+        channel: fields.CANAL || fields.CHANNEL,
         service: fields.SERVICIO || fields.SERVICE || 'youtube',
         control: fields.CONTROL || 'managed',
         browser: fields.NAVEGADOR || fields.BROWSER,
+      };
+
+    case 'personal_browser_detect':
+    case 'personal_browser_status':
+    case 'personal_browser_close':
+      return {};
+
+    case 'personal_browser_login':
+      return {
+        target: fields.SITIO || fields.TARGET || fields.URL,
+        mode: (fields.MODO || fields.MODE || 'managed').toLowerCase(),
+      };
+
+    case 'personal_browser_link':
+      return {
+        browser: fields.NAVEGADOR || fields.BROWSER || fields.APLICACIÓN || fields.APPLICATION,
+        port: fields.PUERTO || fields.PORT ? Number(fields.PUERTO || fields.PORT) : undefined,
       };
 
     case 'desktop_snapshot':
@@ -577,6 +613,13 @@ function _buildParams(action, fields, userGoal, projectCwd) {
           fields.WINDOW,
         maxDepth: fields.PROFUNDIDAD ? Number(fields.PROFUNDIDAD) : undefined,
         maxNodes: fields.LIMITE ? Number(fields.LIMITE) : undefined,
+      };
+
+    case 'ocr_query':
+      return {
+        captureId: fields.CAPTURA || fields.CAPTURE_ID,
+        query: fields.QUERY || fields.VALOR || fields.VALUE || fields.TEXTO || fields.TEXT,
+        lang: fields.IDIOMA || fields.LANG,
       };
 
     case 'desktop_screenshot':
@@ -941,8 +984,8 @@ class StructuredActionParser {
       return null;
     }
 
-    if (action === 'play_media' && !fields.QUERY) {
-      logger.warn('StructuredActionParser', '[structured-parser] play_media sin QUERY');
+    if (action === 'play_media' && !fields.QUERY && !fields.CANAL && !fields.CHANNEL) {
+      logger.warn('StructuredActionParser', '[structured-parser] play_media sin QUERY ni CANAL');
       return null;
     }
 

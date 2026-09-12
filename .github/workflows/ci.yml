@@ -121,7 +121,7 @@ jobs:
 
       - name: Contratos JS de escritorio (Linux)
         if: runner.os == 'Linux'
-        run: ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_desktop_automation.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_desktop_control.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_website_resolver.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_task_detector_desktop.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_structured_parser_bilingual.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_task_approvals.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_desktop_task_e2e.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_language_profile.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_multilingual_inference.js
+        run: ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_desktop_automation.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_desktop_control.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_website_resolver.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_task_detector_desktop.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_structured_parser_bilingual.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_task_approvals.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_desktop_task_e2e.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_language_profile.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_multilingual_inference.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_personal_browser.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_personal_channel.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_ocr_fallback.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_intent_classifier.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_intent_arbitrator.js && ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron tests/test_deep_autonomy.js
 
       - name: Contratos JS de escritorio (Windows)
         if: runner.os == 'Windows'
@@ -145,6 +145,18 @@ jobs:
           & .\node_modules\electron\dist\electron.exe tests\test_language_profile.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & .\node_modules\electron\dist\electron.exe tests\test_multilingual_inference.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\node_modules\electron\dist\electron.exe tests\test_personal_browser.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\node_modules\electron\dist\electron.exe tests\test_personal_channel.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\node_modules\electron\dist\electron.exe tests\test_ocr_fallback.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\node_modules\electron\dist\electron.exe tests\test_deep_autonomy.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\node_modules\electron\dist\electron.exe tests\test_intent_classifier.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .\node_modules\electron\dist\electron.exe tests\test_intent_arbitrator.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & .\node_modules\electron\dist\electron.exe tests\test_windows_sandbox.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -471,6 +471,71 @@ async function buildContext(sessionHistory, activeProvider, options = {}) {
     );
   }
 
+  // Clasificador por embeddings (IntentClassifier): decide el DOMINIO por
+  // inferencia cuando el regex queda débil (sin tarea, sin confianza o sin
+  // dominio). El regex queda como fallback si los embeddings no están disponibles. Ningún
+  // idioma nuevo exige tocar código: el modelo multilingüe ya lo entiende.
+  try {
+    const weak =
+      !taskIntent ||
+      taskIntent.isTask !== true ||
+      taskIntent.confidence === 'none' ||
+      !taskIntent.domain;
+    if (weak) {
+      const { classify } = require('../task/IntentClassifier.js');
+      const EmbedService = require('../grounding/EmbedService.js');
+      const classified = await classify(userText, {
+        embedFn: (text) => EmbedService.embedText(text),
+      });
+      if (classified.isTask && classified.domain && classified.level !== 'none') {
+        taskIntent = {
+          isTask: true,
+          confidence: classified.level === 'high' ? 'high' : 'medium',
+          domain: classified.domain,
+          goal: String(userText || '').slice(0, 200),
+          specificity: 'vague',
+          _debug: { classifiedBy: 'embeddings', scores: classified.scores },
+        };
+        logger.info(
+          'context',
+          `[core] taskIntent clasificada por embeddings: ${classified.domain.id} (${(classified.confidence * 100).toFixed(0)}%, ${classified.level})`
+        );
+      }
+    }
+  } catch (e) {
+    logger.warn('context', '[core] clasificador por embeddings error:', e.message);
+  }
+
+  // Árbitro LLM opt-in (IntentArbitrator): solo cuando regex Y embeddings
+  // quedan débiles y el caller lo habilitó (options.intentArbitration). Cubre
+  // negación y multi-intención en cualquier idioma, con timeout y fallback a
+  // lo ya detectado. Apagado por defecto: cuesta una llamada LLM por mensaje.
+  try {
+    const stillWeak =
+      options.intentArbitration === true &&
+      (!taskIntent || taskIntent.isTask !== true || taskIntent.confidence === 'none');
+    if (stillWeak) {
+      const { arbitrate } = require('../task/IntentArbitrator.js');
+      const verdict = await arbitrate(userText, {
+        completeFn: (messages, systemPrompt, callOpts) =>
+          LLMProvider.complete(messages, systemPrompt, callOpts),
+      });
+      if (verdict && verdict.isTask && verdict.domain) {
+        taskIntent = {
+          isTask: true,
+          confidence: 'medium',
+          domain: verdict.domain,
+          goal: verdict.goal,
+          specificity: 'vague',
+          _debug: verdict._debug,
+        };
+        logger.info('context', `[core] taskIntent arbitrada por LLM: ${verdict.domain.id}`);
+      }
+    }
+  } catch (e) {
+    logger.warn('context', '[core] árbitro LLM error:', e.message);
+  }
+
   // GroundingEngine
   let result;
   if (state.grounding) {

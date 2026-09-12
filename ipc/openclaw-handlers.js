@@ -141,6 +141,11 @@ function register(ctx) {
             const pattern = approvalPattern(action);
             const alwaysPromptTools = new Set([
               'browser',
+              'personal_browser_detect',
+              'personal_browser_link',
+              'personal_browser_status',
+              'personal_browser_close',
+              'personal_browser_login',
               'desktop_snapshot',
               'desktop_screenshot',
               'pointer_click',
@@ -164,8 +169,16 @@ function register(ctx) {
             // agente ejecuta acciones de alto impacto sin mostrar el card.
             // El control interactivo queda excluido: contenido web o una UI
             // comprometida no puede convertir una preferencia global antigua
-            // en acceso silencioso al escritorio.
-            if (approvalConfig.autoApprove && !alwaysPromptTools.has(action.tool)) {
+            // en acceso silencioso al escritorio. Lo IRREVERSIBLE (comprar,
+            // pagar, borrar, publicar con cargo) tampoco entra JAMÁS en
+            // autoApprove: exige card explícita siempre (T13/T16).
+            let irreversible = false;
+            try {
+              irreversible = require('../core/security/IrreversiblePolicy.js').isIrreversible(action);
+            } catch (_) {
+              irreversible = false;
+            }
+            if (approvalConfig.autoApprove && !alwaysPromptTools.has(action.tool) && !irreversible) {
               resolve(true);
               return;
             }
@@ -187,8 +200,9 @@ function register(ctx) {
               tool: action.tool,
               params: action.params,
               description:
-                action.description ||
-                `${action.tool}: ${JSON.stringify(action.params).slice(0, 100)}`,
+                (irreversible ? '⚠ ACCIÓN IRREVERSIBLE (comprar/pagar/borrar/publicar). Revisa con calma: ' : '') +
+                (action.description ||
+                  `${action.tool}: ${JSON.stringify(action.params).slice(0, 100)}`),
               // Vista previa de diff (null cuando no se puede calcular: edit
               // ambiguo, patch que no aplica, write sin content). La UI debe
               // comunicar la ausencia explícitamente, nunca ocultarla.

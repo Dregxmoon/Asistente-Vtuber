@@ -1,5 +1,5 @@
 ---
-description: 'Buscar un producto en una tienda web y verificar precio y disponibilidad con evidencia citada (receta managed verificable)'
+description: 'Buscar un producto en una tienda web y verificar precio y disponibilidad con evidencia citada (receta managed verificable). EN: search a product in a web store and verify price and availability with quoted evidence. Ejemplos: abre amazon y busca, dime si está disponible. EN examples: open amazon and check, is it in stock'
 version: '1.0.0'
 domains: ['web', 'desktop']
 ---

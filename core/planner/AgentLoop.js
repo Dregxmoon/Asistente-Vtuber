@@ -38,6 +38,7 @@ const {
   taskApprovalPattern,
   addApproval,
 } = require('../security/SessionApprovals.js');
+const { isIrreversible } = require('../security/IrreversiblePolicy.js');
 
 /**
  * Deriva una propuesta de tarea `task:<tipo>:<destino>` desde tool+params.
@@ -244,6 +245,33 @@ function _detectUnverifiedEditClaims(responseText, toolResults) {
   const CODE_CTX_RE = /\b(archivo|c[oó]digo|parche|[a-z]\.(py|js|ts|json|md)|funci[oó]n)\b/i;
   const m = text.match(CLAIM_RE);
   if (m && CODE_CTX_RE.test(text)) {
+    return `afirma "${m[0]}"`;
+  }
+  return null;
+}
+
+/**
+ * E2 (hermana desktop de BUG-1): detecta respuestas que AFIRMAN resultados
+ * de escritorio/navegador/medios ("¡listo!", "ya está sonando", "está en
+ * stock") sin NINGUNA tool interactiva verificada en el run. Determinista.
+ * @param {string} responseText
+ * @param {Array<{ok?: boolean, tool?: string, result?: object}>} toolResults
+ * @returns {string|null} resumen del claim, o null si hay evidencia
+ */
+function _detectUnverifiedDesktopClaims(responseText, toolResults) {
+  const results = Array.isArray(toolResults) ? toolResults : [];
+  const hadVerified = results.some(
+    (item) => item && UI_TOOLS.has(item.tool) && _isVerifiedInteractiveResult(item)
+  );
+  if (hadVerified) return null;
+  const text = String(responseText || '');
+  if (!text.trim()) return null;
+  const CLAIM_RE =
+    /\b(ya est[aá]|listo[,!]?\s*(ya)?|verificad[oa]|reproduciendo|sonando|está sonando|disponible|en stock|abierto|comprado|guardado|done|playing|verified|completed)\b/i;
+  const DESKTOP_CTX_RE =
+    /\b(video|audio|música|musica|canción|cancion|reproducci[óo]n|disponibilidad|precio|stock|ventana|navegador|p[áa]gina|aplicaci[óo]n|tienda|manga|canal|login|sesi[óo]n|clic|búsqueda|busqueda|browser|website|price|login)\b/i;
+  const m = text.match(CLAIM_RE);
+  if (m && DESKTOP_CTX_RE.test(text)) {
     return `afirma "${m[0]}"`;
   }
   return null;
@@ -739,6 +767,41 @@ Para "abre <app> y escribe <texto>":
    con \`ui_get_state\`/\`ui_wait\` (expected con el texto esperado).
 4. Guarda y confirma el archivo en disco cuando aplique; si algo no se pudo
    verificar, dilo explícitamente en el cierre.
+
+## Receta: navegador personal del usuario (con sus sesiones)
+
+Si la tarea necesita las sesiones del usuario (logins, carrito, historial):
+1. \`personal_browser_detect\` — propone cuál vincular (el que corre gana).
+2. \`personal_browser_link\` — REQUIERE aprobación explícita; Kaoru jamás
+   cierra el navegador del usuario: si el puerto está ocupado se informa.
+3. \`browser\` con mode=personal — mismos snapshot/click/type/get_text de
+   siempre, ahora con sus sesiones. Desconectar NO cierra su navegador.
+
+## Receta: login una vez (Ruta 1, sin vínculo personal)
+
+Si no hay vínculo y el sitio pide login:
+1. \`personal_browser_login\` con el sitio — abre managed/personal y devuelve
+   la observación. Resultado SIEMPRE login_required + verified=false.
+2. Pide al usuario que inicie sesión UNA vez y te avise ("ya entré").
+3. Re-observa (snapshot) y continúa la tarea. Kaoru NUNCA escribe credenciales
+   ni afirma login sin evidencia posterior.
+
+## Receta: último video de un canal ("ponme lo más reciente de X")
+
+Una sola acción, sin buscar a mano:
+\`\`\`action
+ACCIÓN: play_media | CANAL: nissaxter | CONTROL: managed
+\`\`\`
+Resuelve el video más reciente del canal y verifica reproducción real.
+
+## Receta: anti-bots honestos (CAPTCHA/preguntas)
+
+Kaoru NUNCA resuelve CAPTCHAs sola. Si navigate/click/type devuelven
+\`humanChallenge\`:
+1. Informa qué página lo pide y trae el navegador al frente.
+2. Pide al usuario que lo resuelva una vez (UNA pregunta concreta, en su idioma).
+3. \`browser\` action=wait_for_clearance (con sessionId/pageId/expectedOrigin)
+   hasta verified=true y retoma. Si expira, informa y deja todo abierto.
 
 \`\`\`action
 ACCIÓN: mcp_call | SERVIDOR: filesystem | HERRAMIENTA: list_directory | PARAMS: {"path": "."}
@@ -1839,6 +1902,7 @@ class AgentLoop {
         // éxito en el run, se marca y se advierte al usuario (el caso
         // "¡Listo! 🌟" sin haber editado nada).
         const falseClaim = _detectUnverifiedEditClaims(responseText, toolResults);
+        const falseDesktopClaim = _detectUnverifiedDesktopClaims(responseText, toolResults);
         let response = this._withExpiredApprovalNotice(responseText);
         if (falseClaim) {
           logger.warn(
@@ -1848,12 +1912,21 @@ class AgentLoop {
           response +=
             '\n\n[NOTA DEL SISTEMA: esta respuesta afirma cambios que NO se ejecutaron — verificado por el pipeline. Pedí que lo haga de nuevo o revisá manualmente.]';
         }
+        if (falseDesktopClaim) {
+          logger.warn(
+            'AgentLoop',
+            `[agent-loop] ⚠ respuesta promete resultado desktop (${falseDesktopClaim}) sin NINGUNA tool verificada en el run`
+          );
+          response +=
+            '\n\n[NOTA DEL SISTEMA: esta respuesta afirma un resultado de escritorio/navegador/medios SIN evidencia verificada en esta ejecución. Pedí que lo verifique de nuevo (snapshot/get_text/ui_wait) o revisá manualmente.]';
+        }
         return {
           response,
           iterations: i + 1,
           toolResults,
           verify,
           unverifiedEdits: falseClaim || undefined,
+          unverifiedDesktop: falseDesktopClaim || undefined,
           skillsUsed: injectedSkills.slice(0, 5),
           artifactRounds: webVerifyRounds,
           mutationJournal: mutationJournal.toJSON(),
@@ -2053,9 +2126,20 @@ class AgentLoop {
         // el scope cubre el resto del run (cero cards más); si no hay handler
         // o se rechaza/expira, sigue el flujo clásico por clic. La propuesta
         // sale de tool+params (estructurado), nunca del idioma del mensaje.
+        // T13/T16: lo irreversible (comprar, pagar, borrar, publicar con
+        // cargo) exige "sí" explícito SIEMPRE: ni el scope de tarea ni el
+        // autoApprove lo silencian. Se fuerza ask y se salta la propuesta.
+        let irreversible = false;
+        try {
+          irreversible = isIrreversible(action);
+        } catch (_) {
+          irreversible = false;
+        }
+        if (irreversible && permissionAction !== 'deny') permissionAction = 'ask';
         if (
           permissionAction === 'ask' &&
           requiresApproval &&
+          !irreversible &&
           !this._taskScope &&
           !this._taskScopeProposed &&
           typeof opts.onTaskApprovalNeeded === 'function'

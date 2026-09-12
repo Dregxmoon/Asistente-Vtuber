@@ -1,5 +1,5 @@
 ---
-description: 'Abrir una app de escritorio (Writer, editores) y escribir texto largo por bloques con verificación y guardado confirmado'
+description: 'Abrir una app de escritorio (Writer, editores) y escribir texto largo por bloques con verificación y guardado confirmado. EN: open a desktop app and write long text in verified blocks. Ejemplos: abre writer y escribe, redacta un ensayo. EN examples: open writer and write, draft an essay'
 version: '1.0.0'
 domains: ['desktop', 'system']
 ---

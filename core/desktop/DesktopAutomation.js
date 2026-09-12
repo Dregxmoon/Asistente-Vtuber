@@ -39,6 +39,9 @@ class DesktopAutomation {
     /** @type {Map<string, {createdAt: number, bounds: {x: number,y: number,width: number,height: number}, imageSize: {width: number,height: number}}>} */
     this._captures = new Map();
     this._latestCaptureId = '';
+    /** @type {Buffer|null} última imagen JPEG (solo para ocr_query, se rota) */
+    this._latestImage = null;
+    this._latestImageId = '';
     /** @type {Map<string, Observation>} */
     this._observations = new Map();
     this._latestObservationId = '';
@@ -188,6 +191,8 @@ class DesktopAutomation {
     this._captures.clear();
     this._captures.set(captureId, { createdAt: this._now(), bounds, imageSize });
     this._latestCaptureId = captureId;
+    this._latestImage = image;
+    this._latestImageId = captureId;
     return {
       kind: 'desktop_screenshot',
       platform: this._platform,
@@ -199,6 +204,48 @@ class DesktopAutomation {
       mimeType: 'image/jpeg',
       byteLength: image.length,
       dataUrl: `data:image/jpeg;base64,${image.toString('base64')}`,
+    };
+  }
+
+  /**
+   * Ojos de respaldo (D3): localiza texto en la última captura con Tesseract
+   * y devuelve puntos de pantalla para pointer_click. NO consume la captura
+   * (leer no es actuar), pero exige vigencia + TTL igual que el clic.
+   * @param {{captureId?: unknown, query?: unknown, lang?: unknown, minConfidence?: unknown}} input
+   */
+  async ocrQuery(input) {
+    const captureId = _safeText(input.captureId, 80);
+    const capture = this._captures.get(captureId);
+    if (!capture || captureId !== this._latestCaptureId) {
+      throw new Error('Captura ausente u obsoleta; ejecuta desktop_screenshot nuevamente');
+    }
+    if (this._now() - capture.createdAt > 30_000) {
+      this._captures.delete(captureId);
+      throw new Error('La captura expiró; ejecuta desktop_screenshot nuevamente');
+    }
+    if (!this._latestImage || this._latestImageId !== captureId) {
+      throw new Error('La imagen de esta captura ya no está disponible; captúrala de nuevo');
+    }
+    const { readWords, locateQuery } = require('./OcrFallback.js');
+    const lang = /^[a-z]{3}([+][a-z]{3})?$/.test(String(input.lang || ''))
+      ? String(input.lang)
+      : undefined;
+    const words = await readWords(this._latestImage, lang);
+    const matches = locateQuery(
+      words,
+      input.query,
+      { bounds: capture.bounds, imageSize: capture.imageSize },
+      Math.min(100, Math.max(0, Number(input.minConfidence) || 30))
+    );
+    return {
+      kind: 'ocr_result',
+      platform: this._platform,
+      captureId,
+      query: _safeText(input.query, 120),
+      matchCount: matches.length,
+      matches,
+      verified: false,
+      requiresObservation: true,
     };
   }
 
@@ -236,6 +283,8 @@ class DesktopAutomation {
     if (!result.ok) throw new Error(_safeText(result.error, 500) || 'El clic fue rechazado');
     this._captures.delete(captureId);
     this._latestCaptureId = '';
+    this._latestImage = null;
+    this._latestImageId = '';
     return {
       kind: 'desktop_action',
       platform: this._platform,

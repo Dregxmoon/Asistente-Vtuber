@@ -159,7 +159,11 @@ const TOOL_SCHEMAS = [
           'navigate, click, type, press, wait_for, get_text, get_url, back, forward, screenshot, snapshot, tabs, new_tab, select_tab, close_tab, select, check, uncheck, hover, scroll, upload, download o dialog',
         default: 'navigate',
       },
-      { name: 'mode', type: 'string', description: 'background o managed' },
+      {
+        name: 'mode',
+        type: 'string',
+        description: 'background, managed o personal (tu navegador vinculado)',
+      },
       { name: 'url', type: 'string', description: 'URL para navegar' },
       { name: 'selector', type: 'string', description: 'Selector CSS opcional' },
       { name: 'role', type: 'string', description: 'Rol accesible del elemento' },
@@ -250,7 +254,13 @@ const TOOL_SCHEMAS = [
         name: 'query',
         type: 'string',
         description: 'Video o tema que se debe buscar',
-        required: true,
+        required: false,
+      },
+      {
+        name: 'channel',
+        type: 'string',
+        description: 'Canal de YouTube (@handle o nombre): reproduce su video más reciente',
+        required: false,
       },
       { name: 'service', type: 'string', description: 'Servicio permitido: youtube' },
       {
@@ -264,6 +274,65 @@ const TOOL_SCHEMAS = [
         description: 'Navegador permitido, solo para control external',
       },
     ],
+    highImpact: true,
+  },
+  {
+    id: 'desktop.personal_detect',
+    name: 'personal_browser_detect',
+    domain: ['desktop', 'web'],
+    source: 'desktop',
+    description:
+      'Detecta qué navegador USA el usuario (en ejecución gana a default). Sin efectos: solo propone vincularlo.',
+    params: [],
+    highImpact: true,
+  },
+  {
+    id: 'desktop.personal_link',
+    name: 'personal_browser_link',
+    domain: ['desktop', 'web'],
+    source: 'desktop',
+    description:
+      'Vincula el navegador personal del usuario por CDP con su consentimiento: lo lanza con depuración sobre SU perfil y adjunta control verificable con sus sesiones. Requiere aprobación explícita.',
+    params: [
+      {
+        name: 'browser',
+        type: 'string',
+        description: 'chromium, chrome, brave o edge (opcional: usa el detectado)',
+      },
+      { name: 'port', type: 'number', description: 'Puerto CDP local (default 9222)' },
+    ],
+    highImpact: true,
+  },
+  {
+    id: 'desktop.personal_status',
+    name: 'personal_browser_status',
+    domain: ['desktop', 'web'],
+    source: 'desktop',
+    description: 'Informa si el navegador personal está vinculado, sin ejecutar acciones',
+    params: [],
+    highImpact: true,
+  },
+  {
+    id: 'desktop.personal_login',
+    name: 'personal_browser_login',
+    domain: ['desktop', 'web'],
+    source: 'desktop',
+    description:
+      'Login guiado Ruta 1: abre el sitio en navegador verificable para que inicies sesión UNA vez (Kaoru jamás toca credenciales). Devuelve observación para retomar.',
+    params: [
+      { name: 'target', type: 'string', description: 'Alias del sitio o URL https', required: true },
+      { name: 'mode', type: 'string', description: 'managed o personal (vinculado)' },
+    ],
+    highImpact: true,
+  },
+  {
+    id: 'desktop.personal_close',
+    name: 'personal_browser_close',
+    domain: ['desktop', 'web'],
+    source: 'desktop',
+    description:
+      'Desconecta el navegador personal (tu navegador sigue abierto). Revoca el vínculo.',
+    params: [],
     highImpact: true,
   },
   {
@@ -291,6 +360,20 @@ const TOOL_SCHEMAS = [
       { name: 'sourceName', type: 'string', description: 'Nombre parcial de ventana' },
       { name: 'width', type: 'number', description: 'Ancho máximo' },
       { name: 'height', type: 'number', description: 'Alto máximo' },
+    ],
+    highImpact: true,
+  },
+  {
+    id: 'desktop.ocr_query',
+    name: 'ocr_query',
+    domain: ['desktop', 'system'],
+    source: 'desktop',
+    description:
+      'Ojos de respaldo: localiza texto en una captura vigente con OCR y devuelve puntos de pantalla para pointer_click (Wayland, canvas, juegos)',
+    params: [
+      { name: 'captureId', type: 'string', description: 'ID de captura', required: true },
+      { name: 'query', type: 'string', description: 'Texto a localizar', required: true },
+      { name: 'lang', type: 'string', description: 'Idioma Tesseract (eng, spa...)' },
     ],
     highImpact: true,
   },

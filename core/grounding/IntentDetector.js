@@ -34,10 +34,9 @@ const EmbedService = require('./EmbedService.js');
 const path = require('path');
 
 // ── Umbrales de confianza ─────────────────────────────────────────────────────
-// Ajustados para all-MiniLM-L6-v2 con similitud coseno normalizada.
-// Los scores de este modelo rara vez superan 0.95 en matches perfectos.
-// 0.72 filtra la mayoría de preguntas conversacionales que accidentalmente
-// comparten vocabulario con acciones de herramienta.
+// Ajustados para paraphrase-multilingual-MiniLM-L12-v2 (ver EmbedModel.js)
+// con similitud coseno normalizada. Se recalibran con --test tras reindexar;
+// si cambias de modelo, repite la calibración (los scores NO son portables).
 const THRESHOLD_HIGH = 0.75;
 const THRESHOLD_LOW = 0.55;
 
@@ -65,8 +64,9 @@ async function _getEmbedder() {
 
   _embedderPromise = (async () => {
     const { pipeline } = await import('@xenova/transformers');
-    logger.info('IntentDetector', '[intent-detector] Cargando modelo all-MiniLM-L6-v2...');
-    _embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
+    const { EMBED_MODEL_ID } = require('./EmbedModel.js');
+    logger.info('IntentDetector', `[intent-detector] Cargando modelo ${EMBED_MODEL_ID}...`);
+    _embedder = await pipeline('feature-extraction', EMBED_MODEL_ID, {
       progress_callback: undefined, // silenciar en producción
     });
     logger.info('IntentDetector', '[intent-detector] Modelo listo.');

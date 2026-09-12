@@ -541,11 +541,18 @@ const _approvalCards = new Map();
 // el cambio.
 const _FILE_MUTATOR_RE = /^(write|edit|edit_file|create_file|apply_patch)$/i;
 
-function _showApprovalCard({ id, tool, params, description, diff }) {
+function _showApprovalCard({ id, tool, params, description, diff, taskScope, task, target }) {
   const card = document.createElement('div');
   card.className = 'approval-card';
+  // Card de TAREA completa (D1b): una aprobación cubre todos los pasos. Mismos
+  // botones y mismo canal de respuesta; solo cambia el título y el detalle.
+  // Sin taskScope se pinta el card clásico por acción (compatibilidad total).
+  const isTaskCard = typeof taskScope === 'string' && taskScope.startsWith('task:');
   const safeDescription = _escapeHtml(description);
   const safeTool = _escapeHtml(tool);
+  const taskTitle = isTaskCard
+    ? `<div class="approval-title">¿HAGO TODA ESTA TAREA? — UNA APROBACIÓN CUBRE TODOS LOS PASOS</div><div class="approval-cmd">${_escapeHtml(task)} → ${_escapeHtml(target)}</div><div style="font-size:10px;color:var(--text-secondary);margin-bottom:10px">Alcance: <code>${_escapeHtml(taskScope)}</code> · Lo destructivo (comprar, pagar, borrar, terminar procesos) siempre pide aparte.</div>`
+    : '';
   const safeParams = {
     command: _escapeHtml(params?.command),
     path: _escapeHtml(params?.path),
@@ -568,7 +575,7 @@ function _showApprovalCard({ id, tool, params, description, diff }) {
   } else {
     previewHtml = _renderPatchPreview(params?.patch);
   }
-  card.innerHTML = `<div class="approval-title">ACCION DE ALTO IMPACTO — APROBACION REQUERIDA</div><div class="approval-cmd">${safeDescription}</div><div style="font-size:10px;color:var(--text-secondary);margin-bottom:10px">Herramienta: <b>${safeTool}</b>${safeParams.command ? ` · <code>${safeParams.command}</code>` : ''}${safeParams.path ? ` · <code>${safeParams.path}</code>` : ''}</div>${sandboxWarning}${previewHtml}<div class="approval-actions"><button class="btn-approve" id="approve-${id}">Ejecutar</button><button class="btn-always" id="always-${id}">Siempre</button><button class="btn-deny" id="deny-${id}">Cancelar</button></div>`;
+  card.innerHTML = `${taskTitle}<div class="approval-title">${isTaskCard ? 'DETALLE DE LA TAREA' : 'ACCION DE ALTO IMPACTO — APROBACION REQUERIDA'}</div><div class="approval-cmd">${safeDescription}</div><div style="font-size:10px;color:var(--text-secondary);margin-bottom:10px">Herramienta: <b>${safeTool}</b>${safeParams.command ? ` · <code>${safeParams.command}</code>` : ''}${safeParams.path ? ` · <code>${safeParams.path}</code>` : ''}</div>${sandboxWarning}${previewHtml}<div class="approval-actions"><button class="btn-approve" id="approve-${id}">${isTaskCard ? 'Hacer la tarea' : 'Ejecutar'}</button><button class="btn-always" id="always-${id}">Siempre</button><button class="btn-deny" id="deny-${id}">Cancelar</button></div>`;
   messagesEl.appendChild(card);
   // Toggle del bloque de diff incrustado en el card (misma interacción que el
   // bloque del feed: clic en el encabezado alterna la clase .open).

@@ -174,6 +174,78 @@ class DesktopControl {
     return this._websiteResolver;
   }
 
+  /**
+   * Ejecuta un binario y devuelve su stdout como texto (sin shell). Lo usa el
+   * vínculo personal para detectar el navegador default (xdg-settings, etc.).
+   * @param {string} command
+   * @param {string[]} [args]
+   * @returns {Promise<string>}
+   */
+  async readTextOutput(command, args = []) {
+    return this._runTextProcess(command, args);
+  }
+
+  /** @returns {Promise<string|null>} desktop-id del navegador default en Linux */
+  async detectDefaultBrowserId() {
+    if (this._platform !== 'linux') return null;
+    try {
+      const output = await this._runTextProcess('xdg-settings', ['get', 'default-web-browser']);
+      const id = output.trim().split(/\s+/)[0];
+      return /^[A-Za-z0-9][A-Za-z0-9._-]*\.desktop$/.test(id) ? id : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /**
+   * Lanza un navegador conocido con puerto CDP sobre un perfil validado
+   * (PersonalBrowser.validatePersonalLink ya lo verificó). Sin shell, sin
+   * matar nada: si el puerto está ocupado el lanzador falla y se informa.
+   * @param {{browser?: unknown, profileDir?: unknown, port?: unknown}} params
+   */
+  async launchBrowserDebug(params) {
+    const { browserInfo } = require('../planner/PersonalBrowser.js');
+    const browser = String((params && params.browser) || '')
+      .trim()
+      .toLowerCase();
+    const info = browserInfo(browser);
+    if (!info)
+      throw new Error(`Navegador no soportado para vínculo personal: ${browser || '(vacío)'}`);
+    const profileDir = String((params && params.profileDir) || '');
+    const port = Number((params && params.port) || 9222);
+    if (!profileDir || !Number.isInteger(port)) throw new Error('Vínculo personal inválido');
+    const args = [`--remote-debugging-port=${port}`, `--user-data-dir=${profileDir}`];
+    if (this._platform === 'linux') {
+      const bins = info.linuxBins || [];
+      if (!bins.length) throw new Error(`Sin binario conocido para ${browser} en Linux`);
+      let lastError = null;
+      for (const bin of bins) {
+        try {
+          await this._spawnDetached(bin, args);
+          return { kind: 'personal_browser', browser, port, status: 'spawned' };
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      throw new Error(
+        `No se pudo lanzar ${browser}: ${lastError instanceof Error ? lastError.message : lastError}`
+      );
+    }
+    if (this._platform === 'win32') {
+      const exe = (info.win32Bins || [])[0];
+      if (!exe) throw new Error(`Sin ejecutable conocido para ${browser} en Windows`);
+      await this._launchWindows(exe, args);
+      return { kind: 'personal_browser', browser, port, status: 'spawned' };
+    }
+    if (this._platform === 'darwin') {
+      const app = (info.darwinApps || [])[0];
+      if (!app) throw new Error(`Sin aplicación conocida para ${browser} en macOS`);
+      await this._spawnDetached('open', ['-a', app, '--args', ...args]);
+      return { kind: 'personal_browser', browser, port, status: 'spawned' };
+    }
+    throw new Error(`Plataforma no compatible: ${this._platform}`);
+  }
+
   /** @returns {Promise<InstalledApp[]>} */
   async listApps() {
     if (this._platform === 'linux') return this._listLinuxApps();

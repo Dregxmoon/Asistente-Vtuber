@@ -190,9 +190,12 @@ function setActivityContainer(el) {
   _activityContainerEl = el;
 }
 
-ipcRenderer.on('agent-approval-needed', (e, { actionId, tool, params, description, diff }) => {
-  _showApprovalCard({ id: actionId, tool, params, description, diff });
-});
+ipcRenderer.on(
+  'agent-approval-needed',
+  (e, { actionId, tool, params, description, diff, taskScope, task, target }) => {
+    _showApprovalCard({ id: actionId, tool, params, description, diff, taskScope, task, target });
+  }
+);
 
 // El timeout de aprobación expiró en main (sin respuesta del usuario): el card
 // se marca como expirado en vez de quedar activo aceptando clics que no van a

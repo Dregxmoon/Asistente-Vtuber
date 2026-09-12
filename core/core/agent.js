@@ -292,6 +292,9 @@ async function runAgent(userMessage, opts = {}) {
 
   const context = await buildContext(sessionHistory, null, {
     mode: 'agent',
+    // Árbitro LLM de intenciones (zona gris): opt-in explícito, apagado por
+    // defecto. Ver IntentArbitrator.js para por qué no hay un LLM local más.
+    intentArbitration: opts.intentArbitration === true,
   });
   logger.info('agent', `[agent-timing] buildContext ${Date.now() - _t0}ms`);
 

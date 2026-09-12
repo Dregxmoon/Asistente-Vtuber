@@ -7,7 +7,9 @@
 > de América"_ debe funcionar de punta a punta sin atajos hardcodeados.
 >
 > **Estado de esta revisión (rama testing):** implementado y verificado con tests
-> verdes **y en vivo** (esta máquina: 70 apps, AT-SPI activo, Chromium real) —
+> verdes **y en vivo** (esta máquina: 70 apps, AT-SPI activo, Chromium real,
+> Tesseract 5.5, Calculadora abierta/observada/cerrada de verdad, Amazon real
+> leído en managed, último video de nissaxter resuelto en vivo) —
 > A1+A4 originales más P0 (resolver compartido `WebsiteResolver` con
 > scoring+caché, paridad bridge/control, dominio web por contexto, fix
 > "está disponible el manga"), P1 (B2: 42 frases desktop ES+EN indexadas en
@@ -168,13 +170,60 @@ _"Abre mi LibreOffice Writer y escribe un ensayo sobre la conquista de América"
 - [x] A4. Dominio desktop genérico + contraparte web por contexto
       (`WEB_HINTS_RE`, `test_task_detector_desktop.js`) + fix "está disponible".
 
+### Ronda inferencia total (sin palabras, sin LLM nuevo)
+
+- [x] **Intenciones por inferencia** (`core/task/IntentClassifier.js`): coseno
+      contra ejemplos realistas por dominio (ES+EN), umbral + margen calibrados
+      en vivo (ES/EN/JA). El regex queda como fallback si fallan embeddings.
+      Cableado en `core/core/context.js`: regex → fusión intent → clasificador
+      → (opt-in) árbitro. Ningún idioma nuevo toca código.
+- [x] **Árbitro LLM opt-in** (`core/task/IntentArbitrator.js`): JSON estricto,
+      timeout 8s, fallback a null. Para negación y multi-intención.
+      **Por qué no un LLM pequeño local**: el modelo pequeño local YA es el de
+      embeddings (offline, ms, 0 deps); un generativo sumaría ~400MB, ~1GB RAM
+      y segundos por mensaje para lo que Groq hace mejor.
+
+### Ronda profunda (verificada en vivo + suites)
+
+- [x] **B1 real:** `core/grounding/EmbedModel.js` (fuente única) +
+      `paraphrase-multilingual-MiniLM-L12-v2` en los 5 call sites + reindex
+      total (DB 220→287) + calibración con queries reales ES/EN/JA. JA→ES cruza
+      a 0.65; EN compuesto llega a 0.54-0.60 (límite del modelo, documentado).
+      Regresiones del swap corregidas con frases compuestas y descripciones de
+      skills bilingües con ejemplos (convención nueva). Nota: el caché del
+      modelo vive en `node_modules/@xenova/transformers/.cache/` (~150MB, se
+      re-descarga con `npm ci` limpio).
+- [x] **Login guiado Ruta 1** (`personal_browser_login`): abre el sitio en
+      navegador verificable, devuelve observación para retomar, estado honesto
+      `login_required` + `verified:false` siempre. Kaoru jamás escribe
+      credenciales. Receta en el prompt.
+- [x] **Card de tarea en el renderer** (`src/chat/ipc.js` + `process.js`):
+      título "¿HAGO TODA ESTA TAREA?", alcance visible, mismos botones y canal.
+      Sin `taskScope` pinta el card clásico (compatible hacia atrás).
+- [x] **T13/T16 irreversibles** (`core/security/IrreversiblePolicy.js`):
+      comprar/pagar/borrar/publicar/rm-rf exigen "sí" explícito siempre — ni
+      taskScope ni autoApprove los silencian; la card lleva aviso ⚠.
+- [x] **D3 OCR** (`core/desktop/OcrFallback.js` + `ocrQuery` + tool `ocr_query`):
+      TSV de Tesseract → puntos de pantalla con la geometría de la captura,
+      misma vigencia/TTL que el clic, sin shell. Vivo: 249 palabras de pantalla
+      real ("saturday 14:30"). Cadena Wayland: screenshot → ocr_query →
+      pointer_click → re-observar.
+- [x] **T17-lite preferencias** (`core/desktop/UserPreferences.js`):
+      recuerda host ganador por términos (count>=2) + explícitos que ganan,
+      JSON atómico 0600 en `~/.config/kaoru/`, bonus +6 en el scoring ("como la
+      otra vez"). El bridge registra resoluciones exitosas solo.
+- [x] **T28 stats** (`OpenClawBridge.desktopSummary()` + handler IPC
+      `agent-desktop-stats` pendiente de UI): tasa por tool desktop + top fallos.
+- [x] **E2 claims desktop**: `_detectUnverifiedDesktopClaims` + nota del sistema + campo `unverifiedDesktop` (probado: humo detectado, evidencia pasa).
+
 ### Fase B — Multilingüe por inferencia (sin ramas por idioma)
 
 Principio implementado: el idioma vive solo en el texto del usuario y la
 respuesta final; tools, protocolo y decisiones usan interlingua canónica en
 inglés. Cero `if idioma == X` en el código.
 
-- [ ] B1. Embeddings multilingües (`paraphrase-multilingual-MiniLM-L12-v2`).
+- [x] B1. Embeddings multilingües (`paraphrase-multilingual-MiniLM-L12-v2` vía
+      `EmbedModel.js`, reindex + calibración; ver Ronda profunda).
 - [x] B2. 42 frases desktop ES+EN indexadas (`init_vectors.js` + `data/core.db`
       220→262; verificado con `--test`: ES medium, EN high).
 - [x] B3. Parser bilingüe (`TARGET/APPLICATION/WINDOW/NAME`,
@@ -195,6 +244,20 @@ inglés. Cero `if idioma == X` en el código.
       `localeHints` en el scoring del resolver (su tienda, su país).
 - [x] B9. Clarificación curiosa: el resolver devuelve candidatos en el error y
       la regla 12 del loop ordena preguntar UNA cosa concreta en su idioma.
+- [x] B10. Navegador personal por CDP (`core/planner/PersonalBrowser.js`):
+      detecta cuál USA el usuario (corriendo gana a default), propone vincularlo
+      y lo lanza con depuración sobre SU perfil. Jamás mata procesos ni toca
+      perfiles fuera de raíces esperadas. Tools `personal_browser_detect/link/status/close` + modo
+      `personal` en `browser` (mismas acciones verificables, ahora con sus sesiones).
+- [x] B11. Anti-bloqueos honestos: `_detectChallenge` tras navegar/actuar +
+      `wait_for_clearance` (el humano pasa el CAPTCHA una vez, Kaoru retoma).
+      Kaoru nunca resuelve CAPTCHAs sola.
+- [x] B12. Ojos para canales: `findLatestChannelVideo` (pestaña /videos en orden
+      de subida, selectores de canal real `ytd-rich-item-renderer`, probado en
+      vivo con nissaxter) + `play_media` con `CANAL` + skill `media-channel`.
+- [x] B13. Apps localizadas: `Name[es]` como primario según locale + aliases
+      ("calculadora" encuentra Calculator); fallback Bing RSS verificado en vivo
+      (`amazon → amazon.com.mx` en 2.9s cuando Google/DDG bloquean).
 
 ### Fase C — Skills de tarea
 

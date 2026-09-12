@@ -245,6 +245,7 @@ function isHighImpact(tool, params) {
     tool === 'play_media' ||
     tool === 'desktop_snapshot' ||
     tool === 'desktop_screenshot' ||
+    tool === 'ocr_query' ||
     tool === 'pointer_click' ||
     tool === 'window_list' ||
     tool === 'window_focus' ||
@@ -260,7 +261,12 @@ function isHighImpact(tool, params) {
     tool === 'process_list' ||
     tool === 'process_stop' ||
     tool === 'camera_status' ||
-    tool === 'open_camera'
+    tool === 'open_camera' ||
+    tool === 'personal_browser_detect' ||
+    tool === 'personal_browser_link' ||
+    tool === 'personal_browser_status' ||
+    tool === 'personal_browser_close' ||
+    tool === 'personal_browser_login'
   )
     return true;
 

@@ -366,7 +366,7 @@ function testBuildInjection() {
     fs.writeFileSync(
       path.join(skillsDir, 'git-skill', 'SKILL.md'),
       `---
-description: "Git version control operations"
+description: "Operaciones con git. Ejemplos: haz un commit, crea una rama. EN examples: make a commit, create a branch"
 ---
 # Git Content
 Detailed git workflows.`

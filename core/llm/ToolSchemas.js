@@ -133,9 +133,10 @@ const TOOL_SCHEMAS = [
         },
         mode: {
           type: 'string',
-          enum: ['background', 'managed'],
+          enum: ['background', 'managed', 'personal'],
           default: 'background',
-          description: 'managed abre la sesión visible que Kaoru puede controlar y verificar',
+          description:
+            'managed abre la sesión visible que Kaoru puede controlar y verificar; personal usa TU navegador vinculado (con tus sesiones, requiere personal_browser_link previo)',
         },
         url: { type: 'string', description: 'URL a navegar (obligatorio para action=navigate)' },
         selector: { type: 'string', description: 'Selector CSS opcional' },
@@ -245,11 +246,15 @@ const TOOL_SCHEMAS = [
   {
     name: 'play_media',
     description:
-      'Para órdenes compuestas como "abre YouTube, busca un video de guitarra y reprodúcelo". Usa por defecto el navegador visible administrado por Kaoru, pulsa reproducir y verifica que el video esté reproduciéndose. Requiere aprobación.',
+      'Para órdenes compuestas como "abre YouTube, busca un video de guitarra y reprodúcelo" o "ponme lo más reciente de <canal>". Usa por defecto el navegador visible administrado por Kaoru, pulsa reproducir y verifica que el video esté reproduciéndose. Requiere aprobación.',
     inputSchema: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: 'Tema o video solicitado' },
+        query: { type: 'string', description: 'Tema o video solicitado (o channel)' },
+        channel: {
+          type: 'string',
+          description: 'Canal de YouTube (@handle o nombre): reproduce su video más reciente',
+        },
         service: { type: 'string', enum: ['youtube'], default: 'youtube' },
         control: {
           type: 'string',
@@ -264,7 +269,57 @@ const TOOL_SCHEMAS = [
           description: 'Navegador opcional, usado únicamente con control=external',
         },
       },
-      required: ['query'],
+      required: [],
+    },
+  },
+  {
+    name: 'personal_browser_detect',
+    description:
+      'Detecta qué navegador USA el usuario (en ejecución gana a default). Sin efectos: solo propone vincularlo.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'personal_browser_link',
+    description:
+      'Vincula el navegador personal del usuario por CDP con su consentimiento (usa su perfil y sesiones). Requiere aprobación explícita; jamás cierra nada.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        browser: {
+          type: 'string',
+          description: 'chromium, chrome, brave o edge (opcional: usa el detectado)',
+        },
+        port: { type: 'number', description: 'Puerto CDP local (default 9222)' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'personal_browser_status',
+    description: 'Informa si el navegador personal está vinculado, sin ejecutar acciones.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'personal_browser_close',
+    description:
+      'Desconecta el navegador personal (tu navegador sigue abierto). Revoca el vínculo.',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'personal_browser_login',
+    description:
+      'Abre un sitio en navegador verificable para que el usuario inicie sesión UNA vez (Kaoru jamás escribe credenciales). Requiere aprobación.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        target: { type: 'string', description: 'Alias del sitio o URL https completa' },
+        mode: {
+          type: 'string',
+          enum: ['managed', 'personal'],
+          description: 'managed (perfil Kaoru) o personal (tu navegador vinculado)',
+        },
+      },
+      required: ['target'],
     },
   },
   {
@@ -294,6 +349,20 @@ const TOOL_SCHEMAS = [
         height: { type: 'number', description: 'Alto máximo, hasta 1080' },
       },
       required: [],
+    },
+  },
+  {
+    name: 'ocr_query',
+    description:
+      'Ojos de respaldo cuando no hay árbol accesible: localiza un texto en una desktop_screenshot vigente con OCR y devuelve puntos de pantalla para pointer_click.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        captureId: { type: 'string', description: 'ID efímero de desktop_screenshot' },
+        query: { type: 'string', description: 'Texto visible a localizar' },
+        lang: { type: 'string', description: 'Idioma Tesseract instalado (eng, spa...)' },
+      },
+      required: ['captureId', 'query'],
     },
   },
   {

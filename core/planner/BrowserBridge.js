@@ -40,6 +40,13 @@ let _launching = null; // promesa en curso, evita lanzar 2 navegadores en parale
 let _managedContext = null;
 let _managedPage = null;
 let _managedLaunching = null;
+// Navegador PERSONAL del usuario (CDP): su binario, su perfil, sus sesiones.
+// Kaoru solo observa y actúa con consentimiento; cerrar la conexión NUNCA
+// cierra su navegador (disconnect ≠ close).
+let _personalBrowser = null;
+let _personalContext = null;
+let _personalPage = null;
+let _personalMeta = null;
 let _fallbackProfileDir = '';
 const _pageIds = new WeakMap();
 const _pendingDialogs = new WeakMap();
@@ -48,6 +55,7 @@ const _hostSafetyCache = new Map();
 const _sessionIds = {
   background: crypto.randomUUID(),
   managed: crypto.randomUUID(),
+  personal: crypto.randomUUID(),
 };
 
 const YOUTUBE_HOSTS = new Set(['www.youtube.com', 'youtube.com', 'm.youtube.com', 'youtu.be']);
@@ -159,6 +167,7 @@ function _trackContextPages(context, mode) {
   context.on('page', (newPage) => {
     _pageId(newPage);
     if (mode === 'managed') _managedPage = newPage;
+    else if (mode === 'personal') _personalPage = newPage;
     else _page = newPage;
   });
 }
@@ -221,6 +230,133 @@ async function _ensureManagedBrowser() {
 }
 
 /**
+ * Adjunta el navegador PERSONAL del usuario por CDP (previamente vinculado
+ * con consentimiento: lanzado con --remote-debugging-port sobre su perfil).
+ * Reutiliza la conexión entre llamadas. Desconectar NO cierra su navegador.
+ * @param {string} endpoint p.ej. http://127.0.0.1:9222
+ * @param {{chromium?: {connectOverCDP: (endpoint: string) => Promise<unknown>}}} [deps] conector inyectable (tests)
+ */
+async function connectPersonalBrowser(endpoint, deps = {}) {
+  const clean = String(endpoint || '').trim();
+  if (!/^http:\/\/127\.0\.0\.1:\d{2,5}$/.test(clean)) {
+    throw new Error('El endpoint personal debe ser local (http://127.0.0.1:PUERTO)');
+  }
+  if (_personalBrowser && _personalContext && _personalPage && !_personalPage.isClosed()) {
+    return _personalPage;
+  }
+  const connector =
+    (deps.chromium && deps.chromium.connectOverCDP) ||
+    (await _playwrightChromium()).connectOverCDP.bind(await _playwrightChromium());
+  _sessionIds.personal = crypto.randomUUID();
+  _personalBrowser = await connector(clean);
+  const contexts =
+    typeof _personalBrowser.contexts === 'function' ? _personalBrowser.contexts() : [];
+  _personalContext = contexts[0] || null;
+  if (!_personalContext || typeof _personalContext.newPage !== 'function') {
+    _personalBrowser = null;
+    _personalContext = null;
+    throw new Error('El navegador personal no expone un contexto utilizable');
+  }
+  await _installNetworkPolicy(_personalContext);
+  _trackContextPages(_personalContext, 'personal');
+  const pages = typeof _personalContext.pages === 'function' ? _personalContext.pages() : [];
+  _personalPage =
+    pages.find((candidate) => !candidate.isClosed()) || (await _personalContext.newPage());
+  _personalPage.setDefaultTimeout(15_000);
+  _personalMeta = { endpoint: clean, connectedAt: Date.now() };
+  logger.info('BrowserBridge', '[browser-bridge] navegador personal adjuntado (CDP)');
+  return _personalPage;
+}
+
+/** Cierra la conexión CDP sin cerrar el navegador del usuario. */
+async function disconnectPersonalBrowser() {
+  const meta = _personalMeta ? { ..._personalMeta } : null;
+  if (_personalBrowser && typeof _personalBrowser.close === 'function') {
+    await _personalBrowser.close().catch(() => {});
+  }
+  _personalBrowser = null;
+  _personalContext = null;
+  _personalPage = null;
+  _personalMeta = null;
+  return { disconnected: true, previous: meta };
+}
+
+function personalBrowserStatus() {
+  if (!_personalBrowser || !_personalContext) return { connected: false };
+  return {
+    connected: true,
+    endpoint: _personalMeta?.endpoint || null,
+    sessionId: _sessionIds.personal,
+  };
+}
+
+async function _playwrightChromium() {
+  if (!_playwright) {
+    try {
+      _playwright = require('playwright');
+    } catch (_) {
+      throw new Error('Playwright no está instalado; no se puede adjuntar el navegador personal');
+    }
+  }
+  return _playwright.chromium;
+}
+
+async function _ensurePersonalBrowser() {
+  if (_personalContext && _personalPage && !_personalPage.isClosed()) return _personalPage;
+  throw new Error(
+    'Navegador personal no vinculado: usa personal_browser_link con tu consentimiento primero'
+  );
+}
+
+/**
+ * Detecta desafíos anti-bot (CAPTCHA/recaptcha/turnstile/press&hold) en la
+ * página actual. Kaoru NO los resuelve sola: los reporta para que el humano
+ * los pase una vez y ella retome (wait_for_clearance). Defensivo: ante
+ * cualquier duda devuelve "sin desafío" en vez de bloquear.
+ * @param {{locator?: Function, evaluate?: Function, title?: Function}} page
+ */
+async function _detectChallenge(page) {
+  try {
+    if (page && typeof page.locator === 'function') {
+      const selectors = [
+        'iframe[src*="recaptcha"]',
+        'iframe[src*="challenge"]',
+        '[data-sitekey]',
+        '#captcha',
+        '.g-recaptcha',
+        'input[name="captcha"]',
+        '#px-captcha',
+      ];
+      for (const selector of selectors) {
+        try {
+          const count = await page.locator(selector).count();
+          if (count > 0) return { challenge: true, kind: 'captcha' };
+        } catch (_) {}
+      }
+    }
+    let text = '';
+    try {
+      if (page && typeof page.evaluate === 'function') {
+        text = String(
+          await page.evaluate(() => String(document.body?.innerText || '').slice(0, 4000))
+        );
+      }
+    } catch (_) {}
+    try {
+      if (page && typeof page.title === 'function' && !text) text = String(await page.title());
+    } catch (_) {}
+    if (
+      /captcha|verify you are (a )?human|verifica que no eres|unusual traffic|tr[aá]fico inusual|press (&|and) hold|are you a robot|just a moment|attention required/i.test(
+        text
+      )
+    ) {
+      return { challenge: true, kind: 'challenge' };
+    }
+  } catch (_) {}
+  return { challenge: false, kind: 'none' };
+}
+
+/**
  * Lanza el navegador headless si no está corriendo ya.
  * Reutiliza la misma instancia entre llamadas para no pagar el costo
  * de arrancar Chromium en cada acción.
@@ -273,6 +409,8 @@ async function _ensureBrowser() {
  * Cierra el navegador. Llamar al cerrar la app (app.on('before-quit')).
  */
 async function closeBrowser() {
+  // La conexión personal se suelta SIN cerrar el navegador del usuario.
+  await disconnectPersonalBrowser().catch(() => {});
   if (_managedContext) {
     await _managedContext.close().catch(() => {});
     _managedContext = null;
@@ -314,9 +452,18 @@ async function closeBrowser() {
  */
 async function executeBrowserAction(input) {
   const { action, url, selector } = input;
-  const mode = input.mode === 'managed' ? 'managed' : 'background';
-  let page = mode === 'managed' ? await _ensureManagedBrowser() : await _ensureBrowser();
-  const context = mode === 'managed' ? _managedContext : _backgroundContext;
+  const mode =
+    input.mode === 'managed' ? 'managed' : input.mode === 'personal' ? 'personal' : 'background';
+  let page;
+  if (mode === 'managed') page = await _ensureManagedBrowser();
+  else if (mode === 'personal') page = await _ensurePersonalBrowser();
+  else page = await _ensureBrowser();
+  const context =
+    mode === 'managed'
+      ? _managedContext
+      : mode === 'personal'
+        ? _personalContext
+        : _backgroundContext;
   const pages = context && typeof context.pages === 'function' ? context.pages() : [page];
   if (input.sessionId && input.sessionId !== _sessionIds[mode]) {
     throw new Error('La sesión del navegador cambió; ejecuta browser snapshot nuevamente');
@@ -355,6 +502,7 @@ async function executeBrowserAction(input) {
     'upload',
     'download',
     'dialog',
+    'wait_for_clearance',
   ]);
   if (scopedActions.has(action)) {
     if (!input.sessionId || !input.pageId || !input.expectedOrigin) {
@@ -385,6 +533,22 @@ async function executeBrowserAction(input) {
     if (_origin(current) !== 'null') await _assertSafeUrl(current);
   };
 
+  // Desafío anti-bot tras navegar/actuar: Kaoru NO resuelve CAPTCHAs sola
+  // (evasión de bots: poco fiable y contra ToS). Lo detecta, lo reporta con
+  // requiresUserAction y el humano lo pasa una vez; wait_for_clearance retoma.
+  const withChallengeCheck = async (result) => {
+    const found = await _detectChallenge(page);
+    if (found.challenge) {
+      return {
+        ...result,
+        humanChallenge: { kind: found.kind, requiresUserAction: true },
+        intentVerified: false,
+        status: 'executed_unverified',
+      };
+    }
+    return result;
+  };
+
   switch (action) {
     case 'navigate': {
       if (!url) throw new Error('navigate requiere "url"');
@@ -392,7 +556,35 @@ async function executeBrowserAction(input) {
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20_000 });
       await ensureFinalUrlSafe();
       const title = await page.title();
-      return { result: { ...pageMeta(), title, status: 'completed', verified: true } };
+      return {
+        result: await withChallengeCheck({
+          ...pageMeta(),
+          title,
+          status: 'completed',
+          verified: true,
+        }),
+      };
+    }
+
+    case 'wait_for_clearance': {
+      const timeout = Math.min(120_000, Math.max(1000, Number(input.timeout) || 60_000));
+      const deadline = Date.now() + timeout;
+      let cleared = false;
+      do {
+        const found = await _detectChallenge(page);
+        cleared = !found.challenge;
+        if (!cleared && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+      } while (!cleared && Date.now() < deadline);
+      return {
+        result: {
+          ...pageMeta(),
+          status: cleared ? 'completed' : 'timeout',
+          verified: cleared,
+          requiresUserAction: !cleared,
+        },
+      };
     }
 
     case 'tabs': {
@@ -416,6 +608,7 @@ async function executeBrowserAction(input) {
       }
       page = await context.newPage();
       if (mode === 'managed') _managedPage = page;
+      else if (mode === 'personal') _personalPage = page;
       else _page = page;
       if (url) {
         await _assertSafeUrl(url);
@@ -428,6 +621,7 @@ async function executeBrowserAction(input) {
     case 'select_tab':
       await page.bringToFront();
       if (mode === 'managed') _managedPage = page;
+      else if (mode === 'personal') _personalPage = page;
       else _page = page;
       return { result: { ...pageMeta(), status: 'completed', verified: true } };
 
@@ -437,6 +631,7 @@ async function executeBrowserAction(input) {
       const remaining = pages.filter((candidate) => !candidate.isClosed());
       if (remaining.length) {
         if (mode === 'managed') _managedPage = remaining[0];
+        else if (mode === 'personal') _personalPage = remaining[0];
         else _page = remaining[0];
       }
       return {
@@ -487,7 +682,7 @@ async function executeBrowserAction(input) {
       await page.waitForTimeout?.(150);
       await ensureFinalUrlSafe();
       return {
-        result: {
+        result: await withChallengeCheck({
           ...pageMeta(),
           executed: true,
           actionVerified: true,
@@ -499,7 +694,7 @@ async function executeBrowserAction(input) {
               ? 'completed'
               : 'executed_unverified',
           previousUrl: beforeUrl,
-        },
+        }),
       };
     }
 
@@ -510,14 +705,14 @@ async function executeBrowserAction(input) {
       await locator.fill(value, { timeout: 15_000 });
       const actual = typeof locator.inputValue === 'function' ? await locator.inputValue() : value;
       return {
-        result: {
+        result: await withChallengeCheck({
           ...pageMeta(),
           executed: true,
           actionVerified: actual === value,
           intentVerified: actual === value,
           status: actual === value ? 'completed' : 'verification_failed',
           valueLength: value.length,
-        },
+        }),
       };
     }
 
@@ -1086,17 +1281,11 @@ async function findFirstYouTubeVideo(rawQuery) {
 }
 
 /**
- * Abre un navegador visible administrado por Kaoru, navega al video y verifica
- * si el elemento multimedia realmente comenzó a reproducirse.
- * @param {string} rawQuery
+ * Verifica que un <video> realmente avanza (no basta con "play pulsado").
+ * Contrato compartido por búsqueda, URL directa y último video de un canal.
+ * @param {{evaluate: Function, locator: Function, waitForFunction?: Function}} page
  */
-async function playYouTubeMedia(rawQuery) {
-  const query = _normalizeMediaQuery(rawQuery);
-  const page = await _ensureManagedBrowser();
-  const watchUrl = await _searchYouTube(page, query);
-  await page.goto(watchUrl, { waitUntil: 'domcontentloaded', timeout: 25_000 });
-  await _dismissYouTubeConsent(page);
-
+async function _awaitPlayback(page) {
   const playButton = page.locator('.ytp-large-play-button, button.ytp-play-button').first();
   let playing = await page
     .evaluate(() => {
@@ -1138,6 +1327,110 @@ async function playYouTubeMedia(rawQuery) {
       .then(() => true)
       .catch(() => false);
   }
+  return playing;
+}
+
+/** @param {unknown} rawHandle @returns {string} handle normalizado sin @ ni URL */
+function _normalizeChannelHandle(rawHandle) {
+  let handle = String(rawHandle || '').trim();
+  const atMatch = /@([A-Za-z0-9._-]{1,60})/.exec(handle);
+  if (atMatch) return atMatch[1];
+  const pathMatch = /\byoutube\.com\/(?:c|user|channel)\/([A-Za-z0-9._-]{1,60})/i.exec(handle);
+  if (pathMatch) return pathMatch[1];
+  handle = handle.replace(/^@/, '').trim();
+  if (!/^[A-Za-z0-9._-]{1,60}$/.test(handle)) throw new Error('Canal de YouTube inválido');
+  return handle;
+}
+
+/**
+ * Ojos para "ponme lo más reciente de <canal>": abre la pestaña de videos del
+ * canal en orden de subida y devuelve el PRIMER /watch válido (el más
+ * reciente). Solo sale una URL validada por _youtubeWatchUrl.
+ * @param {string} rawHandle @nissaxter, nissaxter, URL del canal...
+ */
+async function findLatestChannelVideo(rawHandle) {
+  const handle = _normalizeChannelHandle(rawHandle);
+  const page = await _ensureBrowser();
+  const candidates = [
+    `https://www.youtube.com/@${handle}/videos`,
+    `https://www.youtube.com/c/${handle}/videos`,
+    `https://www.youtube.com/user/${handle}/videos`,
+  ];
+  for (const channelUrl of candidates) {
+    await _assertSafeUrl(channelUrl);
+    await page.goto(channelUrl, { waitUntil: 'domcontentloaded', timeout: 25_000 }).catch(() => {});
+    await _dismissYouTubeConsent(page);
+    // El renderer de YouTube hidrata DESPUÉS de domcontentloaded: esperar el
+    // primer enlace antes de leer, si no el DOM sale vacío (falso negativo).
+    // Las páginas de canal usan ytd-rich-item-renderer con anchors SIN id
+    // (a#video-title solo aparece en búsquedas): se cubren ambas formas.
+    const CHANNEL_LINK_SELECTOR =
+      'ytd-rich-item-renderer a[href*="watch?v="], a#video-title[href*="watch?v="]';
+    if (page && typeof page.locator === 'function') {
+      await page
+        .locator(CHANNEL_LINK_SELECTOR)
+        .first()
+        .waitFor({ state: 'attached', timeout: 12_000 })
+        .catch(() => {});
+    }
+    const first = await page
+      .evaluate(
+        (selector) =>
+          [...document.querySelectorAll(selector)]
+            .slice(0, 5)
+            .map((element) => element.getAttribute('href') || ''),
+        CHANNEL_LINK_SELECTOR
+      )
+      .catch(() => []);
+    for (const href of Array.isArray(first) ? first : []) {
+      const watchUrl = _youtubeWatchUrl(href);
+      if (watchUrl) return watchUrl;
+    }
+  }
+  throw new Error(
+    `No encontré videos recientes del canal "${handle}"; verifica el nombre del canal`
+  );
+}
+
+/**
+ * Reproduce una URL /watch ya validada en el navegador visible y verifica
+ * reproducción real. Misma evidencia que la búsqueda (playing + verified).
+ * @param {string} watchUrl URL https de youtube.com/watch validada
+ * @param {string} [label] etiqueta para el reporte (canal o consulta)
+ */
+async function playYouTubeUrl(watchUrl, label = '') {
+  const validated = _youtubeWatchUrl(watchUrl);
+  if (!validated) throw new Error('URL de video inválida para reproducción');
+  const page = await _ensureManagedBrowser();
+  await page.goto(validated, { waitUntil: 'domcontentloaded', timeout: 25_000 });
+  await _dismissYouTubeConsent(page);
+  const playing = await _awaitPlayback(page);
+  await page.bringToFront();
+  return {
+    kind: 'media',
+    service: 'youtube',
+    query: label,
+    url: validated,
+    browser: 'kaoru-managed-chromium',
+    playing,
+    verified: playing,
+    requiresUserAction: !playing,
+  };
+}
+
+/**
+ * Abre un navegador visible administrado por Kaoru, navega al video y verifica
+ * si el elemento multimedia realmente comenzó a reproducirse.
+ * @param {string} rawQuery
+ */
+async function playYouTubeMedia(rawQuery) {
+  const query = _normalizeMediaQuery(rawQuery);
+  const page = await _ensureManagedBrowser();
+  const watchUrl = await _searchYouTube(page, query);
+  await page.goto(watchUrl, { waitUntil: 'domcontentloaded', timeout: 25_000 });
+  await _dismissYouTubeConsent(page);
+
+  const playing = await _awaitPlayback(page);
   await page.bringToFront();
   return {
     kind: 'media',
@@ -1169,7 +1462,12 @@ module.exports = {
   executeBrowserAction,
   executeWebSearch,
   findFirstYouTubeVideo,
+  findLatestChannelVideo,
   playYouTubeMedia,
+  playYouTubeUrl,
+  connectPersonalBrowser,
+  disconnectPersonalBrowser,
+  personalBrowserStatus,
   closeBrowser,
   setDefaultLocale,
   _youtubeWatchUrl,
@@ -1182,6 +1480,8 @@ module.exports = {
   },
   _setRssFallbackForTests: (fallback) => {
     // null explícito = sin fallback (tests deterministas sin red).
-    _rssFallback = fallback === null ? null : typeof fallback === 'function' ? fallback : _fetchBingRss;
+    _rssFallback =
+      fallback === null ? null : typeof fallback === 'function' ? fallback : _fetchBingRss;
   },
+  _detectChallengeForTests: _detectChallenge,
 };

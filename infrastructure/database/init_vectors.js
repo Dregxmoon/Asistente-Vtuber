@@ -228,6 +228,10 @@ const BUILTIN_INTENT_CATALOG = [
       'puedes mostrarme lo que tiene',
       'qué hay dentro de',
       'pásame el contenido de',
+      'lee el archivo package.json',
+      'muéstrame el archivo de configuración',
+      'lee el fichero json',
+      'read the package.json file',
     ],
   },
   {
@@ -379,6 +383,10 @@ const BUILTIN_INTENT_CATALOG = [
       'investiga en internet',
       'fíjate en internet qué dice sobre',
       'busca noticias sobre',
+      'busca en internet cómo configurar algo',
+      'busca en internet un tutorial de',
+      'investiga cómo hacer algo en la web',
+      'search the internet how to configure something',
     ],
   },
   {
@@ -450,6 +458,8 @@ const BUILTIN_INTENT_CATALOG = [
       'ponme el reproductor de video',
       'open my writer app and start working',
       'launch the game',
+      'abre la app y escribe un texto',
+      'open writer and write an essay',
     ],
   },
   {
@@ -467,6 +477,15 @@ const BUILTIN_INTENT_CATALOG = [
       'take me to the store page',
       'abre el navegador en esa dirección',
       'open that link in my browser',
+      'abre amazon y revisa un producto',
+      'abre la tienda y dime si está disponible',
+      'abre el sitio y consulta el precio',
+      'open amazon and check availability',
+      'open the store and check the price',
+      'open amazon and check if it is available',
+      'open the store and check if it is available',
+      'abre amazon y mira si está disponible',
+      'abre la página y mira el manga',
     ],
   },
   {
@@ -482,6 +501,12 @@ const BUILTIN_INTENT_CATALOG = [
       'play that video',
       'search and play the song',
       'pon el directo en la pantalla',
+      'ponme lo más reciente de youtube',
+      'reproduce lo último de su canal de youtube',
+      'pon el último video del canal',
+      'reproduce el video más nuevo del canal',
+      'play the latest video from the youtube channel',
+      'play the newest youtube upload from',
     ],
   },
   {
@@ -643,13 +668,14 @@ async function getEmbedder() {
 
   await loadPipeline();
 
-  logger.info('init_vectors', '[init-vectors] Cargando modelo all-MiniLM-L6-v2...');
+  const { EMBED_MODEL_ID } = require('../../core/grounding/EmbedModel.js');
+  logger.info('init_vectors', `[init-vectors] Cargando modelo ${EMBED_MODEL_ID}...`);
   logger.info(
     'init_vectors',
     '[init-vectors] Primera carga: ~5-10s. Las siguientes serán instantáneas.'
   );
 
-  _embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
+  _embedder = await pipeline('feature-extraction', EMBED_MODEL_ID, {
     progress_callback: (info) => {
       if (info.status === 'downloading') {
         process.stdout.write(

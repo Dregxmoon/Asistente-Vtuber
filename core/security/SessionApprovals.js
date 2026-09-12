@@ -115,7 +115,12 @@ function approvalPattern(action) {
       .slice(0, 16);
     return `ui_wait:${application}:${expectedFingerprint}`;
   }
-  if (tool === 'desktop_snapshot' || tool === 'desktop_screenshot' || tool === 'window_list') {
+  if (
+    tool === 'desktop_snapshot' ||
+    tool === 'desktop_screenshot' ||
+    tool === 'ocr_query' ||
+    tool === 'window_list'
+  ) {
     const application = String(params.application || params.sourceId || params.sourceName || 'all')
       .trim()
       .toLowerCase()
@@ -140,6 +145,27 @@ function approvalPattern(action) {
   }
   if (tool === 'desktop_capabilities' || tool === 'camera_status' || tool === 'open_camera') {
     return tool;
+  }
+  if (tool === 'personal_browser_detect' || tool === 'personal_browser_status') {
+    return tool;
+  }
+  if (tool === 'personal_browser_link') {
+    const browser = String(params.browser || 'detectado')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .slice(0, 40);
+    return `personal_browser_link:${browser || 'detectado'}`;
+  }
+  if (tool === 'personal_browser_close') {
+    return 'personal_browser_close';
+  }
+  if (tool === 'personal_browser_login' && typeof params.target === 'string' && params.target.trim()) {
+    try {
+      return `personal_browser_login:${new URL(params.target.trim()).hostname}`;
+    } catch (_) {
+      return `personal_browser_login:${params.target.trim().toLowerCase().slice(0, 80)}`;
+    }
   }
   if (
     [
@@ -264,13 +290,18 @@ function taskApprovalPattern(task, target) {
 
 // Tools que una aprobación de tarea puede cubrir: observación, navegación,
 // interacción UI y apertura/reproducción. Excluidas a propósito: process_stop
-// (termina procesos), subidas/descargas del navegador (escriben archivos) y
-// todo lo que no sea desktop/web (exec, write, edit, git, mcp...).
+// (termina procesos), personal_browser_link (el consentimiento mismo siempre
+// se pregunta), subidas/descargas del navegador (escriben archivos) y todo lo
+// que no sea desktop/web (exec, write, edit, git, mcp...).
 const TASK_SCOPED_TOOLS = new Set([
   'list_apps',
   'launch_app',
   'open_website',
   'play_media',
+  'personal_browser_detect',
+  'personal_browser_status',
+  'personal_browser_close',
+  'personal_browser_login',
   'desktop_snapshot',
   'desktop_screenshot',
   'pointer_click',
@@ -303,6 +334,10 @@ const TASK_SCOPED_TOOLS = new Set([
  * @returns {boolean}
  */
 function isTaskScopeApproved(action, taskScope) {
+  try {
+    const { isIrreversible } = require('./IrreversiblePolicy.js');
+    if (isIrreversible(action)) return false;
+  } catch (_) {}
   if (typeof taskScope !== 'string' || !taskScope.startsWith('task:')) return false;
   const parts = taskScope.split(':');
   if (parts.length !== 3 || !parts[1] || !parts[2]) return false;

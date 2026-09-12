@@ -86,6 +86,7 @@ const DESKTOP_TOOLS = new Set([
   'play_media',
   'desktop_snapshot',
   'desktop_screenshot',
+  'ocr_query',
   'pointer_click',
   'window_list',
   'window_focus',
@@ -102,6 +103,11 @@ const DESKTOP_TOOLS = new Set([
   'process_stop',
   'camera_status',
   'open_camera',
+  'personal_browser_detect',
+  'personal_browser_link',
+  'personal_browser_status',
+  'personal_browser_close',
+  'personal_browser_login',
 ]);
 
 const DESKTOP_ACTIONS = {
@@ -325,13 +331,22 @@ class OpenClawBridge {
     // Inyectable para tests del guard verificar ⇒ managed (producción: Playwright real).
     this._managedNavigator =
       options.managedNavigator || ((input) => BrowserBridge.executeBrowserAction(input));
+    // Inyectables para tests del modo canal (producción: YouTube real).
+    this._channelFinder = options.channelFinder || null;
+    this._channelPlayer = options.channelPlayer || null;
+    // Inyectable para tests del vínculo personal (producción: CDP real).
+    this._personalConnector = options.personalConnector || BrowserBridge.connectPersonalBrowser;
     // Inyectables solo para tests; en producción caen a BrowserBridge/UrlGuard reales.
     this._webSearch = options.webSearch || BrowserBridge.executeWebSearch;
     this._websiteUrlGuard = options.urlGuard || isUrlSafe;
+    // Memoria viva "como la otra vez" (inyectable en tests con ruta temporal).
+    const { UserPreferences } = require('../desktop/UserPreferences.js');
+    this._prefs = options.userPreferences || new UserPreferences();
     this._websiteResolver = new WebsiteResolver({
       aliases: SITE_ALIASES,
       webSearch: this._webSearch,
       urlGuard: this._websiteUrlGuard,
+      prefs: this._prefs,
     });
     // P0: el mismo contrato en ambas capas. Si el control de escritorio admite
     // resolver, se le inyecta este resolver para que `DesktopControl` directo
@@ -350,6 +365,134 @@ class OpenClawBridge {
   /** @param {string} rawTarget */
   _resolveWebsiteTarget(rawTarget) {
     return this._websiteResolver.resolve(rawTarget);
+  }
+
+  /**
+   * Detecta el navegador que el usuario USA: el que corre ahora gana sobre el
+   * predeterminado. Solo datos, sin listas mágicas (PersonalBrowser).
+   */
+  async _detectPersonalBrowser() {
+    const PersonalBrowser = require('./PersonalBrowser.js');
+    let processes = [];
+    try {
+      const listed = await this._desktopControl.execute('process_list', { limit: 250 });
+      processes = Array.isArray(listed) ? listed : [];
+    } catch (_) {
+      processes = [];
+    }
+    const running = PersonalBrowser.detectRunningBrowser({ processes });
+    let defaultBrowser = null;
+    try {
+      if (typeof this._desktopControl.detectDefaultBrowserId === 'function') {
+        const desktopId = await this._desktopControl.detectDefaultBrowserId();
+        if (desktopId) {
+          for (const [id, info] of Object.entries(PersonalBrowser.KNOWN_BROWSERS)) {
+            if (
+              info.desktopIds.some(
+                (candidate) => candidate.toLowerCase() === String(desktopId).toLowerCase()
+              )
+            ) {
+              defaultBrowser = { browser: id, source: 'default' };
+              break;
+            }
+          }
+        }
+      }
+    } catch (_) {
+      defaultBrowser = null;
+    }
+    const proposal = PersonalBrowser.proposePersonalBrowser(running, defaultBrowser);
+    return {
+      kind: 'personal_browser',
+      running,
+      defaultBrowser,
+      proposal,
+      note: proposal
+        ? `Veo que usas ${proposal.browser} (${proposal.reason}). Vincúlalo con personal_browser_link para operar con tus sesiones.`
+        : 'No detecté un navegador soportado corriendo ni por defecto.',
+    };
+  }
+
+  /**
+   * Login guiado Ruta 1: abre el sitio en un navegador verificable (managed o
+   * personal vinculado) y devuelve la observación para retomar. Kaoru NUNCA
+   * escribe credenciales: el humano inicia sesión UNA vez, dice "ya entré" y
+   * la sesión queda guardada en ese perfil. Verificado=false SIEMPRE aquí —
+   * afirmar login sería fabricar evidencia.
+   */
+  async _guidedLogin(params = {}) {
+    const rawTarget = String(params.target || '').trim();
+    if (!rawTarget) throw new Error('personal_browser_login requiere un sitio (SITIO o URL)');
+    const resolved = await this._resolveWebsiteTarget(rawTarget);
+    const mode = params.mode === 'personal' ? 'personal' : 'managed';
+    const navigated = await this._managedNavigator({ action: 'navigate', mode, url: resolved.url });
+    const observed = await this._managedNavigator({ action: 'snapshot', mode });
+    const observation = observed && observed.result ? observed.result : {};
+    return {
+      kind: 'website',
+      url: resolved.url,
+      title: navigated && navigated.result ? navigated.result.title : '',
+      browser: mode === 'personal' ? 'personal' : 'kaoru-managed-chromium',
+      status: 'login_required',
+      verified: false,
+      requiresUserAction: true,
+      resolvedBy: resolved.resolvedBy,
+      observation: {
+        sessionId: observation.sessionId || null,
+        pageId: observation.pageId || null,
+        origin: observation.origin || null,
+      },
+      note: 'Inicia sesión UNA vez en esta ventana y dime "ya entré". Tu sesión queda guardada; Kaoru jamás toca tus credenciales.',
+    };
+  }
+
+  /**
+   * Vincula el navegador personal con consentimiento (aprobación previa en
+   * AgentLoop): valida perfil+puerto, lo lanza con CDP y adjunta Playwright.
+   * JAMÁS cierra nada del usuario; si el puerto está ocupado se informa.
+   */
+  async _linkPersonalBrowser(params = {}) {
+    const PersonalBrowser = require('./PersonalBrowser.js');
+    const browser = String(params.browser || '')
+      .trim()
+      .toLowerCase();
+    const port = Number(params.port) || PersonalBrowser.CDP_DEFAULT_PORT;
+    let target = browser;
+    if (!target) {
+      const detected = await this._detectPersonalBrowser();
+      if (!detected.proposal) {
+        throw new Error(detected.note || 'No se detectó un navegador personal para vincular');
+      }
+      target = detected.proposal.browser;
+    }
+    const profile = PersonalBrowser.resolveProfileDir(target, {});
+    if (!profile.exists) {
+      throw new Error(
+        `No encontré el perfil de ${target} (${profile.path}). Ábrelo una vez de forma normal y reintenta`
+      );
+    }
+    const validated = await PersonalBrowser.validatePersonalLink({
+      browser: target,
+      profileDir: profile.path,
+      port,
+    });
+    const launched = await this._desktopControl.launchBrowserDebug({
+      browser: validated.browser,
+      profileDir: validated.profileDir,
+      port: validated.port,
+    });
+    const endpoint = PersonalBrowser.cdpEndpoint(validated.port);
+    await this._personalConnector(endpoint);
+    return {
+      kind: 'personal_browser',
+      browser: validated.browser,
+      label: validated.label,
+      endpoint,
+      launched: launched.status,
+      sessionId: BrowserBridge.personalBrowserStatus().sessionId,
+      verified: true,
+      note: 'Vinculado con tus sesiones. Desconecta con personal_browser_close (tu navegador sigue abierto).',
+    };
   }
 
   /**
@@ -451,6 +594,8 @@ class OpenClawBridge {
           desktopResult = await this._desktopAutomation.snapshot(params);
         } else if (tool === 'desktop_screenshot') {
           desktopResult = await this._desktopAutomation.screenshot(params);
+        } else if (tool === 'ocr_query') {
+          desktopResult = await this._desktopAutomation.ocrQuery(params);
         } else if (tool === 'pointer_click') {
           desktopResult = await this._desktopAutomation.pointerClick(params);
         } else if (tool === 'window_list') {
@@ -483,30 +628,56 @@ class OpenClawBridge {
             browser: 'kaoru-managed-chromium',
             ...navigated.result,
           };
+        } else if (tool === 'personal_browser_detect') {
+          desktopResult = await this._detectPersonalBrowser();
+        } else if (tool === 'personal_browser_link') {
+          desktopResult = await this._linkPersonalBrowser(params);
+        } else if (tool === 'personal_browser_status') {
+          desktopResult = {
+            kind: 'personal_browser',
+            ...BrowserBridge.personalBrowserStatus(),
+          };
+        } else if (tool === 'personal_browser_close') {
+          desktopResult = {
+            kind: 'personal_browser',
+            ...(await BrowserBridge.disconnectPersonalBrowser()),
+            note: 'Conexión cerrada; tu navegador sigue abierto.',
+          };
+        } else if (tool === 'personal_browser_login') {
+          desktopResult = await this._guidedLogin(params);
         } else if (tool === 'play_media') {
           const service = String(params.service || 'youtube')
             .trim()
             .toLowerCase();
           const query = String(params.query || '').trim();
+          const channel = String(params.channel || '').trim();
           if (service !== 'youtube')
             throw new Error(`Servicio multimedia no permitido: ${service}`);
-          if (!query || query.length > 200)
-            throw new Error('play_media requiere una consulta válida');
-          if ([...query].some((character) => character.charCodeAt(0) < 32)) {
+          if (!query && !channel)
+            throw new Error('play_media requiere una consulta o un canal válido');
+          if (query.length > 200 || channel.length > 60)
+            throw new Error('play_media requiere una consulta o un canal válido');
+          if ([...query, ...channel].some((character) => character.charCodeAt(0) < 32)) {
             throw new Error('La consulta multimedia contiene caracteres no permitidos');
           }
           const control = String(params.control || 'managed').toLowerCase();
           if (!['managed', 'external'].includes(control)) {
             throw new Error(`Modo de control multimedia no permitido: ${control}`);
           }
+          // "Ponme lo más reciente de <canal>": resuelve el último video del
+          // canal y lo reproduce con la misma verificación que la búsqueda.
+          const channelPlayer = this._channelPlayer || BrowserBridge.playYouTubeUrl;
+          const channelFinder = this._channelFinder || BrowserBridge.findLatestChannelVideo;
           const playback =
             control === 'managed'
-              ? await this._mediaPlayer(query)
+              ? channel
+                ? await channelPlayer(await channelFinder(channel), channel)
+                : await this._mediaPlayer(query)
               : {
                   kind: 'media',
                   service,
-                  query,
-                  url: await this._mediaResolver(query),
+                  query: channel || query,
+                  url: channel ? await channelFinder(channel) : await this._mediaResolver(query),
                   browser: params.browser || 'default',
                   playing: false,
                   verified: false,
@@ -558,6 +729,15 @@ class OpenClawBridge {
           }
         }
         if (tool === 'open_website' && resolvedTargetInfo && desktopResult) {
+          // Memoria viva: lo resuelto por búsqueda y abierto con éxito se
+          // recuerda ("como la otra vez"). Nunca rompe el flujo.
+          if (resolvedTargetInfo.resolvedBy === 'search' && resolvedTargetInfo.query) {
+            try {
+              if (this._prefs && typeof this._prefs.recordResolution === 'function') {
+                this._prefs.recordResolution(resolvedTargetInfo.query, desktopResult.url);
+              }
+            } catch (_) {}
+          }
           desktopResult = {
             ...desktopResult,
             ...(forcedManaged ? { forcedManaged: true } : {}),
@@ -772,6 +952,41 @@ class OpenClawBridge {
       failures[entry.failureClass] = (failures[entry.failureClass] || 0) + 1;
     }
     return { total, ok, failed, tools, failures, byTool, available: this._available };
+  }
+
+  /**
+   * Resumen desktop para el dashboard de autonomía (T28): tasa de éxito por
+   * tool de escritorio/navegador y clases de fallo dominantes. Solo lectura
+   * sobre el action log; nunca toca ejecución.
+   */
+  desktopSummary() {
+    const stats = this.getStats();
+    const desktopEntries = this._actionLog.filter((entry) =>
+      DESKTOP_TOOLS.has(entry.tool)
+    );
+    const byTool = {};
+    for (const entry of desktopEntries) {
+      const toolStats = byTool[entry.tool] || { total: 0, ok: 0, failed: 0, successRate: 0 };
+      toolStats.total++;
+      if (entry.ok) toolStats.ok++;
+      else toolStats.failed++;
+      toolStats.successRate = toolStats.total ? toolStats.ok / toolStats.total : 0;
+      byTool[entry.tool] = toolStats;
+    }
+    const topFailures = Object.entries(stats.failures)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([failureClass, count]) => ({ failureClass, count }));
+    const total = desktopEntries.length;
+    const ok = desktopEntries.filter((entry) => entry.ok).length;
+    return {
+      total,
+      ok,
+      failed: total - ok,
+      successRate: total ? ok / total : 0,
+      byTool,
+      topFailures,
+    };
   }
 }
 

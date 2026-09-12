@@ -50,7 +50,8 @@ async function _getEmbedder() {
     if (!_pipelineModule) {
       _pipelineModule = await import('@xenova/transformers');
     }
-    const pipe = await _pipelineModule.pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+    const { EMBED_MODEL_ID } = require('../grounding/EmbedModel.js');
+    const pipe = await _pipelineModule.pipeline('feature-extraction', EMBED_MODEL_ID);
     _embedder = async (text) => {
       const output = await pipe(text, { pooling: 'mean', normalize: true });
       return output.data;

@@ -42,7 +42,7 @@ function _terms(value) {
 /** @typedef {(input: {query: string, max_results?: number}) => Promise<unknown>} WebSearchFn */
 /** @typedef {(url: string, opts?: {timeout?: number}) => Promise<unknown>} ResolverGuardFn */
 /** @typedef {() => number} NowFn */
-/** @typedef {{aliases?: Record<string, string>, webSearch?: WebSearchFn|null, urlGuard?: ResolverGuardFn|null, now?: NowFn, cacheTtlMs?: number, localeHints?: string[]}} ResolverOptions */
+/** @typedef {{aliases?: Record<string, string>, webSearch?: WebSearchFn|null, urlGuard?: ResolverGuardFn|null, now?: NowFn, cacheTtlMs?: number, localeHints?: string[], prefs?: {preferredHost?: (query: string) => string|null}|null}} ResolverOptions */
 /** @typedef {{title?: unknown, url?: unknown}} SearchCandidate */
 /** @typedef {{url: string, resolvedBy: string, query?: string, score?: number, cached?: boolean}} ResolvedTarget */
 
@@ -58,6 +58,8 @@ class WebsiteResolver {
     this._localeHints = Array.isArray(options.localeHints)
       ? options.localeHints.map((h) => String(h).toLowerCase())
       : [];
+    /** Memoria viva "como la otra vez" (UserPreferences, opcional) */
+    this._prefs = options.prefs || null;
     /** @type {Map<string, {at: number, value: {url: string, resolvedBy: string, query?: string, score?: number}}>} */
     this._cache = new Map();
   }
@@ -187,9 +189,19 @@ class WebsiteResolver {
           : 0;
       const hostTld = String(parsed.hostname.split('.').pop() || '').toLowerCase();
       const localeBonus = this._localeHints.includes(hostTld) ? 4 : 0;
+      let memoryBonus = 0;
+      try {
+        if (this._prefs && typeof this._prefs.preferredHost === 'function') {
+          memoryBonus =
+            this._prefs.preferredHost(queryTerms.join(' ')) === parsed.hostname.toLowerCase()
+              ? 6
+              : 0;
+        }
+      } catch (_) {}
       scored.push({
         url: parsed.href,
-        score: coverage * 10 + (hostHasAll ? 5 : 0) + exactBonus + localeBonus - index * 0.01,
+        score:
+          coverage * 10 + (hostHasAll ? 5 : 0) + exactBonus + localeBonus + memoryBonus - index * 0.01,
         index,
       });
     });
