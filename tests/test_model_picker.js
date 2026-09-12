@@ -256,7 +256,7 @@ function testPickerModels() {
 function testConnectProvider() {
   console.log(C.bold('\n── Test 4: connectProvider (openai/anthropic/nicho) ─────────────'));
 
-  // openai-compatible con key + modelo + rol → conecta y queda primary.
+  // openai-compatible con key + modelo + rol → conecta y queda activo.
   const openrouter = LLMProvider.connectProvider({
     providerId: 'openrouter',
     apiKey: 'sk-test-openrouter',
@@ -272,7 +272,7 @@ function testConnectProvider() {
   );
 
   const data = LLMProvider.getModelPickerData();
-  assert(data.active.provider === 'openrouter', 'openrouter queda como primary');
+  assert(data.active.provider === 'openrouter', 'openrouter queda como activo');
   assert(
     data.providers.find((p) => p.id === 'openrouter').hasKey === true,
     'picker refleja hasKey tras conectar'

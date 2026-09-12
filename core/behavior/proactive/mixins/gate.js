@@ -293,7 +293,7 @@ module.exports = {
       this._enqueuePendingTrigger(trigger, 'decision_in_progress');
       return { blocked: true };
     }
-    if (!LLMProvider.getActiveProvider()) {
+    if (!LLMProvider.getActiveProvider() || !LLMProvider.hasActiveKey()) {
       this._enqueuePendingTrigger(trigger, 'provider_unavailable');
       return { blocked: true };
     }

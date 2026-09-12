@@ -90,15 +90,18 @@ function fakeSensor(getCurrentContext) {
 
 let defaultMessageSeq = 0;
 
-function stubLLM({ provider = 'groq', complete } = {}) {
+function stubLLM({ provider = 'groq', complete, hasKey = true } = {}) {
   const origP = LLMProvider.getActiveProvider;
   const origC = LLMProvider.complete;
+  const origK = LLMProvider.hasActiveKey;
   LLMProvider.getActiveProvider = () => provider;
+  LLMProvider.hasActiveKey = () => hasKey;
   LLMProvider.complete =
     complete || (async () => `hola, mensaje de prueba variante${++defaultMessageSeq}`);
   return () => {
     LLMProvider.getActiveProvider = origP;
     LLMProvider.complete = origC;
+    LLMProvider.hasActiveKey = origK;
   };
 }
 
@@ -123,6 +126,14 @@ async function testTryTriggerContract() {
     !engine._lastAttemptByType['long_silence'],
     'sin proveedor → NO consume cooldown por tipo'
   );
+  restore();
+
+  // 1a2. Proveedor elegido pero SIN key → bloqueado (no se puede cumplir).
+  restore = stubLLM({ provider: 'groq', hasKey: false });
+  engine = makeEngine();
+  res = await engine._tryTrigger({ type: 'long_silence', context: 'x' });
+  assert(res && res.blocked, 'proveedor sin key → { blocked }');
+  assert(!engine._lastAttemptByType['long_silence'], 'sin key → NO consume cooldown por tipo');
   restore();
 
   // 1b. Conversación RECIENTE del usuario → bloqueado (el chat abierto por sí

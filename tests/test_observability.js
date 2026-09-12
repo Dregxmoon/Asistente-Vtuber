@@ -225,7 +225,7 @@ function testProviderContextStatus() {
   LLM.setUsageTracker(tracker);
   LLM.configure({
     llm: {
-      primary: 'groq',
+      provider: 'groq',
       providers: {
         groq: {
           apiKey: 'test-only',

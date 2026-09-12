@@ -8,6 +8,17 @@ const { ipcMain } = require('electron');
 
 const MASKED_KEY_VALUE = '***';
 
+// Poda las claves legacy de la pila (primary/fallback) al persistir: hay UN
+// solo proveedor activo (llm.provider). ConfigManager conserva claves
+// desconocidas, así que sin esta poda vivirían para siempre en disco.
+function _withoutLegacyProviders(cfg) {
+  if (cfg && cfg.llm && typeof cfg.llm === 'object') {
+    delete cfg.llm.primary;
+    delete cfg.llm.fallback;
+  }
+  return cfg;
+}
+
 function register(ctx) {
   const { Core, loadConfig, loadEffectiveConfig, redactKeys, saveConfig } = ctx;
 
@@ -15,8 +26,7 @@ function register(ctx) {
 
   ipcMain.handle('save-llm-keys', (e, { providers, useKeychain, models }) => {
     const currentCfg = loadConfig();
-    const existingPrimary = currentCfg.llm?.primary || 'groq';
-    const existingFallback = currentCfg.llm?.fallback || ['gemini'];
+    const existingProvider = currentCfg.llm?.provider || currentCfg.llm?.primary || 'groq';
 
     const keychainActive = !!useKeychain && ctx.KeychainManager.isAvailable();
 
@@ -64,14 +74,15 @@ function register(ctx) {
           )
         );
 
-    saveConfig({
-      llm: {
-        primary: existingPrimary,
-        fallback: existingFallback,
-        providers: newProviders,
-        apiKeys: apiKeysToSave,
-      },
-    });
+    saveConfig(
+      _withoutLegacyProviders({
+        llm: {
+          provider: existingProvider,
+          providers: newProviders,
+          apiKeys: apiKeysToSave,
+        },
+      })
+    );
 
     logger.info(
       'config-handlers',
@@ -107,15 +118,16 @@ function register(ctx) {
         ...(reasoningEffort ? { [model]: reasoningEffort } : {}),
       },
     };
-    saveConfig({
-      llm: {
-        ...(currentCfg.llm || {}),
-        primary: currentCfg.llm?.primary || 'groq',
-        fallback: currentCfg.llm?.fallback || ['gemini'],
-        providers,
-        apiKeys: currentCfg.llm?.apiKeys || {},
-      },
-    });
+    saveConfig(
+      _withoutLegacyProviders({
+        llm: {
+          ...(currentCfg.llm || {}),
+          provider: currentCfg.llm?.provider || currentCfg.llm?.primary || 'groq',
+          providers,
+          apiKeys: currentCfg.llm?.apiKeys || {},
+        },
+      })
+    );
     ctx.Core.reloadLLMConfig();
     logger.info('config-handlers', `[config] modelo ${provider}/${mode} → ${model}`);
     return true;
@@ -187,8 +199,9 @@ function register(ctx) {
     return LLMProvider.getModelPickerData();
   });
 
-  // Conecta un provider (registro si hace falta + key + primary) y asigna el
-  // modelo al rol elegido. Persiste en config.json y recarga el pipeline.
+  // Conecta un provider (registro si hace falta + key) y lo deja como el
+  // ÚNICO activo, y asigna el modelo al rol elegido. Persiste en config.json
+  // y recarga el pipeline.
   ipcMain.handle(
     'connect-llm-provider',
     (e, { providerId, apiKey, modelId, mode, useKeychain }) => {
@@ -240,19 +253,24 @@ function register(ctx) {
         else customProviders.push(cp);
       }
 
-      const primary = LLMProvider.getActiveProvider() || currentCfg.llm?.primary || 'groq';
-      saveConfig({
-        llm: {
-          primary,
-          fallback: currentCfg.llm?.fallback || ['gemini'],
-          providers: newProviders,
-          apiKeys,
-          customProviders,
-          queue: currentCfg.llm?.queue,
-          remoteCatalog: currentCfg.llm?.remoteCatalog,
-          favorites: currentCfg.llm?.favorites || [],
-        },
-      });
+      const provider =
+        LLMProvider.getActiveProvider() ||
+        currentCfg.llm?.provider ||
+        currentCfg.llm?.primary ||
+        'groq';
+      saveConfig(
+        _withoutLegacyProviders({
+          llm: {
+            provider,
+            providers: newProviders,
+            apiKeys,
+            customProviders,
+            queue: currentCfg.llm?.queue,
+            remoteCatalog: currentCfg.llm?.remoteCatalog,
+            favorites: currentCfg.llm?.favorites || [],
+          },
+        })
+      );
       ctx.Core.reloadLLMConfig();
       logger.info('config-handlers', `[config] provider conectado: ${providerId}`);
       return res;
@@ -268,18 +286,19 @@ function register(ctx) {
       : [];
     if (on) favorites.push(modelKey);
     LLMProvider.setFavoriteModel(modelKey, on);
-    saveConfig({
-      llm: {
-        primary: currentCfg.llm?.primary || 'groq',
-        fallback: currentCfg.llm?.fallback || ['gemini'],
-        providers: currentCfg.llm?.providers || {},
-        apiKeys: currentCfg.llm?.apiKeys || {},
-        customProviders: currentCfg.llm?.customProviders || [],
-        queue: currentCfg.llm?.queue,
-        remoteCatalog: currentCfg.llm?.remoteCatalog,
-        favorites,
-      },
-    });
+    saveConfig(
+      _withoutLegacyProviders({
+        llm: {
+          provider: currentCfg.llm?.provider || currentCfg.llm?.primary || 'groq',
+          providers: currentCfg.llm?.providers || {},
+          apiKeys: currentCfg.llm?.apiKeys || {},
+          customProviders: currentCfg.llm?.customProviders || [],
+          queue: currentCfg.llm?.queue,
+          remoteCatalog: currentCfg.llm?.remoteCatalog,
+          favorites,
+        },
+      })
+    );
     logger.info('config-handlers', `[config] favorito ${on ? 'added' : 'removed'}: ${modelKey}`);
     return true;
   });

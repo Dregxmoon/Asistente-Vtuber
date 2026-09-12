@@ -583,7 +583,7 @@ async function _mbrApplyConnected(row, mode) {
   });
   if (reasoningEffort) row.reasoningEffort = reasoningEffort;
   if (_pickerData.active.provider !== row.providerId) {
-    ipcRenderer.send('set-provider', { primary: row.providerId });
+    ipcRenderer.send('set-provider', { provider: row.providerId });
   }
   await loadLLMConfig();
   modelBrowserStatus.textContent = `✓ ${row.label} activo en ${role}`;

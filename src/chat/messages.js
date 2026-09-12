@@ -482,7 +482,7 @@ async function _useModel(m, mode) {
     });
     if (reasoningEffort) m.reasoningEffort = reasoningEffort;
     if (_picker.data.active.provider !== m.providerId) {
-      ipcRenderer.send('set-provider', { primary: m.providerId });
+      ipcRenderer.send('set-provider', { provider: m.providerId });
     }
     await loadLLMConfig();
     pickerStatus.textContent = `✓ ${m.label} activo en ${role}`;

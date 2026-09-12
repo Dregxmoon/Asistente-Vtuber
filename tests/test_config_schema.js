@@ -71,7 +71,7 @@ function testSchemaShape() {
     0,
     'agent.pinTimeoutMs default 0 (desbloquear una vez por sesión)'
   );
-  for (const k of ['primary', 'fallback', 'apiKeys', 'providers']) {
+  for (const k of ['provider', 'apiKeys', 'providers']) {
     assert(k in SCHEMA.llm.schema, `schema.llm incluye "${k}"`);
   }
 }
@@ -85,7 +85,7 @@ function testDefaults() {
   assertEqual(cfg.autonomy, 'suggest', 'autonomy default "suggest"');
   assertEqual(cfg.activeModel, 'March 7th', 'activeModel default "March 7th"');
   assertEqual(cfg.chatTheme, 'dark', 'chatTheme default "dark"');
-  assertEqual(cfg.llm.primary, 'groq', 'llm.primary default "groq"');
+  assertEqual(cfg.llm.provider, 'groq', 'llm.provider default "groq"');
   assertEqual(cfg.sensors.git, true, 'sensors.git default true');
   assertEqual(cfg.gestures.cooldownMs, 15000, 'gestures.cooldownMs default');
   assert(Array.isArray(cfg.mcp.servers), 'mcp.servers default []');
@@ -126,7 +126,7 @@ function testTypeValidation() {
     fp,
     JSON.stringify({
       autonomy: 123,
-      llm: { primary: 5, fallback: 'nope' },
+      llm: { provider: 5 },
       gestures: { cooldownMs: 'x' },
     }),
     'utf-8'
@@ -135,7 +135,7 @@ function testTypeValidation() {
   const cfg = mgr.load();
 
   assertEqual(cfg.autonomy, 'suggest', 'autonomy numérico → default');
-  assertEqual(cfg.llm.primary, 'groq', 'llm.primary numérico → default');
+  assertEqual(cfg.llm.provider, 'groq', 'llm.provider numérico → default');
   assertEqual(cfg.gestures.cooldownMs, 15000, 'gestures.cooldownMs string → default');
   assert(mgr.report && mgr.report.errors.length >= 3, 'report acumula 3+ errores');
   const joined = (mgr.report && mgr.report.errors.join(' ')) || '';
@@ -151,7 +151,7 @@ function testEnumAndArrays() {
     fp,
     JSON.stringify({
       autonomy: 'volador',
-      llm: { fallback: ['gemini', 42, null, 'openai', {}] },
+      llm: { primary: 'openai', fallback: ['gemini'] },
     }),
     'utf-8'
   );
@@ -163,9 +163,9 @@ function testEnumAndArrays() {
     mgr.report && mgr.report.errors.some((e) => e.includes('no es válido')),
     'error de enum registrado'
   );
-  assertEqual(cfg.llm.fallback.length, 2, 'fallback filtra no-strings');
-  assertEqual(cfg.llm.fallback[0], 'gemini', 'fallback conserva strings');
-  assertEqual(cfg.llm.fallback[1], 'openai', 'fallback conserva strings (2)');
+  assertEqual(cfg.llm.provider, 'groq', 'provider default con legacy presente');
+  assertEqual(cfg.llm.primary, 'openai', 'legacy primary se conserva en disco (migra en runtime)');
+  assertEqual(cfg.llm.fallback[0], 'gemini', 'legacy fallback se conserva en disco (ignorado)');
 }
 
 // ── Test 6: claves desconocidas se conservan + warning ─────────────────────
@@ -198,7 +198,7 @@ function testGet() {
   console.log(C.bold('\n── get() por path ─────────────────────────────────────'));
 
   const mgr = new ConfigManager(null, { verbose: false });
-  assertEqual(mgr.get('llm.primary'), 'groq', 'get llm.primary');
+  assertEqual(mgr.get('llm.provider'), 'groq', 'get llm.provider');
   assertEqual(mgr.get('mcp.servers.length'), 0, 'get mcp.servers.length');
   assertEqual(mgr.get('no.existe', 'fallback'), 'fallback', 'get con fallback');
 }
@@ -210,13 +210,13 @@ function testSaveReload() {
   const fp = makeTmpConfig();
   const mgr = new ConfigManager(fp, { verbose: false });
   mgr.load();
-  const res = mgr.save({ autonomy: 'act', llm: { primary: 'openai' } });
+  const res = mgr.save({ autonomy: 'act', llm: { provider: 'openai' } });
   assert(res.ok, 'save devuelve ok');
 
   const onDisk = JSON.parse(fs.readFileSync(fp, 'utf-8'));
   assertEqual(onDisk.autonomy, 'act', 'disco: autonomy persistido');
-  assertEqual(onDisk.llm.primary, 'openai', 'disco: llm.primary persistido');
-  assertEqual(onDisk.llm.fallback[0], 'gemini', 'disco: defaults de fallback conservados');
+  assertEqual(onDisk.llm.provider, 'openai', 'disco: llm.provider persistido');
+  assert(!('fallback' in (onDisk.llm || {})), 'disco: sin clave fallback');
 
   const fresh = new ConfigManager(fp, { verbose: false });
   assertEqual(fresh.load().autonomy, 'act', 'relectura desde disco refleja el cambio');
@@ -231,7 +231,7 @@ function testLLMCatalogPersistence() {
   mgr.load();
   const res = mgr.save({
     llm: {
-      primary: 'groq',
+      provider: 'groq',
       customProviders: [{ id: 'mi-proxy', name: 'Mi Proxy', baseURL: 'http://localhost:8080/v1' }],
       queue: { enabled: false, concurrency: 2 },
       remoteCatalog: { enabled: false },
@@ -268,10 +268,10 @@ function testCloneIsolation() {
 
   const mgr = new ConfigManager(null, { verbose: false });
   const a = mgr.load();
-  a.llm.primary = 'hacked';
+  a.llm.provider = 'hacked';
   a.autonomy = 'act';
   const b = mgr.load();
-  assertEqual(b.llm.primary, 'groq', 'segundo load no refleja mutación del primero');
+  assertEqual(b.llm.provider, 'groq', 'segundo load no refleja mutación del primero');
   assertEqual(b.autonomy, 'suggest', 'autonomy aislado');
 }
 

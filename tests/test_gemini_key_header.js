@@ -106,7 +106,7 @@ async function main() {
     'ningún request registrado expone la key en la URL'
   );
 
-  LLMProvider.configure({ llm: { primary: null } });
+  LLMProvider.configure({ llm: { provider: 'groq' } });
   server.close();
 
   const total = passed + failed;

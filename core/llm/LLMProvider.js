@@ -171,10 +171,11 @@ const MAX_OUTPUT = { fast: 1024, smart: 8192 };
 const TIMEOUT_MS = { fast: 15_000, smart: 60_000 };
 const FAST_HISTORY_LIMIT = 8;
 const VALID_MODES = new Set(['fast', 'smart']);
-// Reintentos por provider: 2 reintentos (3 intentos en total). Los fallos
-// transitorios (429 con espera corta, timeouts, red) se reintentan con backoff
-// exponencial + jitter; el mensaje de rate-limit "espera > 30s" NO se espera de
-// forma síncrona (ver MAX_RETRY_WAIT_MS) y degrada el provider para el fallback.
+// Reintentos del proveedor activo: 2 reintentos (3 intentos en total). Los
+// fallos transitorios (429 con espera corta, timeouts, red) se reintentan con
+// backoff exponencial + jitter; el mensaje de rate-limit "espera > 30s" NO se
+// espera de forma síncrona (ver MAX_RETRY_WAIT_MS): se reporta con pasos
+// accionables. Sin rotación a otro proveedor.
 const MAX_RETRIES_PER_PROVIDER = 2;
 const RETRY_BASE_MS = 2000;
 // Si un rate-limit dice "espera > 30s", no lo esperamos de forma síncrona
@@ -334,9 +335,12 @@ function _trimHistoryForMode(messages, mode) {
 }
 
 // ── Configuración por defecto ─────────────────────────────────────────────────
+// UN solo proveedor activo (llm.provider), elegido por el usuario con sus
+// modelos. NO hay pila ni rotación entre proveedores: si el elegido falla,
+// se reintenta con backoff y luego se reporta el error con pasos accionables
+// (esperar el rate-limit o cambiar de proveedor con /model).
 let _config = {
-  primary: 'groq',
-  fallback: ['gemini'],
+  provider: 'groq',
   providers: {},
   customProviders: [],
   // Fase J: cola por provider (concurrency 1 = serial, cooldown por 429,
@@ -354,11 +358,24 @@ let _config = {
 // (Date.now). Permite aplicar el TTL sin re-consultar la API en cada uso.
 const _catalogRefreshedAt = {};
 
+let _legacyFallbackWarned = false;
+
 function configure(cfg) {
   if (!cfg) return;
   const llm = cfg.llm || cfg;
-  if (llm.primary) _config.primary = llm.primary;
-  if (llm.fallback) _config.fallback = llm.fallback;
+  if (llm.provider) _config.provider = llm.provider;
+  else if (llm.primary) {
+    // Migración de configs viejas (llm.primary → llm.provider), una sola vez.
+    _config.provider = llm.primary;
+  }
+  if (Array.isArray(llm.fallback) && llm.fallback.length > 0 && !_legacyFallbackWarned) {
+    _legacyFallbackWarned = true;
+    logger.info(
+      'LLMProvider',
+      '[llm] llm.fallback está obsoleto y se ignora: hay UN solo proveedor activo ' +
+        `(${_config.provider}). Cambialo con /model si lo necesitas.`
+    );
+  }
   if (llm.queue) {
     _config.queue = { ..._config.queue, ...llm.queue };
   }
@@ -1834,54 +1851,12 @@ function _parseRetryAfter(err) {
   return secs ? Math.ceil(parseFloat(secs[1]) * 1000) : 0;
 }
 
-// ── Fase 4: estado de degradación por provider ───────────────────────────────
-// Cuando un provider entra en rate-limit con una espera larga, se recuerda
-// durante un rato y la rotación lo SALTE A (va directo al fallback). Sin esto,
-// un provider agotado (p. ej. Groq "try again in 50m") se martilla en CADA
-// request del mismo período: reintenta, falla y solo después prueba el fallback,
-// quemando latencia y tokens. La memoria se extiende con el retry-after real.
-const _degradedProviders = new Map(); // providerId → { until: number, reason: string }
-const DEGRADED_BASE_MS = 60_000; // memoria mínima (1 min)
-const DEGRADED_TRIGGER_MS = 10_000; // degradar solo si la espera es "larga"
-
-/** Marca un provider como degradado hasta `Date.now() + max(waitMs, base)`. */
-function _markProviderDegraded(providerId, reason, waitMs = 0) {
-  const until = Date.now() + Math.max(waitMs || 0, DEGRADED_BASE_MS);
-  _degradedProviders.set(providerId, { until, reason });
-  logger.info(
-    'LLMProvider',
-    `[llm] ${providerId} marcado DEGRADADO hasta ${new Date(until).toISOString()} (${reason})`
-  );
-  return until;
-}
-
-/** true mientras el provider esté en cooldown de degradación. */
-function _isProviderDegraded(providerId) {
-  const d = _degradedProviders.get(providerId);
-  if (!d) return false;
-  if (Date.now() > d.until) {
-    _degradedProviders.delete(providerId);
-    return false;
-  }
-  return true;
-}
-
-/**
- * Orden de rotación de providers teniendo en cuenta la degradación: los
- * providers degradados (en rate-limit con espera larga) se empujan al FINAL
- * conservando su orden relativo; el resto mantiene el orden configurado.
- * Así el primary degradado deja de martillarse y el fallback sano responde.
- */
-function _rotationOrder() {
-  const order = [...new Set([_config.primary, ...(_config.fallback || [])].filter(Boolean))];
-  const healthy = [];
-  const degraded = [];
-  for (const p of order) {
-    if (p && _isProviderDegraded(p)) degraded.push(p);
-    else healthy.push(p);
-  }
-  return [...healthy, ...degraded];
-}
+// ── Proveedor único: sin rotación ni degradación ─────────────────────────────
+// Había una pila primary→fallback con memoria de degradación por provider.
+// Se eliminó por decisión de producto: UN solo proveedor activo elegido por
+// el usuario. Si entra en rate-limit, se respeta su Retry-After dentro de los
+// reintentos y luego se reporta el error con pasos accionables (esperar o
+// cambiar de proveedor con /model). Nada rota solo a otro proveedor.
 
 // ── Fase J: cola de requests por provider ─────────────────────────────────────
 const _queues = new Map(); // providerId → ProviderQueue
@@ -1911,180 +1886,160 @@ function getQueueStats() {
   return out;
 }
 
-async function _callWithFallback(messages, systemPrompt, mode = 'fast', opts = {}) {
-  const order = _rotationOrder();
-  const tried = [];
-  const missingKeys = [];
-  const rateLimits = []; // { provider, waitMs } — 429/429-ish para dar consejo útil
+/**
+ * Llamada al ÚNICO proveedor activo, con reintentos y backoff. Sin rotación:
+ * si falla de forma definitiva, se lanza un error accionable (esperar el
+ * rate-limit o cambiar de proveedor con /model). Nada salta solo a otro.
+ */
+async function _callSingleProvider(messages, systemPrompt, mode = 'fast', opts = {}) {
+  const providerName = _config.provider;
+  const fn = PROVIDERS[providerName];
+  if (!fn || !_registry.has(providerName)) {
+    const known = [..._registry.keys()].join(', ');
+    throw new Error(
+      `Proveedor desconocido: "${providerName}". Disponibles: ${known}. Elegí uno con /model.`
+    );
+  }
+  if (!defHasKey(providerName)) {
+    throw new Error(
+      `Sin API key para ${providerName}. ` +
+        'Todos los proveedores (incluso los "gratis") necesitan su propia API key — configúrala en el selector de modelos (tocá el modelo en la barra superior o escribí /model).'
+    );
+  }
 
-  for (const providerName of order) {
-    const fn = PROVIDERS[providerName];
-    if (!fn) continue;
-    if (!defHasKey(providerName)) {
-      missingKeys.push(providerName);
-      continue;
-    }
-
-    let lastErr = null;
-    for (let attempt = 0; attempt <= MAX_RETRIES_PER_PROVIDER; attempt++) {
-      try {
-        if (attempt > 0) {
-          const ra = _parseRetryAfter(lastErr);
-          if (ra > MAX_RETRY_WAIT_MS) {
-            tried.push(providerName);
-            break;
-          }
-          const waitMs = ra > 0 ? ra : _backoffWithJitter(attempt - 1);
-          logger.info(
-            'LLMProvider',
-            `[llm] reintentando ${providerName} en ${waitMs}ms (intento ${attempt + 1}/${MAX_RETRIES_PER_PROVIDER + 1})...`
-          );
-          await _sleepAbortable(waitMs, opts.signal);
-        }
+  let lastErr = null;
+  let rateLimitWaitMs = 0;
+  for (let attempt = 0; attempt <= MAX_RETRIES_PER_PROVIDER; attempt++) {
+    try {
+      if (attempt > 0) {
+        const ra = _parseRetryAfter(lastErr);
+        if (ra > MAX_RETRY_WAIT_MS) break;
+        const waitMs = ra > 0 ? ra : _backoffWithJitter(attempt - 1);
         logger.info(
           'LLMProvider',
-          `[llm] intentando ${providerName} (${mode})${attempt > 0 ? ` [retry ${attempt}]` : ''}...`
+          `[llm] reintentando ${providerName} en ${waitMs}ms (intento ${attempt + 1}/${MAX_RETRIES_PER_PROVIDER + 1})...`
         );
-        const result = await _enqueueProviderCall(
-          providerName,
-          () => fn(messages, systemPrompt, mode, opts),
-          opts
-        );
-        logger.info('LLMProvider', `[llm] respuesta de ${providerName} (${result.length} chars)`);
-        return _stripForbiddenPhrases(result);
-      } catch (e) {
-        lastErr = e;
-        if (e?.code === 'ABORTED' || e?.name === 'AbortError') throw e;
-        const retryable = _isRetryableError(e);
-        logger.info(
-          'LLMProvider',
-          `[llm] ${providerName} falló${retryable ? ' (transitorio)' : ' (no reintentable)'}: ${e.message}`
-        );
-        if (retryable && /(\b429\b|rate limit|quota|too many requests)/i.test(e.message)) {
-          rateLimits.push({ provider: providerName, waitMs: _parseRetryAfter(e) });
-          // Fase 4: espera larga → marcar degradado para que las próximas
-          // requests vayan directo al fallback en vez de martillar el provider.
-          const waitMs = _parseRetryAfter(e);
-          if (waitMs >= DEGRADED_TRIGGER_MS) {
-            _markProviderDegraded(providerName, 'rate-limit', waitMs);
-          }
-        }
-        // Modelo retirado por el provider: elegir reemplazo vivo y reintentar
-        // en el próximo attempt (fn resuelve el modelo por llamada vía
-        // _resolveModel, así que el override en memoria alcanza).
-        let modelRecovered = false;
-        if (_isModelUnavailableError(e.message)) {
-          try {
-            modelRecovered = await _recoverDecommissionedModel(providerName, mode);
-          } catch (_) {
-            /* recuperación best-effort */
-          }
-        }
-        // Si hubo reemplazo NO cortamos aunque el error sea "no reintentable":
-        // el attempt siguiente ya usa el modelo nuevo.
-        if ((!retryable && !modelRecovered) || attempt === MAX_RETRIES_PER_PROVIDER) {
-          tried.push(providerName);
-          break;
+        await _sleepAbortable(waitMs, opts.signal);
+      }
+      logger.info(
+        'LLMProvider',
+        `[llm] intentando ${providerName} (${mode})${attempt > 0 ? ` [retry ${attempt}]` : ''}...`
+      );
+      const result = await _enqueueProviderCall(
+        providerName,
+        () => fn(messages, systemPrompt, mode, opts),
+        opts
+      );
+      logger.info('LLMProvider', `[llm] respuesta de ${providerName} (${result.length} chars)`);
+      return _stripForbiddenPhrases(result);
+    } catch (e) {
+      lastErr = e;
+      if (e?.code === 'ABORTED' || e?.name === 'AbortError') throw e;
+      const retryable = _isRetryableError(e);
+      logger.info(
+        'LLMProvider',
+        `[llm] ${providerName} falló${retryable ? ' (transitorio)' : ' (no reintentable)'}: ${e.message}`
+      );
+      if (retryable && /(\b429\b|rate limit|quota|too many requests)/i.test(e.message)) {
+        rateLimitWaitMs = _parseRetryAfter(e);
+      }
+      // Modelo retirado por el provider: elegir reemplazo vivo y reintentar
+      // en el próximo attempt (fn resuelve el modelo por llamada vía
+      // _resolveModel, así que el override en memoria alcanza).
+      let modelRecovered = false;
+      if (_isModelUnavailableError(e.message)) {
+        try {
+          modelRecovered = await _recoverDecommissionedModel(providerName, mode);
+        } catch (_) {
+          /* recuperación best-effort */
         }
       }
+      // Si hubo reemplazo NO cortamos aunque el error sea "no reintentable":
+      // el attempt siguiente ya usa el modelo nuevo.
+      if ((!retryable && !modelRecovered) || attempt === MAX_RETRIES_PER_PROVIDER) break;
     }
   }
-  if (tried.length > 0) {
-    let msg = `Todos los providers fallaron: ${tried.join(', ')}`;
-    if (rateLimits.length > 0) {
-      rateLimits.sort((a, b) => b.waitMs - a.waitMs);
-      const worst = rateLimits[0];
-      const when =
-        worst.waitMs > 0
-          ? `vuelve a intentar en ~${Math.ceil(worst.waitMs / 60000)} min`
-          : 'su cuota diaria puede estar agotada (los tiers gratis tienen límites)';
-      msg += `. ${worst.provider} está en rate-limit — ${when} o cambia de proveedor con /model.`;
-    }
-    throw new Error(msg);
+  if (rateLimitWaitMs > 0) {
+    const when =
+      rateLimitWaitMs > 0 && rateLimitWaitMs < Infinity
+        ? `vuelve a intentar en ~${Math.ceil(rateLimitWaitMs / 60000)} min`
+        : 'su cuota diaria puede estar agotada (los tiers gratis tienen límites)';
+    throw new Error(
+      `${providerName} está en rate-limit — ${when}, o cambia de proveedor con /model.`
+    );
   }
   throw new Error(
-    `Sin API key para: ${missingKeys.join(', ') || '(ninguno)'}. ` +
-      'Todos los proveedores (incluso los "gratis") necesitan su propia API key — configúrala en el selector de modelos (tocá el modelo en la barra superior o escribí /model).'
+    `${providerName} falló: ${lastErr?.message || 'error desconocido'}. ` +
+      'Si persiste, cambia de proveedor con /model.'
   );
 }
 
-async function _callWithFallbackTools(messages, systemPrompt, mode = 'smart', tools, opts = {}) {
+async function _callSingleProviderTools(messages, systemPrompt, mode = 'smart', tools, opts = {}) {
   if (!tools || tools.length === 0) {
-    const text = await _callWithFallback(messages, systemPrompt, mode, opts);
+    const text = await _callSingleProvider(messages, systemPrompt, mode, opts);
     return { content: text, toolCalls: null };
   }
 
-  const order = _rotationOrder();
-  const tried = [];
-  const missingKeys = [];
+  const providerName = _config.provider;
+  const fn = PROVIDERS_WITH_TOOLS[providerName];
+  if (!fn || !_registry.has(providerName)) {
+    const known = [..._registry.keys()].join(', ');
+    throw new Error(
+      `Proveedor desconocido: "${providerName}". Disponibles: ${known}. Elegí uno con /model.`
+    );
+  }
+  if (!defHasKey(providerName)) {
+    throw new Error(
+      `Sin API key para ${providerName}. ` +
+        'Todos los proveedores (incluso los "gratis") necesitan su propia API key — configúrala en el selector de modelos (tocá el modelo en la barra superior o escribí /model).'
+    );
+  }
 
-  for (const providerName of order) {
-    const fn = PROVIDERS_WITH_TOOLS[providerName];
-    if (!fn) continue;
-    if (!defHasKey(providerName)) {
-      missingKeys.push(providerName);
-      continue;
-    }
-
-    let lastErr = null;
-    // Tool-calling arranca SIEMPRE en 'smart': el catálogo completo (27 tools)
-    // + system prompt (~7-8,5K tokens) excede el TPM del modelo fast de Groq
-    // (llama-3.1-8b-instant, 6K) → HTTP 413 ~100% de las veces. Empezar por
-    // 'fast' solo agrega latencia sin chance real de éxito; 'fast' queda solo
-    // para las llamadas de texto puro (complete/completeTask).
-    let callMode = 'smart';
-    for (let attempt = 0; attempt <= MAX_RETRIES_PER_PROVIDER; attempt++) {
-      try {
-        if (attempt > 0) {
-          const ra = _parseRetryAfter(lastErr);
-          if (ra > MAX_RETRY_WAIT_MS) {
-            tried.push(providerName);
-            break;
-          }
-          const waitMs = ra > 0 ? ra : _backoffWithJitter(attempt - 1);
-          await _sleepAbortable(waitMs, opts.signal);
-        }
-        const result = await _enqueueProviderCall(
-          providerName,
-          () => fn(messages, systemPrompt, callMode, tools, opts),
-          opts
-        );
-        return { ...result, content: _stripForbiddenPhrases(result.content) };
-      } catch (e) {
-        lastErr = e;
-        if (e?.code === 'ABORTED' || e?.name === 'AbortError') throw e;
-        const retryable = _isRetryableError(e);
-        logger.info(
-          'LLMProvider',
-          `[llm] ${providerName} tool-calling falló${retryable ? ' (transitorio)' : ' (no reintentable)'}: ${e.message}`
-        );
-        // Fase 4: espera larga en tool-calling → marcar degradado también aquí.
-        if (retryable && /(\b429\b|rate limit|quota|too many requests)/i.test(e.message)) {
-          const waitMs = _parseRetryAfter(e);
-          if (waitMs >= DEGRADED_TRIGGER_MS) {
-            _markProviderDegraded(providerName, 'rate-limit (tool-calling)', waitMs);
-          }
-        }
-        // Modelo retirado: reemplazo vivo + reintento (igual que path de texto).
-        let modelRecovered = false;
-        if (_isModelUnavailableError(e.message)) {
-          try {
-            modelRecovered = await _recoverDecommissionedModel(providerName, mode);
-          } catch (_) {
-            /* recuperación best-effort */
-          }
-        }
-        if ((!retryable && !modelRecovered) || attempt === MAX_RETRIES_PER_PROVIDER) {
-          tried.push(providerName);
-          break;
+  let lastErr = null;
+  // Tool-calling arranca SIEMPRE en 'smart': el catálogo completo (27 tools)
+  // + system prompt (~7-8,5K tokens) excede el TPM del modelo fast de Groq
+  // (llama-3.1-8b-instant, 6K) → HTTP 413 ~100% de las veces. Empezar por
+  // 'fast' solo agrega latencia sin chance real de éxito; 'fast' queda solo
+  // para las llamadas de texto puro (complete/completeTask).
+  let callMode = 'smart';
+  for (let attempt = 0; attempt <= MAX_RETRIES_PER_PROVIDER; attempt++) {
+    try {
+      if (attempt > 0) {
+        const ra = _parseRetryAfter(lastErr);
+        if (ra > MAX_RETRY_WAIT_MS) break;
+        const waitMs = ra > 0 ? ra : _backoffWithJitter(attempt - 1);
+        await _sleepAbortable(waitMs, opts.signal);
+      }
+      const result = await _enqueueProviderCall(
+        providerName,
+        () => fn(messages, systemPrompt, callMode, tools, opts),
+        opts
+      );
+      return { ...result, content: _stripForbiddenPhrases(result.content) };
+    } catch (e) {
+      lastErr = e;
+      if (e?.code === 'ABORTED' || e?.name === 'AbortError') throw e;
+      const retryable = _isRetryableError(e);
+      logger.info(
+        'LLMProvider',
+        `[llm] ${providerName} tool-calling falló${retryable ? ' (transitorio)' : ' (no reintentable)'}: ${e.message}`
+      );
+      // Modelo retirado: reemplazo vivo + reintento (igual que path de texto).
+      let modelRecovered = false;
+      if (_isModelUnavailableError(e.message)) {
+        try {
+          modelRecovered = await _recoverDecommissionedModel(providerName, mode);
+        } catch (_) {
+          /* recuperación best-effort */
         }
       }
+      if ((!retryable && !modelRecovered) || attempt === MAX_RETRIES_PER_PROVIDER) break;
     }
   }
 
   logger.warn(
     'LLMProvider',
-    `[llm] tool-calling falló en todos los providers (${tried.join(', ')})${missingKeys.length ? ` — sin key: ${missingKeys.join(', ')}` : ''}, fallback a texto`
+    `[llm] tool-calling falló en ${providerName}: ${lastErr?.message || 'error desconocido'}, fallback a texto`
   );
   // Fallback sin tools: el system prompt original enmarca al modelo como agente
   // con herramientas. Sin capacidad real de ejecutar nada, "sigue en personaje"
@@ -2097,7 +2052,7 @@ async function _callWithFallbackTools(messages, systemPrompt, mode = 'smart', to
     'Si la tarea que te piden requiere alguna de esas capacidades, decilo explícitamente ' +
     "(ej: 'no puedo ejecutar esto ahora mismo, intentá de nuevo') — NUNCA " +
     'describas, narres o simules que ya la ejecutaste.';
-  const text = await _callWithFallback(messages, fallbackPrompt, mode, opts);
+  const text = await _callSingleProvider(messages, fallbackPrompt, mode, opts);
   return { content: text, toolCalls: null };
 }
 
@@ -2120,33 +2075,40 @@ function getResolvedApiKey(providerId) {
 // nunca ejecuta. Se inyecta NO_TOOLS_NOTICE antes de pasar al LLM.
 function complete(messages, systemPrompt, opts) {
   _rebuildMaps();
-  return _callWithFallback(messages, systemPrompt + NO_TOOLS_NOTICE, 'fast', opts);
+  return _callSingleProvider(messages, systemPrompt + NO_TOOLS_NOTICE, 'fast', opts);
 }
 
 function completeTask(messages, systemPrompt, opts) {
   _rebuildMaps();
-  return _callWithFallback(messages, systemPrompt + NO_TOOLS_NOTICE, 'smart', opts);
+  return _callSingleProvider(messages, systemPrompt + NO_TOOLS_NOTICE, 'smart', opts);
 }
 
 // Texto puro con modo explícito: los subagentes con perfil 'fast' bindean acá
 // en vez de completeTask (que siempre usa 'smart') para su fallback textual.
 function completeForMode(messages, systemPrompt, mode = 'fast', opts) {
   _rebuildMaps();
-  return _callWithFallback(messages, systemPrompt + NO_TOOLS_NOTICE, mode, opts);
+  return _callSingleProvider(messages, systemPrompt + NO_TOOLS_NOTICE, mode, opts);
 }
 
 async function completeWithTools(messages, systemPrompt, tools = [], mode = 'smart', opts) {
   _rebuildMaps();
-  const result = await _callWithFallbackTools(messages, systemPrompt, mode, tools, opts);
+  const result = await _callSingleProviderTools(messages, systemPrompt, mode, tools, opts);
   return { ...result, content: _stripForbiddenPhrases(result.content) };
 }
 
+/**
+ * El proveedor ACTIVO: el elegido por el usuario (llm.provider), sin importar
+ * si ya tiene key (la falta de key se reporta al llamar, con pasos para
+ * configurarla). Devuelve null solo si el id no está registrado.
+ */
 function getActiveProvider() {
-  const order = _rotationOrder();
-  for (const name of order) {
-    if (defHasKey(name)) return name;
-  }
-  return null;
+  return _registry.has(_config.provider) ? _config.provider : null;
+}
+
+/** true si el proveedor activo tiene key disponible (config/env/llavero). */
+function hasActiveKey() {
+  const active = getActiveProvider();
+  return !!active && defHasKey(active);
 }
 
 function getActiveModel(mode = 'fast') {
@@ -2451,7 +2413,7 @@ function connectProvider({ providerId, apiKey, modelId, mode } = {}) {
     _config.providers[providerId] = { ...(_config.providers[providerId] || {}), model: prev };
   }
 
-  if (_getApiKey(providerId)) _config.primary = providerId;
+  if (_getApiKey(providerId)) _config.provider = providerId;
 
   return {
     ok: true,
@@ -2486,8 +2448,7 @@ function removeCustomProvider(id) {
   _registry.delete(id);
   _config.customProviders = (_config.customProviders || []).filter((c) => c.id !== id);
   delete _config.providers[id];
-  if (_config.primary === id) _config.primary = 'groq';
-  _config.fallback = (_config.fallback || []).filter((f) => f !== id);
+  if (_config.provider === id) _config.provider = 'groq';
   _rebuildMaps();
 }
 
@@ -2582,11 +2543,8 @@ module.exports = {
   getContextStatus,
   _debug_recordUsage: _recordUsage,
   _debug_resolveModel: _resolveModel,
-  _debug_rotationOrder: _rotationOrder,
-  _debug_markProviderDegraded: _markProviderDegraded,
-  _debug_isProviderDegraded: _isProviderDegraded,
-  _debug_degradedProviders: _degradedProviders,
-  _debug_callWithFallbackTools: _callWithFallbackTools,
+  _debug_callSingleProviderTools: _callSingleProviderTools,
+  hasActiveKey,
   _debug_stripForbiddenPhrases: _stripForbiddenPhrases,
   setNoEmojis,
   _debug_setToolCaller(providerId, fn) {

@@ -50,10 +50,12 @@ const SCHEMA = {
   autonomy: { type: 'string', default: 'suggest', enum: AUTONOMY_MODES },
   llm: {
     type: 'object',
-    default: { primary: 'groq', fallback: ['gemini'], apiKeys: {}, providers: {} },
+    default: { provider: 'groq', apiKeys: {}, providers: {} },
     schema: {
-      primary: { type: 'string', default: 'groq' },
-      fallback: { type: 'array', default: ['gemini'], itemType: 'string' },
+      // UN solo proveedor activo elegido por el usuario. La pila
+      // primary→fallback se eliminó: `primary`/`fallback` legacy se ignoran
+      // (LLMProvider.configure migra `primary` una vez).
+      provider: { type: 'string', default: 'groq' },
       apiKeys: { type: 'object', default: {} },
       providers: { type: 'object', default: {} },
       // Fase catálogo: antes vivían solo en memoria; ahora se validan y

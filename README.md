@@ -63,7 +63,7 @@ Los asistentes de escritorio tradicionales son **reactivos**: esperan a que el u
 
 1. **Decisión auditable.** Las señales normalizadas de sensores pasan por un núcleo determinista (<code>DecisionCore</code>) con <em>reason codes</em>: su admisión puede rastrearse hasta puntuación, pesos y política. El LLM redacta el contenido una vez admitidas; los triggers heredados o no sensoriales se documentan por separado.
 2. **Datos locales con transferencias explícitas.** Memoria, embeddings, telemetría y preferencias se guardan localmente. El contenido necesario para responder se envía al proveedor LLM configurado; capturas, contexto del SO y resultados de herramientas pueden incluirse cuando la tarea lo requiere y el permiso lo permite.
-3. **Soberanía de proveedores.** El catálogo de proveedores se resuelve desde la implementación y admite fallback configurable, reintento exponencial y modelos locales cuando están disponibles.
+3. **Soberanía de proveedores.** El catálogo de proveedores se resuelve desde la implementación con UN solo proveedor activo elegido por el usuario, reintento exponencial y modelos locales cuando están disponibles.
 4. **Extensible por MCP.** Cliente Model Context Protocol propio: cualquier servidor de herramientas del ecosistema se conecta sin tocar el núcleo.
 5. **Autonomía calibrada por datos.** Un slider de autonomía (`observe | suggest | act`) más un modelo de receptividad que ajusta la frecuencia y el presupuesto según la respuesta real del usuario.
 
@@ -198,7 +198,7 @@ El LLM no autoriza acciones. <code>ActionParser</code>, <code>PermissionManager<
 <details>
 <summary><strong>Multi-proveedor de LLM</strong></summary>
 
-Proveedores configurables con cadena de fallback, reintento exponencial con jitter, límite de fallas consecutivas y mensajes accionables ante límites de uso. El catálogo efectivo de modelos vive en `core/llm/catalog.js`.
+Un único proveedor configurable elegido por el usuario (con sus modelos), reintento exponencial con jitter y mensajes accionables ante límites de uso. El catálogo efectivo de modelos vive en `core/llm/catalog.js`.
 
 </details>
 
@@ -455,9 +455,8 @@ En `config.json` (fuente de claves) o `.env` (alternativa):
   "activeModel": "March 7th",
   "activeWorkspace": "~/mis-proyectos/panel",
   "llm": {
-    "primary": "groq",
-    "apiKeys": { "groq": "", "gemini": "", "openai": "" },
-    "fallback": ["gemini", "openai"]
+    "provider": "groq",
+    "apiKeys": { "groq": "", "gemini": "", "openai": "" }
   },
   "autonomy": "suggest",
   "sensors": {
@@ -476,9 +475,8 @@ En `config.json` (fuente de claves) o `.env` (alternativa):
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `activeModel`     | Modelo Live2D activo (carpeta dentro de `models/`)                                                                                   |
 | `activeWorkspace` | Carpeta/proyecto activo sobre el que opera el asistente                                                                              |
-| `llm.primary`     | Proveedor principal (`groq` / `gemini` / `openai`)                                                                                   |
+| `llm.provider`    | El ÚNICO proveedor activo, elegido por el usuario (`groq` / `gemini` / `openai` / …) — sin pilas ni rotación                         |
 | `llm.apiKeys`     | Claves API por proveedor (o `LLM_KEY_*` en `.env`)                                                                                   |
-| `llm.fallback`    | Cadena de fallback entre proveedores                                                                                                 |
 | `autonomy`        | `observe` (solo observa) · `suggest` (propone, default) · `act` (actúa con regla `allow` explícita; si no existe, pide confirmación) |
 | `sensors.*`       | Activa/desactiva sensores de señales (git, sistema, título, portapapeles, eventos, LSP)                                              |
 | `mcp.servers`     | Servidores MCP a conectar al arrancar                                                                                                |

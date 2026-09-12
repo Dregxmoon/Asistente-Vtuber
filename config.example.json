@@ -1,13 +1,12 @@
 {
   "activeModel": "March 7th",
   "llm": {
-    "primary": "groq",
+    "provider": "groq",
     "apiKeys": {
       "groq": "",
       "gemini": "",
       "openai": ""
-    },
-    "fallback": ["gemini", "openai"]
+    }
   },
   "autonomy": "suggest",
   "sensors": {

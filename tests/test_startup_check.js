@@ -52,7 +52,7 @@ async function main() {
   }
 
   // ── Caso 3: válido pero SIN ninguna API key → accionable antes del primer msj ──
-  fs.writeFileSync(configPath, JSON.stringify({ llm: { primary: 'groq', apiKeys: {} } }));
+  fs.writeFileSync(configPath, JSON.stringify({ llm: { provider: 'groq', apiKeys: {} } }));
   const noKeys = validateStartupConfig({ configPath, examplePath, keychainHasKeys: false });
   t(noKeys.issues[0].type === 'no_keys', 'caso 3: tipo = no_keys');
   t(

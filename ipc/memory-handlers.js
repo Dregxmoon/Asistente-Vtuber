@@ -197,20 +197,24 @@ function register(ctx) {
   ipcMain.handle('list-skills', () => Core.listSkills());
   ipcMain.handle('store-fact', (e, fact) => Core.storeFact(fact));
 
-  ipcMain.on('set-provider', (e, { primary }) => {
-    if (!primary) return;
+  ipcMain.on('set-provider', (e, { provider, primary }) => {
+    const id = provider || primary;
+    if (!id) return;
     const LLMProvider = require('../core/llm/LLMProvider.js');
-    LLMProvider.configure({ llm: { primary } });
+    LLMProvider.configure({ llm: { provider: id } });
     // Fase C: persistir el provider activo en config.json (antes quedaba solo
     // en memoria; se acabó la disociación entre provider y modelo).
     try {
       if (ctx && typeof ctx.loadConfig === 'function' && typeof ctx.saveConfig === 'function') {
         const cfg = ctx.loadConfig() || {};
         const providers = { ...(cfg.llm?.providers || {}) };
+        const pruned = { ...(cfg.llm || {}) };
+        delete pruned.primary;
+        delete pruned.fallback;
         ctx.saveConfig({
           llm: {
-            primary,
-            fallback: cfg.llm?.fallback || ['gemini'],
+            ...pruned,
+            provider: id,
             providers,
             apiKeys: cfg.llm?.apiKeys || {},
           },
@@ -219,7 +223,7 @@ function register(ctx) {
     } catch (e) {
       logger.warn('memory-handlers', '[config] no se pudo persistir el provider:', e.message);
     }
-    logger.info('memory-handlers', '[config] provedor cambiado a:', primary);
+    logger.info('memory-handlers', '[config] provedor cambiado a:', id);
   });
 }
 

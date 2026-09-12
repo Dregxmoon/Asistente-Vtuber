@@ -87,10 +87,12 @@ function waitForEvent(bus, event, timeout = 8000) {
   });
 }
 
-function stubLLM({ complete } = {}) {
+function stubLLM({ complete, hasKey = true } = {}) {
   const origP = LLMProvider.getActiveProvider;
   const origC = LLMProvider.complete;
+  const origK = LLMProvider.hasActiveKey;
   LLMProvider.getActiveProvider = () => 'groq';
+  LLMProvider.hasActiveKey = () => hasKey;
   LLMProvider.complete = async (...args) =>
     complete
       ? complete(...args)
@@ -99,6 +101,7 @@ function stubLLM({ complete } = {}) {
     restore: () => {
       LLMProvider.getActiveProvider = origP;
       LLMProvider.complete = origC;
+      LLMProvider.hasActiveKey = origK;
     },
   };
 }

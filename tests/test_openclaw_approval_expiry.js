@@ -324,6 +324,7 @@ ACCIÓN: run_command | COMANDO: rm -rf /
 }
 
 // ── Test 7: agent.autoApprove → sin card, aprobado al instante ───────────────
+// (salvo irreversibles: rm -rf SIEMPRE muestra card aunque haya autoApprove)
 
 async function testAutoApproveSkipsCard() {
   console.log(C.bold('\n── Test 7: agent.autoApprove → auto-aprobado sin card ──────────'));
@@ -335,12 +336,43 @@ async function testAutoApproveSkipsCard() {
   mockIpcMain.invokeHandler('agent-run', {}, { text: 'haz algo' }).catch(() => {});
   await new Promise((r) => setImmediate(r));
 
-  const value = await capturedApproval({ tool: 'exec', params: { command: 'rm -rf /' } });
+  const value = await capturedApproval({ tool: 'exec', params: { command: 'npm run build' } });
   assert(value === true, 'autoApprove → true sin mostrar card');
   const needed = sendLog.find((x) => x.channel === 'agent-approval-needed');
   assert(!needed, 'no se envía agent-approval-needed');
   const expired = sendLog.find((x) => x.channel === 'agent-approval-expired');
   assert(!expired, 'no se envía agent-approval-expired');
+  resetApprovals();
+  mockIpcMain.emit('agent-cancel');
+}
+
+// ── Test 7b: irreversible IGNORA autoApprove (siempre pide) ──────────────────
+
+async function testIrreversibleIgnoresAutoApprove() {
+  console.log(C.bold('\n── Test 7b: irreversible con autoApprove → card igual ──────────'));
+  resetApprovals();
+  sendLog.length = 0;
+  const ctx = makeCtx(60, { autoApprove: true });
+  register(ctx);
+
+  mockIpcMain.invokeHandler('agent-run', {}, { text: 'haz algo' }).catch(() => {});
+  await new Promise((r) => setImmediate(r));
+
+  const pending = capturedApproval({ tool: 'exec', params: { command: 'rm -rf /' } });
+  await new Promise((r) => setImmediate(r));
+  const needed = sendLog.find((x) => x.channel === 'agent-approval-needed');
+  assert(needed, 'rm -rf con autoApprove SÍ muestra card');
+  assert(
+    needed && /IRREVERSIBLE/.test(needed.payload.description),
+    'la card lleva aviso de irreversible',
+    needed && needed.payload.description
+  );
+  mockIpcMain.emitResponse('agent-approval-response', {
+    id: needed.payload.actionId,
+    approved: false,
+  });
+  const value = await pending;
+  assert(value === false, 'denegado → false');
   resetApprovals();
   mockIpcMain.emit('agent-cancel');
 }
@@ -404,6 +436,7 @@ async function main() {
     await testAgentLoopPlainDenyNoNotice();
     await testAgentLoopObjectDecisionNotApproved();
     await testAutoApproveSkipsCard();
+    await testIrreversibleIgnoresAutoApprove();
     await testRunStatusAndSteering();
   } finally {
     Module._load = realLoad;

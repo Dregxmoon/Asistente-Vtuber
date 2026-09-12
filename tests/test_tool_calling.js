@@ -448,7 +448,7 @@ async function testToolCallingStartsSmart() {
     free: true,
     models: { fast: 'fast-model', smart: 'smart-model' },
   });
-  LLMProvider.configure({ llm: { primary: id, fallback: [], apiKeys: { [id]: 'FAKE' } } });
+  LLMProvider.configure({ llm: { provider: id, apiKeys: { [id]: 'FAKE' } } });
   LLMProvider._setKeychainResolver(false);
 
   const calls = { fast: 0, smart: 0 };
@@ -531,7 +531,7 @@ async function testToolFallbackPromptInjection() {
     free: true,
     models: { fast: 'fast-model', smart: 'smart-model' },
   });
-  LLMProvider.configure({ llm: { primary: id, fallback: [], apiKeys: { [id]: 'FAKE' } } });
+  LLMProvider.configure({ llm: { provider: id, apiKeys: { [id]: 'FAKE' } } });
   LLMProvider._setKeychainResolver(false);
 
   // tool-calling falla en TODOS los providers (no reintentable)

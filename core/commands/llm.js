@@ -101,8 +101,8 @@ module.exports = function registerCommands(register) {
 
       // ── Con proveedor pero sin modelo: activarlo y listar sus modelos ─────
       if (!args[1]) {
-        LLMProvider.configure({ llm: { primary: valid.id } });
-        if (ctx.sendIPC) ctx.sendIPC('set-provider', { primary: valid.id });
+        LLMProvider.configure({ llm: { provider: valid.id } });
+        if (ctx.sendIPC) ctx.sendIPC('set-provider', { provider: valid.id });
         // Valida el catálogo contra el endpoint real (con TTL) antes de
         // listar: descarta modelos que la cuenta no tiene accesibles (p.ej.
         // 404 "Function not found" en NVIDIA Build). Sin key no hace red y
@@ -160,10 +160,10 @@ module.exports = function registerCommands(register) {
 
       // Persistir en config.json (IPCs) y aplicar en memoria.
       const cfg = {
-        llm: { primary: valid.id, providers: { [valid.id]: { model: { [mode]: modelName } } } },
+        llm: { provider: valid.id, providers: { [valid.id]: { model: { [mode]: modelName } } } },
       };
       LLMProvider.configure(cfg);
-      if (ctx.sendIPC) ctx.sendIPC('set-provider', { primary: valid.id });
+      if (ctx.sendIPC) ctx.sendIPC('set-provider', { provider: valid.id });
       if (ctx.ipcRenderer) {
         try {
           await ctx.ipcRenderer.invoke('set-llm-model', {

@@ -73,11 +73,13 @@ function fakeSensor() {
 
 let defaultMessageSeq = 0;
 
-function stubLLM({ provider = 'groq', complete } = {}) {
+function stubLLM({ provider = 'groq', complete, hasKey = true } = {}) {
   const origP = LLMProvider.getActiveProvider;
   const origC = LLMProvider.complete;
+  const origK = LLMProvider.hasActiveKey;
   let calls = 0;
   LLMProvider.getActiveProvider = () => provider;
+  LLMProvider.hasActiveKey = () => hasKey;
   LLMProvider.complete = async (...args) => {
     calls++;
     return complete
@@ -89,6 +91,7 @@ function stubLLM({ provider = 'groq', complete } = {}) {
     restore: () => {
       LLMProvider.getActiveProvider = origP;
       LLMProvider.complete = origC;
+      LLMProvider.hasActiveKey = origK;
     },
   };
 }

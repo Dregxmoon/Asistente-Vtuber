@@ -76,11 +76,13 @@ function fakeSensor() {
   };
 }
 
-function stubLLM({ complete } = {}) {
+function stubLLM({ complete, hasKey = true } = {}) {
   const origP = LLMProvider.getActiveProvider;
   const origC = LLMProvider.complete;
+  const origK = LLMProvider.hasActiveKey;
   let calls = 0;
   LLMProvider.getActiveProvider = () => 'groq';
+  LLMProvider.hasActiveKey = () => hasKey;
   LLMProvider.complete = async (...args) => {
     calls++;
     return complete ? complete(...args) : 'mensaje de prueba';
@@ -91,6 +93,7 @@ function stubLLM({ complete } = {}) {
     restore: () => {
       LLMProvider.getActiveProvider = origP;
       LLMProvider.complete = origC;
+      LLMProvider.hasActiveKey = origK;
     },
   };
 }

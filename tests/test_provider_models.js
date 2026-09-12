@@ -79,7 +79,7 @@ function testActiveModel() {
   console.log(C.bold('\n── Test 2: activeModel con override por usuario ───────────────'));
 
   // Sin override → el default del provider
-  LLMProvider.configure({ llm: { primary: 'groq' } });
+  LLMProvider.configure({ llm: { provider: 'groq' } });
   let p = LLMProvider.getAvailableProviders().find((x) => x.id === 'groq');
   assert(p.activeModel.fast === 'llama-3.1-8b-instant', 'groq fast = default');
   assert(p.activeModel.smart === 'llama-3.3-70b-versatile', 'groq smart = default');

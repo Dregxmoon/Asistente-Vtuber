@@ -151,7 +151,7 @@ function testModel() {
   const mockLLMProvider = {
     getActiveProvider: () => configured || 'groq',
     configure: (cfg) => {
-      configured = cfg.llm.primary;
+      configured = cfg.llm.provider;
     },
     getAvailableProviders: () => mockProviders,
     listModels: (id) => {
