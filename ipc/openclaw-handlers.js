@@ -1,5 +1,6 @@
 // @ts-nocheck
 'use strict';
+const { swallow } = require('../core/observability/SwallowedErrors.js');
 const logger = require('../core/observability/Logger.js');
 const {
   approvalPattern,
@@ -11,6 +12,10 @@ const {
 const { ipcMain } = require('electron');
 const { getToolRegistry } = require('../core/task/ToolRegistry.js');
 const { AgentRunController } = require('../core/planner/AgentRunController.js');
+// Tabla única de permisos: el conjunto always-prompt se genera desde
+// ToolPolicy.js (no hay lista paralela que mantener).
+const { alwaysPromptTools } = require('../core/security/ToolPolicy.js');
+const ALWAYS_PROMPT_TOOLS = alwaysPromptTools();
 
 // Tiempo máximo (ms) que el usuario tiene para responder a un card de
 // aprobación. Configurable en config.json → agent.approvalTimeoutMs. 120s
@@ -101,7 +106,9 @@ function register(ctx) {
       // Subagentes por perfil (F1): agent.subagent.enabled (default true).
       // Apagado quita la tool subagent del catálogo que ve el agente.
       getToolRegistry().setSubagentsEnabled(cfg?.agent?.subagent?.enabled !== false);
-    } catch (_) {}
+    } catch (_) {
+      swallow('openclaw-handlers._t');
+    }
 
     const ownerId = senderId(e);
     const abort = new AbortController();
@@ -139,32 +146,6 @@ function register(ctx) {
           controller.noteProgress({ phase: 'approval', tool: action.tool, status: 'waiting' });
           return new Promise((resolve) => {
             const pattern = approvalPattern(action);
-            const alwaysPromptTools = new Set([
-              'browser',
-              'personal_browser_detect',
-              'personal_browser_link',
-              'personal_browser_status',
-              'personal_browser_close',
-              'personal_browser_login',
-              'desktop_snapshot',
-              'desktop_screenshot',
-              'pointer_click',
-              'window_list',
-              'window_focus',
-              'ui_get_state',
-              'ui_wait',
-              'ui_click',
-              'ui_type',
-              'ui_press',
-              'ui_select',
-              'ui_scroll',
-              'window_close',
-              'desktop_capabilities',
-              'process_list',
-              'process_stop',
-              'camera_status',
-              'open_camera',
-            ]);
             // Auto-aprobación global (config.json → agent.autoApprove): el
             // agente ejecuta acciones de alto impacto sin mostrar el card.
             // El control interactivo queda excluido: contenido web o una UI
@@ -174,11 +155,17 @@ function register(ctx) {
             // autoApprove: exige card explícita siempre (T13/T16).
             let irreversible = false;
             try {
-              irreversible = require('../core/security/IrreversiblePolicy.js').isIrreversible(action);
+              irreversible = require('../core/security/IrreversiblePolicy.js').isIrreversible(
+                action
+              );
             } catch (_) {
               irreversible = false;
             }
-            if (approvalConfig.autoApprove && !alwaysPromptTools.has(action.tool) && !irreversible) {
+            if (
+              approvalConfig.autoApprove &&
+              !ALWAYS_PROMPT_TOOLS.has(action.tool) &&
+              !irreversible
+            ) {
               resolve(true);
               return;
             }
@@ -200,7 +187,9 @@ function register(ctx) {
               tool: action.tool,
               params: action.params,
               description:
-                (irreversible ? '⚠ ACCIÓN IRREVERSIBLE (comprar/pagar/borrar/publicar). Revisa con calma: ' : '') +
+                (irreversible
+                  ? '⚠ ACCIÓN IRREVERSIBLE (comprar/pagar/borrar/publicar). Revisa con calma: '
+                  : '') +
                 (action.description ||
                   `${action.tool}: ${JSON.stringify(action.params).slice(0, 100)}`),
               // Vista previa de diff (null cuando no se puede calcular: edit

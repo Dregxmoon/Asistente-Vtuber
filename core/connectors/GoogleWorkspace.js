@@ -1,5 +1,6 @@
 // @ts-check
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 const fs = require('fs/promises');
 const path = require('path');
 const os = require('os');
@@ -68,7 +69,9 @@ async function findUvx(configured = '') {
         await fs.access(candidate, fs.constants.X_OK);
         return candidate;
       }
-    } catch (_) {}
+    } catch (_) {
+      swallow('GoogleWorkspace.findUvx');
+    }
   }
   throw new Error(
     'No se encontró uvx. Instala uv o selecciona la ruta de uvx en Opciones avanzadas.'

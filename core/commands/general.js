@@ -1,5 +1,6 @@
 // @ts-nocheck
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 
 module.exports = function registerCommands(register) {
   register({
@@ -228,7 +229,9 @@ module.exports = function registerCommands(register) {
       let servers = [];
       try {
         servers = typeof ctx.mcpServers === 'function' ? ctx.mcpServers() : [];
-      } catch {}
+      } catch {
+        swallow('general.items');
+      }
 
       let listado;
       if (!servers.length) {

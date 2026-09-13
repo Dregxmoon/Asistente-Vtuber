@@ -9,10 +9,10 @@ y el **recall de memoria** — embeddings locales, sin dependencia de servicios 
 
 Inicializa y puebla las tablas vectoriales:
 
-| Tabla | Propósito |
-|---|---|
+| Tabla            | Propósito                                                         |
+| ---------------- | ----------------------------------------------------------------- |
 | `intent_catalog` | Catálogo de frases de referencia para la detección de intenciones |
-| `intent_vectors` | Embeddings 384d (`all-MiniLM-L6-v2`) de cada frase |
+| `intent_vectors` | Embeddings 384d (`all-MiniLM-L6-v2`) de cada frase                |
 
 **Intenciones soportadas (60+ frases):** `read_file`, `edit_file`, `run_command`, `web_search`,
 `browser`, `create_file`, `apply_patch`, `list_directory`, `code_execution` y más — con variantes

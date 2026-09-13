@@ -1,3 +1,4 @@
+const { swallow } = require('../observability/SwallowedErrors.js');
 // @ts-nocheck
 const logger = require('../observability/Logger.js');
 // workspace.js — gestión del workspace activo (repo/carpeta sobre la que el
@@ -40,7 +41,9 @@ async function setActiveWorkspace(newPath) {
     (async () => {
       try {
         await state.lspManager.stop();
-      } catch {}
+      } catch {
+        swallow('workspace.setActiveWorkspace');
+      }
       try {
         await state.lspManager.start(resolved);
         logger.info('workspace', '[core] LSP listo para', resolved);

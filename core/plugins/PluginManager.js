@@ -1,5 +1,6 @@
 // @ts-check
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 const logger = require('../observability/Logger.js');
 
 /**
@@ -114,7 +115,9 @@ class PluginManager {
   _readKeyFile(keyPath) {
     try {
       if (fs.existsSync(keyPath)) return fs.readFileSync(keyPath, 'utf8');
-    } catch (_) {}
+    } catch (_) {
+      swallow('PluginManager._readKeyFile');
+    }
     return null;
   }
 
@@ -429,7 +432,9 @@ class PluginManager {
     for (const plugin of this._plugins) {
       try {
         plugin.api.dispose?.();
-      } catch {}
+      } catch {
+        swallow('PluginManager.dispose');
+      }
     }
     this._plugins = [];
     this._hooks.clear();

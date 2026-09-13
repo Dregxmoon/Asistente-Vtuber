@@ -1,3 +1,4 @@
+const { swallow } = require('../observability/SwallowedErrors.js');
 // @ts-check
 const logger = require('../observability/Logger.js');
 /**
@@ -137,7 +138,9 @@ class SessionManager {
       if (typeof this._graph.listActiveIntentions === 'function') {
         return this._graph.listActiveIntentions({ limit: 5 });
       }
-    } catch (_) {}
+    } catch (_) {
+      swallow('SessionManager._pendingIntentions');
+    }
     return [];
   }
 
@@ -256,7 +259,9 @@ class SessionManager {
         logger.error('SessionManager', '[session] error:', err.message);
         try {
           this._graph.endSession(sessionId, { turnCount, summary: null });
-        } catch (_) {}
+        } catch (_) {
+          swallow('SessionManager.close');
+        }
       })
       .finally(() => {
         this._isClosing = false;
@@ -311,7 +316,9 @@ class SessionManager {
       if (fs.existsSync(marker)) {
         try {
           lastRun = JSON.parse(fs.readFileSync(marker, 'utf-8')).ts || 0;
-        } catch (_) {}
+        } catch (_) {
+          swallow('SessionManager._maybeRunDecay');
+        }
       }
       const hoursSince = (Date.now() - lastRun) / (1000 * 60 * 60);
       if (hoursSince >= DECAY_INTERVAL_HOURS) {

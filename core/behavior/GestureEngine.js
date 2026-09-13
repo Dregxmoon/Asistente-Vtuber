@@ -1,5 +1,6 @@
 // @ts-nocheck
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 
 // GestureEngine — orquesta la reproducción de gestos sobre una instancia
 // Live2D ya cargada (overlay o mini-avatar del chat). Une ModelAugmenter
@@ -135,7 +136,9 @@ class GestureEngine {
     if (this._onPlay) {
       try {
         this._onPlay({ mood: m, gesture: resolved.gesture, source: resolved.source, forced });
-      } catch {}
+      } catch {
+        swallow('GestureEngine.play');
+      }
     }
     return { ok: true, gesture: resolved.gesture, source: resolved.source };
   }
@@ -201,12 +204,16 @@ class GestureEngine {
       if (wasMotion && typeof mm.stopAllMotions === 'function') {
         try {
           mm.stopAllMotions();
-        } catch {}
+        } catch {
+          swallow('GestureEngine._resetPose');
+        }
       }
       if (mm.expressionManager && typeof mm.expressionManager.resetExpression === 'function') {
         try {
           mm.expressionManager.resetExpression();
-        } catch {}
+        } catch {
+          swallow('GestureEngine._resetPose');
+        }
       }
     }
     // La API de parámetros vive en im.coreModel (wrapper del Live2DCubismCore),
@@ -225,7 +232,9 @@ class GestureEngine {
       for (let i = 0; i < n; i++) {
         cm.setParameterValueByIndex(i, cm.getParameterDefaultValue(i), 1);
       }
-    } catch {}
+    } catch {
+      swallow('GestureEngine._resetPose');
+    }
   }
 
   // Revertir a neutro ya mismo (p. ej. al cambiar de modelo).
@@ -264,7 +273,9 @@ class GestureEngine {
     let mood;
     try {
       mood = analyzer(text);
-    } catch {}
+    } catch {
+      swallow('GestureEngine.onChat');
+    }
     if (mood) this.setEmotion(mood);
   }
 

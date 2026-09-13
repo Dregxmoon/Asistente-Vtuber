@@ -1,5 +1,6 @@
 // @ts-nocheck
 'use strict';
+const { swallow } = require('../core/observability/SwallowedErrors.js');
 const logger = require('../core/observability/Logger.js');
 
 const crypto = require('crypto');
@@ -123,7 +124,9 @@ function register(ctx) {
     let uvxPath = '';
     try {
       uvxPath = await findUvx(server?.command || '');
-    } catch (_) {}
+    } catch (_) {
+      swallow('mcp-handlers.server');
+    }
     return { uvxPath, configured: !!server, email: server?.env?.USER_GOOGLE_EMAIL || null };
   });
 

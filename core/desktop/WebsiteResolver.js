@@ -1,5 +1,6 @@
 // @ts-check
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 
 /**
  * WebsiteResolver.js — resolución universal de destinos web en runtime.
@@ -197,11 +198,18 @@ class WebsiteResolver {
               ? 6
               : 0;
         }
-      } catch (_) {}
+      } catch (_) {
+        swallow('WebsiteResolver._rankCandidates');
+      }
       scored.push({
         url: parsed.href,
         score:
-          coverage * 10 + (hostHasAll ? 5 : 0) + exactBonus + localeBonus + memoryBonus - index * 0.01,
+          coverage * 10 +
+          (hostHasAll ? 5 : 0) +
+          exactBonus +
+          localeBonus +
+          memoryBonus -
+          index * 0.01,
         index,
       });
     });

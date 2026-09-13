@@ -1,5 +1,6 @@
 // @ts-nocheck
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 const logger = require('../observability/Logger.js');
 
 // GitManager.js — Tool propia de Git (no exec crudo).
@@ -547,7 +548,9 @@ class GitManager {
   _cleanupAskpass() {
     try {
       if (this._askpassPath) fs.unlinkSync(this._askpassPath);
-    } catch {}
+    } catch {
+      swallow('GitManager._cleanupAskpass');
+    }
     this._askpassPath = null;
   }
 

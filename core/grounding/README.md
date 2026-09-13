@@ -17,14 +17,14 @@ estado del sistema operativo, intención del usuario y herramientas disponibles.
 
 El `contextPackage` contiene:
 
-| Bloque | Contenido |
-|---|---|
-| `identity` | Personalidad del asistente (`core/identity/identity.json`) |
-| `osContext` | App activa, ventanas, tiempo de uso, hora/día |
-| `persistentMemory` | Nodos y episodios recuperados del `StateGraph` |
-| `sessionHistory` | Historial de la sesión actual |
-| `currentMessage` | Último mensaje del usuario |
-| `toolIntent` | Resultado de la detección semántica de intención |
+| Bloque             | Contenido                                                  |
+| ------------------ | ---------------------------------------------------------- |
+| `identity`         | Personalidad del asistente (`core/identity/identity.json`) |
+| `osContext`        | App activa, ventanas, tiempo de uso, hora/día              |
+| `persistentMemory` | Nodos y episodios recuperados del `StateGraph`             |
+| `sessionHistory`   | Historial de la sesión actual                              |
+| `currentMessage`   | Último mensaje del usuario                                 |
+| `toolIntent`       | Resultado de la detección semántica de intención           |
 
 ## `IntentDetector.js` — detección semántica de intención
 
@@ -32,11 +32,11 @@ Detecta si el usuario quiere ejecutar una acción, con embeddings locales (`all-
 búsqueda coseno en `sqlite-vec`. **Pre-filtro barato**: evita pedirle al LLM que decida cada vez si hay
 acción que ejecutar.
 
-| Nivel | Significado |
-|---|---|
-| `high` | El LLM responde con bloque de acción estructurado |
-| `medium` | Sugerencia suave |
-| `low / none` | Conversación normal |
+| Nivel        | Significado                                       |
+| ------------ | ------------------------------------------------- |
+| `high`       | El LLM responde con bloque de acción estructurado |
+| `medium`     | Sugerencia suave                                  |
+| `low / none` | Conversación normal                               |
 
 ## `RetrievalPlanner.js` — recuperación de memoria
 
@@ -45,8 +45,8 @@ coseno **ponderada por recencia**: lo reciente pesa más, sin descartar lo impor
 
 ## `serializers/` — formateo del system prompt
 
-| Archivo | Propósito |
-|---|---|
+| Archivo             | Propósito                                                                                                                                          |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GroqSerializer.js` | System prompt en secciones (identidad → contexto SO → memoria → intención de herramienta). Serializer único del pipeline para todos los providers. |
 
 La selección ocurre en `ContextAssembler.build()` según el proveedor activo, con fallback a Groq.

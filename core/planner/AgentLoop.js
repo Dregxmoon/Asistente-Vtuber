@@ -1,5 +1,6 @@
 // @ts-nocheck
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 const logger = require('../observability/Logger.js');
 
 const path = require('path');
@@ -11,10 +12,9 @@ const AP = require('./ActionParser.js');
 const LLMProvider = require('../llm/LLMProvider.js');
 const { getToolRegistry } = require('../task/ToolRegistry.js');
 const { getGitManager } = require('../git/GitManager.js');
-const { WorkspaceCheckpoint, MUTATOR_TOOLS } = require('../git/WorkspaceCheckpoint.js');
+const { WorkspaceCheckpoint } = require('../git/WorkspaceCheckpoint.js');
 const { verifyHtmlFiles } = require('./web-verify.js');
 const { verifySyntax } = require('./syntax-verify.js');
-const { computeDiffPreview } = require('../git/FileDiff.js');
 const { getGitHubManager } = require('../github/GitHubManager.js');
 const { RunMetrics } = require('./run-metrics.js');
 const { getMoodEngine } = require('../identity/MoodEngine.js');
@@ -33,47 +33,8 @@ const {
   capabilityForTool,
   capabilityPermissionTool,
 } = require('../desktop/DesktopCapabilities.js');
-const {
-  isTaskScopeApproved,
-  taskApprovalPattern,
-  addApproval,
-} = require('../security/SessionApprovals.js');
-const { isIrreversible } = require('../security/IrreversiblePolicy.js');
+const { ApprovalGate } = require('./ApprovalGate.js');
 
-/**
- * Deriva una propuesta de tarea `task:<tipo>:<destino>` desde tool+params.
- * Intencionalmente SIN parsear texto ni idioma: el destino ya viene
- * estructurado en los params (target/app/query/host). Devuelve null cuando la
- * acción no describe una tarea proponible (y el loop usa cards por clic).
- * @param {{tool?: string, params?: Record<string, unknown>}} action
- * @returns {{task: string, target: string, pattern: string}|null}
- */
-function _proposeTaskScope(action) {
-  if (!action || typeof action.tool !== 'string') return null;
-  const params = action.params && typeof action.params === 'object' ? action.params : {};
-  const str = (value) => String(value || '').trim();
-  /** @type {[string, string]|null} */
-  let kind = null;
-  if (action.tool === 'launch_app' && str(params.app)) {
-    kind = ['app-task', str(params.app)];
-  } else if (action.tool === 'open_website' && str(params.target)) {
-    kind = ['web-task', str(params.target).slice(0, 80)];
-  } else if (action.tool === 'play_media' && str(params.query)) {
-    kind = ['media-play', str(params.query).slice(0, 80)];
-  } else if (action.tool === 'browser' && str(params.url)) {
-    try {
-      kind = ['web-task', new URL(str(params.url)).hostname];
-    } catch (_) {
-      kind = null;
-    }
-  } else if (['desktop_snapshot', 'window_list', 'desktop_screenshot'].includes(action.tool)) {
-    kind = ['desktop-task', str(params.application || params.sourceName) || 'desktop'];
-  }
-  if (!kind) return null;
-  const pattern = taskApprovalPattern(kind[0], kind[1]);
-  if (!pattern) return null;
-  return { task: kind[0], target: kind[1], pattern };
-}
 const {
   MutationJournal,
   isMutatingAction,
@@ -644,7 +605,9 @@ function buildActiveIntentionsSection(intentions) {
     if (!steps.length && typeof it.steps === 'string') {
       try {
         steps = JSON.parse(it.steps);
-      } catch (_) {}
+      } catch (_) {
+        swallow('AgentLoop.buildActiveIntentionsSection');
+      }
     } else if (Array.isArray(it.steps)) {
       steps = it.steps;
     }
@@ -998,6 +961,9 @@ class AgentLoop {
     // Debe existir antes de hooks y de _runInternal: el finally emite métricas
     // incluso si una excepción ocurre antes de entrar al bucle.
     this._metrics = new RunMetrics();
+    // El gate de aprobaciones vive y muere con el run (como las métricas):
+    // el scope de tarea aprobado no puede filtrarse al siguiente run.
+    this._approvalGate = new ApprovalGate({ metrics: this._metrics });
     const t0 = Date.now();
     let result;
     try {
@@ -1025,7 +991,9 @@ class AgentLoop {
         if (typeof opts.onPlan === 'function') {
           try {
             opts.onPlan({ kind: 'progress', ...result.plan, goalId: this._currentGoalId });
-          } catch (_) {}
+          } catch (_) {
+            swallow('AgentLoop.run');
+          }
         }
       }
       if (result && this._steeringApplied > 0) {
@@ -1155,9 +1123,13 @@ class AgentLoop {
     const signal = opts.signal || null;
     this._signal = signal;
     this._steeringApplied = 0;
-    // D1b: propuesta de tarea completa, una sola vez por run.
-    this._taskScope = null;
-    this._taskScopeProposed = false;
+    // Estado del gate de aprobaciones por run (scope, propuesta, expiración).
+    // Defensa: si _runInternal se invoca sin pasar por run(), se crea acá.
+    if (!this._approvalGate) {
+      this._approvalGate = new ApprovalGate({ metrics: this._metrics });
+    } else {
+      this._approvalGate.reset();
+    }
     // Instrumentación por-run: acumuladores que se emiten al terminar (ver
     // _emitRunMetrics en run()). Por-instancia: los subagentes son otro
     // AgentLoop, así sus métricas no contaminan las del run padre.
@@ -1337,7 +1309,9 @@ class AgentLoop {
         if (this._bridge && typeof this._bridge.setLocaleHints === 'function') {
           this._bridge.setLocaleHints(derived.tldHints);
         }
-      } catch (_) {}
+      } catch (_) {
+        swallow('AgentLoop.top');
+      }
     }
 
     // ── Fase de plan explícito (mejora de calidad) ─────────────────────────
@@ -1361,11 +1335,8 @@ class AgentLoop {
           ),
         }
       : null;
-    // Tool de alto impacto cuya aprobación expiró (sin respuesta del usuario a
-    // tiempo) en este run. Si el run cierra con texto, el aviso se anexa a la
-    // respuesta final: nunca puede sonar a "todo listo" si una acción quedó
-    // denegada por timeout sin que el usuario lo supiera activamente.
-    this._approvalExpiredTool = null;
+    // La tool expirada vive en el gate (reset arriba): _withExpiredApprovalNotice
+    // la lee vía this._approvalExpiredTool (getter delegado).
     let repositorySnapshot = '';
     if (!this._plan && this._shouldPlan(userMessage, taskIntent, opts)) {
       repositorySnapshot = await this._buildRepositorySnapshot(userMessage);
@@ -1373,7 +1344,9 @@ class AgentLoop {
       if (typeof opts.onPlan === 'function') {
         try {
           opts.onPlan({ kind: 'reconnaissance', summary: repositorySnapshot });
-        } catch (_) {}
+        } catch (_) {
+          swallow('AgentLoop.top');
+        }
       }
     }
     if (this._plan) {
@@ -1390,7 +1363,9 @@ class AgentLoop {
             done,
             total: this._plan.steps.length,
           });
-        } catch (_) {}
+        } catch (_) {
+          swallow('AgentLoop.top');
+        }
       }
       logger.info(
         'AgentLoop',
@@ -1577,7 +1552,9 @@ class AgentLoop {
                 status: 'applied',
                 count: this._steeringApplied,
               });
-            } catch (_) {}
+            } catch (_) {
+              swallow('AgentLoop.top');
+            }
           }
         }
       }
@@ -2097,137 +2074,21 @@ class AgentLoop {
           }
         }
 
-        // ── Vista previa de diff (aprobación informada) ─────────────────────
-        // Para mutaciones de archivos (write/edit/apply_patch) se calcula en
-        // memoria el diff real ANTES de pedir aprobación, y se adjunta al
-        // action para que onApprovalNeeded lo incluya en el card. Nunca
-        // bloquea ni es prerequisito de seguridad: si falla o da null (edit
-        // ambiguo, patch que no aplica) la aprobación sigue, y la UI lo
-        // comunica como "vista previa no disponible".
-        if (MUTATOR_TOOLS.has(action.tool) && action._diffPreview === undefined) {
-          try {
-            action._diffPreview = computeDiffPreview({
-              tool: action.tool,
-              params: action.params,
-              cwd: AP.PROJECT_CWD,
-            });
-          } catch (e) {
-            logger.warn(
-              'AgentLoop',
-              `[diff-preview] falló el cálculo para ${action.tool}: ${e.message}`
-            );
-            action._diffPreview = null;
+        // ── Aprobaciones: delegadas a ApprovalGate ───────────────────────────
+        // Todo el flujo permiso → irreversible → diff-preview → propuesta de
+        // tarea → scope → card/timeout vive en core/planner/ApprovalGate.js
+        // con estado por-run. Acá solo se aplica el veredicto.
+        const gateDecision = await this._approvalGate.decide({
+          action,
+          requiresApproval,
+          permissionAction,
+          opts,
+        });
+        if (!gateDecision.proceed) {
+          if (gateDecision.historyMessage) {
+            iterationHistory.push({ role: 'user', content: gateDecision.historyMessage });
           }
-        }
-
-        // D1b: propuesta de tarea completa (UNA vez por run). Ante la primera
-        // acción desktop/web que exige aprobación, se propone
-        // task:<tipo>:<destino> vía opts.onTaskApprovalNeeded. Si se aprueba,
-        // el scope cubre el resto del run (cero cards más); si no hay handler
-        // o se rechaza/expira, sigue el flujo clásico por clic. La propuesta
-        // sale de tool+params (estructurado), nunca del idioma del mensaje.
-        // T13/T16: lo irreversible (comprar, pagar, borrar, publicar con
-        // cargo) exige "sí" explícito SIEMPRE: ni el scope de tarea ni el
-        // autoApprove lo silencian. Se fuerza ask y se salta la propuesta.
-        let irreversible = false;
-        try {
-          irreversible = isIrreversible(action);
-        } catch (_) {
-          irreversible = false;
-        }
-        if (irreversible && permissionAction !== 'deny') permissionAction = 'ask';
-        if (
-          permissionAction === 'ask' &&
-          requiresApproval &&
-          !irreversible &&
-          !this._taskScope &&
-          !this._taskScopeProposed &&
-          typeof opts.onTaskApprovalNeeded === 'function'
-        ) {
-          const proposal = _proposeTaskScope(action);
-          if (proposal) {
-            this._taskScopeProposed = true;
-            try {
-              const scopeDecision = await opts.onTaskApprovalNeeded({
-                ...proposal,
-                firstAction: { tool: action.tool },
-              });
-              const scopeObj =
-                scopeDecision !== null && typeof scopeDecision === 'object' ? scopeDecision : null;
-              const scopeApproved = scopeObj ? Boolean(scopeObj.approved) : Boolean(scopeDecision);
-              if (scopeApproved) {
-                addApproval(proposal.pattern);
-                this._taskScope = proposal.pattern;
-                logger.info(
-                  'AgentLoop',
-                  `[agent-loop] tarea aprobada de una vez: ${proposal.pattern}`
-                );
-              }
-            } catch (e) {
-              logger.warn('AgentLoop', `[agent-loop] propuesta de tarea falló: ${e.message}`);
-            }
-          }
-        }
-        const effectiveTaskScope = this._taskScope || opts.taskScope || null;
-
-        // D1: aprobación por tarea completa. Si el run trae un taskScope
-        // (`task:<tipo>:<destino>`) ya aprobado en sesión y la acción cae
-        // dentro de las tools cubiertas, se ejecuta sin card por clic. Todo
-        // lo demás (exec, escritura de archivos, process_stop, uploads...)
-        // sigue el flujo normal de aprobación por tool.
-        const taskScopeCovered =
-          permissionAction === 'ask' &&
-          requiresApproval &&
-          isTaskScopeApproved(action, effectiveTaskScope);
-        if (taskScopeCovered) {
-          logger.info(
-            'AgentLoop',
-            `[agent-loop] tool "${action.tool}" cubierta por scope de tarea ${effectiveTaskScope}`
-          );
-          this._metrics.trackApproval(true);
-        }
-
-        if (
-          permissionAction === 'ask' &&
-          requiresApproval &&
-          !taskScopeCovered &&
-          opts.onApprovalNeeded
-        ) {
-          const decision = await opts.onApprovalNeeded(action);
-          // onApprovalNeeded puede devolver boolean (true/false) o un objeto
-          // rico { approved, reason }. El caso reason === 'timeout' distingue
-          // una aprobación que EXPIRÓ (el usuario no respondió a tiempo) de
-          // una denegación explícita — el cierre del run debe decirlo.
-          const isObject = decision !== null && typeof decision === 'object';
-          const isTimeout = isObject && decision.reason === 'timeout';
-          const approved = isObject ? Boolean(decision.approved) : Boolean(decision);
-          this._metrics.trackApproval(approved);
-          if (!approved) {
-            if (isTimeout) this._approvalExpiredTool = action.tool;
-            iterationHistory.push({
-              role: 'user',
-              content: isTimeout
-                ? `[La herramienta "${action.tool}" NO se ejecutó: el tiempo de aprobación expiró sin tu respuesta — continúa sin ella o busca otra estrategia]`
-                : `[Herramienta "${action.tool}" cancelada por el usuario — continúa sin ella o busca otra estrategia]`,
-            });
-            lastToolResult = {
-              ok: false,
-              error: isTimeout ? 'aprobacion_expirada' : 'cancelada_por_usuario',
-              tool: action.tool,
-            };
-            continue;
-          }
-        } else if (
-          requiresApproval &&
-          !taskScopeCovered &&
-          !opts.onApprovalNeeded &&
-          permissionAction !== 'allow'
-        ) {
-          iterationHistory.push({
-            role: 'user',
-            content: `[Herramienta "${action.tool}" requiere aprobación pero no hay handler — BLOQUEADA. Continúa sin ella o informa que no puedes ejecutarla.]`,
-          });
-          lastToolResult = { ok: false, error: 'sin_handler_aprobacion', tool: action.tool };
+          lastToolResult = gateDecision.toolResult;
           continue;
         }
 
@@ -2298,7 +2159,9 @@ class AgentLoop {
         // estado emocional (default/gentle post-error). Nunca rompe el loop.
         try {
           getMoodEngine().noteProgress({ phase: 'start' });
-        } catch (_) {}
+        } catch (_) {
+          swallow('AgentLoop.top');
+        }
         try {
           if (GIT_TOOLS.has(action.tool)) {
             result = await this._executeGitTool(action);
@@ -2383,7 +2246,9 @@ class AgentLoop {
                     ? require('path').resolve(target)
                     : require('path').resolve(AP.PROJECT_CWD || process.cwd(), target)
                 );
-              } catch {}
+              } catch {
+                swallow('AgentLoop.top');
+              }
             }
           }
           if (isMutatingAction(action)) {
@@ -2394,7 +2259,9 @@ class AgentLoop {
             if (p) {
               try {
                 mutatedFiles.add(require('path').resolve(p));
-              } catch {}
+              } catch {
+                swallow('AgentLoop.top');
+              }
             }
             for (const k of Array.from(this._readCache.keys())) {
               if (k.endsWith(`::${p}`)) this._readCache.delete(k);
@@ -2449,7 +2316,9 @@ class AgentLoop {
         // mood 'gentle' para el próximo turno (tono uncertainty.was_wrong).
         try {
           getMoodEngine().noteProgress({ phase: 'end', status: result.ok ? 'ok' : 'error' });
-        } catch (_) {}
+        } catch (_) {
+          swallow('AgentLoop.top');
+        }
 
         // ── LSP.1: feedback de diagnósticos tras editar (patrón opencode) ──
         // Cuando una tool que muta archivos tuvo éxito, se sincroniza el cambio
@@ -2575,7 +2444,9 @@ class AgentLoop {
                   done: 0,
                   total: replacement.steps.length,
                 });
-              } catch (_) {}
+              } catch (_) {
+                swallow('AgentLoop.top');
+              }
             }
           } else {
             iterationHistory.push({ role: 'user', content: reflection.message });
@@ -2615,7 +2486,9 @@ class AgentLoop {
             total: this._plan.steps.length,
             stepStates: progress.stepStates,
           });
-        } catch (_) {}
+        } catch (_) {
+          swallow('AgentLoop.top');
+        }
       }
 
       // ── Iteraciones adaptativas ──────────────────────────────────────────
@@ -3423,7 +3296,9 @@ class AgentLoop {
     let catalog = { tools: [] };
     try {
       catalog = this._toolRegistry.getCatalog(null);
-    } catch (_) {}
+    } catch (_) {
+      swallow('AgentLoop._profileTools');
+    }
     const allowAll = profile.tools.allow.includes('*');
     const restricted =
       profile.readOnly || !allowAll || (profile.tools.deny && profile.tools.deny.length > 0);
@@ -3435,7 +3310,9 @@ class AgentLoop {
     let text = null;
     try {
       text = this._toolRegistry.serializeToPrompt(null, 30, names);
-    } catch (_) {}
+    } catch (_) {
+      swallow('AgentLoop._profileTools');
+    }
     return { catalog: text, names, restricted };
   }
 
@@ -3813,12 +3690,16 @@ class AgentLoop {
         .sort((a, b) => a.name.localeCompare(b.name))
         .slice(0, 80)
         .map((entry) => (entry.isDirectory() ? `${entry.name}/` : entry.name));
-    } catch (_) {}
+    } catch (_) {
+      swallow('AgentLoop._buildRepositorySnapshot');
+    }
     let gitSummary = '';
     try {
       const status = await this._git?.status?.(cwd);
       if (status) gitSummary = JSON.stringify(status).slice(0, 1800);
-    } catch (_) {}
+    } catch (_) {
+      swallow('AgentLoop._buildRepositorySnapshot');
+    }
     return [
       '# RECONOCIMIENTO DEL REPOSITORIO',
       `Raíz: ${cwd}`,
@@ -4337,7 +4218,9 @@ class AgentLoop {
         let tags = [];
         try {
           tags = JSON.parse(n.tags || '[]');
-        } catch {}
+        } catch {
+          swallow('AgentLoop.relevant');
+        }
         return tags.includes('context-compaction');
       });
       if (relevant.length === 0) return null;
@@ -4421,6 +4304,15 @@ class AgentLoop {
         })
         .join(joinSep) || emptyMsg
     );
+  }
+
+  /**
+   * Tool expirada del run actual, delegada al gate de aprobaciones (fuente
+   * única; el loop ya no guarda estado de aprobación).
+   * @returns {string|null}
+   */
+  get _approvalExpiredTool() {
+    return (this._approvalGate && this._approvalGate.approvalExpiredTool) || null;
   }
 
   /**

@@ -1,5 +1,6 @@
 // @ts-nocheck
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 
 // skills.js — gestión visual de skills: listar, importar desde disco,
 // buscar en GitHub e instalar (SkillHub). Complementa /skill [nombre]
@@ -136,7 +137,9 @@ function register(register) {
             fs.rmSync(extractDir, { recursive: true, force: true });
             try {
               fs.unlinkSync(tarPath);
-            } catch {}
+            } catch {
+              swallow('skills.top');
+            }
 
             if (installed.length) await sm.index(await sm.scan(true));
 

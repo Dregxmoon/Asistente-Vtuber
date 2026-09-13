@@ -1,5 +1,6 @@
 // @ts-check
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 
 /**
  * syntax-verify.js — Verificación de sintaxis UNIVERSAL para archivos mutados
@@ -198,7 +199,9 @@ async function checkYaml(file) {
   let yaml = null;
   try {
     yaml = require('js-yaml');
-  } catch {}
+  } catch {
+    swallow('syntax-verify.checkYaml');
+  }
   if (!yaml) return { ok: true, skipped: 'yaml parser no instalado' };
   try {
     yaml.load(fs.readFileSync(file, 'utf-8'));

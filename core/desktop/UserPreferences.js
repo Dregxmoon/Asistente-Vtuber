@@ -1,5 +1,6 @@
 // @ts-check
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 
 /**
  * UserPreferences.js — memoria viva mínima para escritorio/web (T17-lite).
@@ -59,7 +60,9 @@ class UserPreferences {
           }
         }
       }
-    } catch (_) {}
+    } catch (_) {
+      swallow('UserPreferences._load');
+    }
     this._cache = data;
     return data;
   }
@@ -72,8 +75,12 @@ class UserPreferences {
       fs.renameSync(tmp, this._filePath);
       try {
         fs.chmodSync(this._filePath, 0o600);
-      } catch (_) {}
-    } catch (_) {}
+      } catch (_) {
+        swallow('UserPreferences._save');
+      }
+    } catch (_) {
+      swallow('UserPreferences._save');
+    }
   }
 
   /**
@@ -103,7 +110,9 @@ class UserPreferences {
           );
       }
       this._save();
-    } catch (_) {}
+    } catch (_) {
+      swallow('UserPreferences.recordResolution');
+    }
   }
 
   /**
@@ -151,7 +160,9 @@ class UserPreferences {
           return new URL(
             explicitStore.startsWith('http') ? explicitStore : `https://${explicitStore}`
           ).hostname.toLowerCase();
-        } catch (_) {}
+        } catch (_) {
+          swallow('UserPreferences.preferredHost');
+        }
       }
       const votes = new Map();
       for (const term of _terms(query)) {

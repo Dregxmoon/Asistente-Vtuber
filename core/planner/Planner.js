@@ -374,6 +374,19 @@ function stepId() {
 
 // ── Planner ───────────────────────────────────────────────────────────────────
 
+/**
+ * @deprecated Ejecución legacy, AISLADA de producción.
+ *
+ * Estado real auditado: ningún flujo productivo instancia Planner para
+ * ejecutar (AgentLoop es el único ejecutor). Lo único vivo de este módulo es:
+ *   - setProjectCWD / getProjectCWD / PROJECT_CWD (cwd del workspace),
+ *   - re-exports de ActionParser (AP, isHighImpact, setProjectCWD...),
+ *   - getStats() vía core/stats.js (solo telemetría),
+ *   - tests/test_planner.js (contrato de regresión, no borrar).
+ * No agregar llamadas nuevas a run()/executeStep(); cualquier ejecución nueva
+ * va por AgentLoop. Si algún día se elimina la clase, migrar primero el test
+ * y getStats().
+ */
 class Planner {
   constructor() {
     this._bridge = getOpenClawBridge();

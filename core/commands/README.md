@@ -9,39 +9,39 @@ procesamiento de lenguaje natural.
 
 Centraliza el registro, búsqueda y ejecución de comandos. Cada comando tiene:
 
-| Campo | Descripción |
-|---|---|
-| `id` | Identificador único |
-| `category` | Agrupación en la UI (General, Memoria, Sistema, …) |
-| `usage` | Sintaxis de uso mostrada al usuario |
-| `description` | Qué hace el comando |
-| `handler` | Función ejecutora (IPC + lógica) |
+| Campo         | Descripción                                        |
+| ------------- | -------------------------------------------------- |
+| `id`          | Identificador único                                |
+| `category`    | Agrupación en la UI (General, Memoria, Sistema, …) |
+| `usage`       | Sintaxis de uso mostrada al usuario                |
+| `description` | Qué hace el comando                                |
+| `handler`     | Función ejecutora (IPC + lógica)                   |
 
 Comandos incluidos:
 
-| Comando | Propósito |
-|---|---|
-| `/help` | Lista de comandos y sintaxis |
-| `/init` | Analiza el **workspace activo** (package.json, extensiones, estructura) y lo guarda en memoria |
-| `/model` | Cambia el proveedor de LLM (Groq / Gemini / OpenAI) |
-| `/cambio-modelo` | Cambia el modelo Live2D (lista los disponibles como botones; matching difuso al escribir) |
+| Comando          | Propósito                                                                                                                                                                                                                                                                        |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/help`          | Lista de comandos y sintaxis                                                                                                                                                                                                                                                     |
+| `/init`          | Analiza el **workspace activo** (package.json, extensiones, estructura) y lo guarda en memoria                                                                                                                                                                                   |
+| `/model`         | Cambia el proveedor de LLM (Groq / Gemini / OpenAI)                                                                                                                                                                                                                              |
+| `/cambio-modelo` | Cambia el modelo Live2D (lista los disponibles como botones; matching difuso al escribir)                                                                                                                                                                                        |
 | `/modelo-vistas` | Selecciona el tamaño de vista del modelo: `/modelo-vistas` (menú con botones), `/modelo-vistas full` (cuerpo completo fijo), `/modelo-vistas half`, `/modelo-vistas head`, `/modelo-vistas random` (rota entre las tres). La opción elegida queda como predeterminada del modelo |
-| `/provider` | Gestión de proveedores (`set` / `add` / `remove`) |
-| `/agent` | Ejecuta el bucle agente sobre un mensaje |
-| `/plan` | Crea/ejecuta un plan de pasos |
-| `/code` | Acción de edición de código |
-| `/review` | Revisión de cambios del workspace |
-| `/fix` | Corrige un error señalado (LSP) |
-| `/undo` | Deshace la última mutación |
-| `/memory` | Estado y operaciones de memoria |
-| `/olvida` | Olvida hechos/nodos de memoria |
-| `/stats` | Estado de sesión, sensores y motor proactivo |
-| `/telemetria` | Reporte de métricas de uso |
-| `/export` | Exporta la conversación |
-| `/retry` | Reintenta la última respuesta |
-| `/credenciales` | Gestión de credenciales (keychain) |
-| `/skill` | Lista/carga skills |
-| `/clear` | Limpia el historial visual |
+| `/provider`      | Gestión de proveedores (`set` / `add` / `remove`)                                                                                                                                                                                                                                |
+| `/agent`         | Ejecuta el bucle agente sobre un mensaje                                                                                                                                                                                                                                         |
+| `/plan`          | Crea/ejecuta un plan de pasos                                                                                                                                                                                                                                                    |
+| `/code`          | Acción de edición de código                                                                                                                                                                                                                                                      |
+| `/review`        | Revisión de cambios del workspace                                                                                                                                                                                                                                                |
+| `/fix`           | Corrige un error señalado (LSP)                                                                                                                                                                                                                                                  |
+| `/undo`          | Deshace la última mutación                                                                                                                                                                                                                                                       |
+| `/memory`        | Estado y operaciones de memoria                                                                                                                                                                                                                                                  |
+| `/olvida`        | Olvida hechos/nodos de memoria                                                                                                                                                                                                                                                   |
+| `/stats`         | Estado de sesión, sensores y motor proactivo                                                                                                                                                                                                                                     |
+| `/telemetria`    | Reporte de métricas de uso                                                                                                                                                                                                                                                       |
+| `/export`        | Exporta la conversación                                                                                                                                                                                                                                                          |
+| `/retry`         | Reintenta la última respuesta                                                                                                                                                                                                                                                    |
+| `/credenciales`  | Gestión de credenciales (keychain)                                                                                                                                                                                                                                               |
+| `/skill`         | Lista/carga skills                                                                                                                                                                                                                                                               |
+| `/clear`         | Limpia el historial visual                                                                                                                                                                                                                                                       |
 
 ## `FileResolver.js`
 

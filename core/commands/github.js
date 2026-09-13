@@ -1,5 +1,6 @@
 // @ts-nocheck
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 
 // Comando /github — conectar la cuenta de GitHub del usuario.
 //
@@ -141,11 +142,15 @@ async function _resolveClientId(ctx, K) {
       const viaIpc = await ctx.ipcRenderer.invoke('github-client-id');
       if (viaIpc) return viaIpc;
     }
-  } catch {}
+  } catch {
+    swallow('github._resolveClientId');
+  }
   try {
     const v = K.getKey(CLIENT_ID_KEY);
     if (v && v.trim()) return v.trim();
-  } catch {}
+  } catch {
+    swallow('github._resolveClientId');
+  }
   return null;
 }
 
@@ -163,7 +168,9 @@ function _notify(ctx, text) {
   try {
     if (ctx && typeof ctx.addMessage === 'function') ctx.addMessage('assistant', text);
     if (ctx && typeof ctx.pushToSession === 'function') ctx.pushToSession('assistant', text);
-  } catch {}
+  } catch {
+    swallow('github._notify');
+  }
 }
 
 async function _deviceLogin(ctx, gh, K, sleep) {
@@ -216,7 +223,9 @@ async function _pollDeviceFlow(ctx, gh, K, flow, info, sleep) {
       let me = null;
       try {
         me = await gh.whoami();
-      } catch {}
+      } catch {
+        swallow('github._pollDeviceFlow');
+      }
       let persisted = false;
       try {
         persisted = K.setKey(GITHUB_TOKEN_KEY, res.accessToken) === true;

@@ -1,5 +1,6 @@
 // @ts-check
 'use strict';
+const { swallow } = require('../../../observability/SwallowedErrors.js');
 
 /**
  * adaptive-integration.js — Integración profunda de los componentes evolutivos
@@ -67,7 +68,9 @@ module.exports = {
         if (latest?.emotions) {
           return this._formatEmotionalContext(latest.emotions);
         }
-      } catch {}
+      } catch {
+        swallow('adaptive-integration._buildEmotionalContext');
+      }
 
       // Obtener detector de emociones (LLM o fallback)
       const detector = graph._llmEmotionDetector || null;

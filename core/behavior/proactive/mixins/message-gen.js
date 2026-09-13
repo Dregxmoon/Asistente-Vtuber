@@ -1,3 +1,4 @@
+const { swallow } = require('../../../observability/SwallowedErrors.js');
 // @ts-nocheck
 const logger = require('../../../observability/Logger.js');
 // message-gen.js — generación del mensaje proactivo con el LLM: prompt de
@@ -255,7 +256,9 @@ ${memory}`;
           .join('\n');
         chatCtx = `\nConversación reciente en el chat:\n${lines}\nNo repitas nada de eso ni ofrezcas lo mismo que ya se trató.`;
       }
-    } catch {}
+    } catch {
+      swallow('message-gen.top');
+    }
 
     // Fase F: cuando el gate admitió (ACT/ESCALATE), el LLM PRODUCE el mensaje;
     // no decide si intervenir. El criterio ya lo puso el gate determinista.
@@ -561,7 +564,9 @@ No expliques por qué escribes. No anuncies que eres proactiva. NO muestres tu r
             )
           );
         }
-      } catch {}
+      } catch {
+        swallow('message-gen.top');
+      }
     } catch (e) {
       logger.warn('message-gen', '[proactive] error leyendo memoria:', e.message);
     }
@@ -621,7 +626,9 @@ No expliques por qué escribes. No anuncies que eres proactiva. NO muestres tu r
           const pick = real[real.length - 1];
           if (pick?.content)
             anchor = ` — podés anclarla a que ya sabes: "${String(pick.content).slice(0, 80)}"`;
-        } catch {}
+        } catch {
+          swallow('message-gen._buildCuriosityContext');
+        }
         for (let i = 0; i < count; i++) {
           bits.push(`- aún no sabes ${gaps[(start + i) % n].trait}${anchor}`);
         }

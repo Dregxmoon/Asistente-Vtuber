@@ -9,20 +9,20 @@ Las tools del agente (`git_status`, `git_diff`, …) se despachan desde
 
 ## `GitManager.js` — wrapper de git
 
-| Método | Operación | Notas de seguridad |
-|---|---|---|
-| `getRepoRoot(cwd)` | `git rev-parse --show-toplevel` | falla si `cwd` no existe / no es dir |
-| `isRepo(cwd)` | ¿`cwd` está dentro de un repo? | no lanza, devuelve `false` |
-| `status(cwd)` | `git status --porcelain=v1 -b` | parsea staged / unstaged / untracked / conflictos / ahead-behind |
-| `diff(cwd, {file, staged})` | `git diff [--staged] [-- file]` | `file` validado (sin globs peligrosos) |
-| `log(cwd, {count, file})` | `git log --oneline` | límite `count` acotado |
-| `branch(cwd)` | `git branch` (rama actual + lista) | — |
-| `add(cwd, paths)` | `git add` | `paths` pasa por `_validPaths` |
-| `commit(cwd, {message})` | `git commit -m` | mensaje no vacío; *mutador → requiere aprobación* |
-| `stash(cwd, {action, message})` | `git stash push/list/pop` | `action` en allowlist |
-| `merge(cwd, {branch, message})` | `git merge` | `branch` valida `_validBranch`; detecta conflictos |
-| `rebase(cwd, {branch})` | `git rebase` | `branch` validada |
-| `push(cwd, {remote, branch, force})` | `git push` | `force` nunca se auto-habilita; requiere aprobación |
+| Método                               | Operación                          | Notas de seguridad                                               |
+| ------------------------------------ | ---------------------------------- | ---------------------------------------------------------------- |
+| `getRepoRoot(cwd)`                   | `git rev-parse --show-toplevel`    | falla si `cwd` no existe / no es dir                             |
+| `isRepo(cwd)`                        | ¿`cwd` está dentro de un repo?     | no lanza, devuelve `false`                                       |
+| `status(cwd)`                        | `git status --porcelain=v1 -b`     | parsea staged / unstaged / untracked / conflictos / ahead-behind |
+| `diff(cwd, {file, staged})`          | `git diff [--staged] [-- file]`    | `file` validado (sin globs peligrosos)                           |
+| `log(cwd, {count, file})`            | `git log --oneline`                | límite `count` acotado                                           |
+| `branch(cwd)`                        | `git branch` (rama actual + lista) | —                                                                |
+| `add(cwd, paths)`                    | `git add`                          | `paths` pasa por `_validPaths`                                   |
+| `commit(cwd, {message})`             | `git commit -m`                    | mensaje no vacío; _mutador → requiere aprobación_                |
+| `stash(cwd, {action, message})`      | `git stash push/list/pop`          | `action` en allowlist                                            |
+| `merge(cwd, {branch, message})`      | `git merge`                        | `branch` valida `_validBranch`; detecta conflictos               |
+| `rebase(cwd, {branch})`              | `git rebase`                       | `branch` validada                                                |
+| `push(cwd, {remote, branch, force})` | `git push`                         | `force` nunca se auto-habilita; requiere aprobación              |
 
 ### Validación de entrada
 

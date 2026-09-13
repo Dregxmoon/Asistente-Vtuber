@@ -1,5 +1,6 @@
 // @ts-nocheck
 'use strict';
+const { swallow } = require('../../core/observability/SwallowedErrors.js');
 const logger = require('../../core/observability/Logger.js');
 
 /**
@@ -153,7 +154,9 @@ class LSPErrorWatcher extends BasePollingWatcher {
     if (this._appChangedHandler) {
       try {
         this._bus.off('os:app-changed', this._appChangedHandler);
-      } catch {}
+      } catch {
+        swallow('LSPErrorWatcher.stop');
+      }
       this._appChangedHandler = null;
     }
     super.stop();
@@ -384,7 +387,9 @@ class LSPErrorWatcher extends BasePollingWatcher {
     for (const f of extra || []) {
       try {
         set.add(path.resolve(f));
-      } catch {}
+      } catch {
+        swallow('LSPErrorWatcher.getOpenFiles');
+      }
     }
     return Array.from(set);
   }

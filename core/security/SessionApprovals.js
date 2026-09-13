@@ -1,5 +1,6 @@
 // @ts-check
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 
 const path = require('path');
 const crypto = require('crypto');
@@ -160,7 +161,11 @@ function approvalPattern(action) {
   if (tool === 'personal_browser_close') {
     return 'personal_browser_close';
   }
-  if (tool === 'personal_browser_login' && typeof params.target === 'string' && params.target.trim()) {
+  if (
+    tool === 'personal_browser_login' &&
+    typeof params.target === 'string' &&
+    params.target.trim()
+  ) {
     try {
       return `personal_browser_login:${new URL(params.target.trim()).hostname}`;
     } catch (_) {
@@ -200,12 +205,16 @@ function approvalPattern(action) {
     if (action === 'navigate' && typeof params.url === 'string') {
       try {
         return `browser:${mode}:navigate:${new URL(params.url).hostname}`;
-      } catch (_) {}
+      } catch (_) {
+        swallow('SessionApprovals.top');
+      }
     }
     if (action === 'new_tab' && typeof params.url === 'string') {
       try {
         return `browser:${mode}:new_tab:${new URL(params.url).hostname}`;
-      } catch (_) {}
+      } catch (_) {
+        swallow('SessionApprovals.top');
+      }
     }
     const scopedActions = new Set([
       'click',
@@ -337,10 +346,15 @@ function isTaskScopeApproved(action, taskScope) {
   try {
     const { isIrreversible } = require('./IrreversiblePolicy.js');
     if (isIrreversible(action)) return false;
-  } catch (_) {}
+  } catch (_) {
+    swallow('SessionApprovals.isTaskScopeApproved');
+  }
   if (typeof taskScope !== 'string' || !taskScope.startsWith('task:')) return false;
-  const parts = taskScope.split(':');
-  if (parts.length !== 3 || !parts[1] || !parts[2]) return false;
+  // El target puede contener ':' (URLs https://...): partir solo los dos
+  // primeros segmentos en vez de exigir exactamente 3 partes.
+  const rest = taskScope.slice('task:'.length);
+  const separator = rest.indexOf(':');
+  if (separator <= 0 || separator >= rest.length - 1) return false;
   if (!action || typeof action.tool !== 'string') return false;
   if (!TASK_SCOPED_TOOLS.has(action.tool)) return false;
   if (action.tool === 'browser' && action.params && typeof action.params === 'object') {

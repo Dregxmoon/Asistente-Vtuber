@@ -1,5 +1,6 @@
 // @ts-nocheck
 'use strict';
+const { swallow } = require('../core/observability/SwallowedErrors.js');
 const logger = require('../core/observability/Logger.js');
 
 const path = require('path');
@@ -63,7 +64,9 @@ function register(ctx) {
       let model3 = null;
       try {
         model3 = fs.readdirSync(folder).find((f) => f.endsWith('.model3.json')) || null;
-      } catch {}
+      } catch {
+        swallow('window-model-handlers.listModels');
+      }
       if (model3) {
         models.push({
           id: entry.name,

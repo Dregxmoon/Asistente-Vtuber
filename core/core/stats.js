@@ -1,3 +1,4 @@
+const { swallow } = require('../observability/SwallowedErrors.js');
 // @ts-nocheck
 const logger = require('../observability/Logger.js');
 // stats.js — estadísticas del núcleo, telemetría y helpers de debug/testing
@@ -20,7 +21,9 @@ function getStats() {
         return acc;
       }, {});
     }
-  } catch (_) {}
+  } catch (_) {
+    swallow('stats.getStats');
+  }
 
   return {
     session: state.session?.getStats() ?? { error: 'no inicializado' },

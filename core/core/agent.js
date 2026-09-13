@@ -1,3 +1,4 @@
+const { swallow } = require('../observability/SwallowedErrors.js');
 // @ts-nocheck
 const logger = require('../observability/Logger.js');
 // agent.js — ejecución del agente: el loop cerrado con tool-calling
@@ -39,7 +40,9 @@ function _estimateDifficultyFor({ message, taskIntent = null, messageCount = 0 }
         mode: 'smart',
       });
     }
-  } catch (_) {}
+  } catch (_) {
+    swallow('agent._estimateDifficultyFor');
+  }
   return estimateDifficulty({ message, taskIntent, messageCount });
 }
 
@@ -88,7 +91,9 @@ function resolveAgentMode(userMessage, opts = {}) {
       let taskIntent = null;
       try {
         taskIntent = state.taskDetector?.detect(userMessage) || null;
-      } catch (_) {}
+      } catch (_) {
+        swallow('agent.resolveAgentMode');
+      }
       const difficulty = _estimateDifficultyFor({
         message: userMessage,
         taskIntent,
@@ -128,7 +133,9 @@ function resolveAgentMode(userMessage, opts = {}) {
           );
         }
       }
-    } catch (_) {}
+    } catch (_) {
+      swallow('agent.top');
+    }
   }
 
   return baseMode === 'fast'
@@ -332,7 +339,9 @@ async function runAgent(userMessage, opts = {}) {
         result: contextFailure,
         evaluation: evaluateTaskOutcome(contextFailure),
       });
-    } catch (_) {}
+    } catch (_) {
+      swallow('agent.top');
+    }
     return contextFailure;
   }
 
@@ -421,7 +430,9 @@ async function runAgent(userMessage, opts = {}) {
         pending = pending.filter((item) => Number(item.id) !== durableGoal.id);
       }
       loopOpts.activeIntentions = pending;
-    } catch (_) {}
+    } catch (_) {
+      swallow('agent.top');
+    }
   }
   loopOpts.currentGoalId = durableGoal?.id || null;
   if (durableGoal?.id) {
@@ -446,14 +457,18 @@ async function runAgent(userMessage, opts = {}) {
     const causalSection = state.graph?.buildCausalMemorySection?.();
     const learnedSections = [learningSection, causalSection].filter(Boolean);
     if (learnedSections.length) loopOpts.learningSection = learnedSections.join('\n\n');
-  } catch (_) {}
+  } catch (_) {
+    swallow('agent.top');
+  }
 
   try {
     const workingMemorySection = workingScope
       ? state.graph?.buildWorkingMemorySection?.(workingScope)
       : null;
     if (workingMemorySection) loopOpts.workingMemorySection = workingMemorySection;
-  } catch (_) {}
+  } catch (_) {
+    swallow('agent.top');
+  }
 
   // Self-critique: en modo tarea (smart), al terminar el run con una respuesta
   // de texto el loop compara el resultado contra la intención original del
@@ -847,7 +862,9 @@ async function runAgent(userMessage, opts = {}) {
         });
       }
     }
-  } catch (_) {}
+  } catch (_) {
+    swallow('agent.top');
+  }
 
   logger.info(
     'agent',

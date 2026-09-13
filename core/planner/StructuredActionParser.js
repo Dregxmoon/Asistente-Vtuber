@@ -49,6 +49,7 @@
  */
 
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 const logger = require('../observability/Logger.js');
 
 // V-05: Prototype pollution prevention — strip dangerous keys from LLM output
@@ -713,7 +714,9 @@ function _buildParams(action, fields, userGoal, projectCwd) {
         let parsed = null;
         try {
           parsed = typeof fields.PARAMS === 'object' ? fields.PARAMS : JSON.parse(fields.PARAMS);
-        } catch (_) {}
+        } catch (_) {
+          swallow('StructuredActionParser.top');
+        }
         if (parsed && typeof parsed === 'object') Object.assign(params, _sanitizeLLMObject(parsed));
       }
       return params;

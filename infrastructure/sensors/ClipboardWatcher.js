@@ -17,6 +17,7 @@
  */
 
 'use strict';
+const { swallow } = require('../../core/observability/SwallowedErrors.js');
 
 const crypto = require('crypto');
 const { getEventBus } = require('../../infrastructure/event-bus/EventBus.js');
@@ -47,7 +48,9 @@ function _sanitizeSnippet(text, kind) {
         }
       }
       safe = url.toString();
-    } catch (_) {}
+    } catch (_) {
+      swallow('ClipboardWatcher._sanitizeSnippet');
+    }
   }
   return safe.slice(0, MAX_SNIPPET);
 }

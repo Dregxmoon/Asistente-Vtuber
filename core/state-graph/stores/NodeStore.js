@@ -1,5 +1,6 @@
 // @ts-nocheck
 'use strict';
+const { swallow } = require('../../observability/SwallowedErrors.js');
 const logger = require('../../observability/Logger.js');
 
 const { DECAY_RATES, NODE_TYPES } = require('./constants');
@@ -84,7 +85,9 @@ class NodeStore {
         newTags = _withProvenanceTag(JSON.parse(node.tags || '[]'), {
           replaceExisting: true,
         });
-      } catch {}
+      } catch {
+        swallow('NodeStore.updateNode');
+      }
     }
     const newVerifiedAt = verified_at ?? node.verified_at;
     const newInferred = inferred !== undefined ? (inferred ? 1 : 0) : node.inferred;

@@ -1,5 +1,6 @@
 // @ts-nocheck
 'use strict';
+const { swallow } = require('../core/observability/SwallowedErrors.js');
 
 // github-handlers.js — IPC para las operaciones de GitHub.
 //
@@ -53,7 +54,9 @@ function register(ctx) {
     try {
       const v = KeychainManager.getKey(CLIENT_ID_KEY);
       if (v && v.trim()) return v.trim();
-    } catch {}
+    } catch {
+      swallow('github-handlers.register');
+    }
     return null;
   });
 
@@ -64,14 +67,18 @@ function register(ctx) {
     let token = null;
     try {
       token = KeychainManager.getKey('github_token');
-    } catch {}
+    } catch {
+      swallow('github-handlers.register');
+    }
     const gh = require('../core/github/GitHubManager.js').getGitHubManager();
     let login = null;
     if (token) {
       try {
         const who = await gh.whoami();
         login = (who && who.login) || null;
-      } catch {}
+      } catch {
+        swallow('github-handlers.register');
+      }
     }
     return {
       connected: !!token,

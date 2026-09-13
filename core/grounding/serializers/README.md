@@ -1,7 +1,7 @@
 # Serializadores de contexto (`core/grounding/serializers/`)
 
 Convierten el paquete de contexto (`ContextPackage`) en el formato exacto que cada proveedor de LLM
-espera. Mantienen la responsabilidad del *formato* separada del *contenido*.
+espera. Mantienen la responsabilidad del _formato_ separada del _contenido_.
 
 ---
 
@@ -16,6 +16,7 @@ Construye el system prompt en secciones separadas por `---`:
    `toolIntent`.
 
 Detalles de implementación relevantes:
+
 - `_buildOSSection()` — renderiza el contexto del SO en texto legible e instruye al modelo a no usar
   herramientas para responder qué apps están abiertas (esa info ya viene en el contexto).
 - `_buildMemorySection()` — renderiza nodos y episodios de memoria persistente.
@@ -47,5 +48,5 @@ flowchart LR
 ## Verificación
 
 `test_prompt_composer` (38 tests aprox.) cubre: presupuesto de contexto con drop de secciones no
-críticas (la identidad es *critical* y nunca se recorta), orden de secciones, formato por proveedor
+críticas (la identidad es _critical_ y nunca se recorta), orden de secciones, formato por proveedor
 (markdown / XML / JSON-sections / provider-native) y compatibilidad con `LLMProvider.complete()`.

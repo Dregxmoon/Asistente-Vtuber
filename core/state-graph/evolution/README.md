@@ -133,11 +133,13 @@ Respuesta del LLM (adaptada al estilo del usuario)
 ## Tests
 
 Ejecutar tests con:
+
 ```bash
 ELECTRON_RUN_AS_NODE=1 node tests/test_evolutionary_memory.js
 ```
 
 Los tests verifican:
+
 - Carga de módulos
 - Extracción de topics
 - Detección de emociones

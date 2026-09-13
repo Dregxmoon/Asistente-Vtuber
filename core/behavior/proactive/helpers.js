@@ -1,3 +1,4 @@
+const { swallow } = require('../../observability/SwallowedErrors.js');
 // @ts-nocheck
 // helpers.js — funciones puras del ProactiveEngine (sin estado de instancia).
 
@@ -457,7 +458,9 @@ function _extractPatch(response) {
   try {
     const parsed = JSON.parse(text);
     return parsed && typeof parsed === 'object' ? parsed : null;
-  } catch (_) {}
+  } catch (_) {
+    swallow('helpers._extractPatch');
+  }
 
   // Fallback: capturar el objeto JSON más externo con "changes".
   const start = text.indexOf('{');
@@ -466,7 +469,9 @@ function _extractPatch(response) {
   try {
     const parsed = JSON.parse(text.slice(start, end + 1));
     return parsed && typeof parsed === 'object' ? parsed : null;
-  } catch (_) {}
+  } catch (_) {
+    swallow('helpers._extractPatch');
+  }
 
   return null;
 }

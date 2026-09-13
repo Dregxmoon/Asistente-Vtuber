@@ -1,5 +1,6 @@
 // @ts-check
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 
 /**
  * GestureEvents.js — dispatcher INDEPENDIENTE de gestos para main.js.
@@ -106,7 +107,9 @@ class GestureEvents {
 
     try {
       this._send(mood, { source: event, ...meta });
-    } catch {}
+    } catch {
+      swallow('GestureEvents.emit');
+    }
     return mood;
   }
 }

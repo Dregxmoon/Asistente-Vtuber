@@ -1,3 +1,4 @@
+const { swallow } = require('../observability/SwallowedErrors.js');
 // @ts-nocheck
 // init.js — secuencia de arranque del núcleo: migración de la BD, creación de
 // graph/grounding/session, sensores, ProactiveEngine, BehaviorModel, planner,
@@ -206,7 +207,9 @@ function init(app) {
       notifyChanged: (absPath, content) => {
         try {
           state.lspManager?.changeDocument(absPath, content);
-        } catch {}
+        } catch {
+          swallow('init.top');
+        }
       },
       waitForDiagnostics: async (absPath) => {
         if (!state.lspManager?.isRunning) return null;

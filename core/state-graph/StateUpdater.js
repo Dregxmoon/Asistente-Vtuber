@@ -1,3 +1,4 @@
+const { swallow } = require('../observability/SwallowedErrors.js');
 // @ts-nocheck
 const logger = require('../observability/Logger.js');
 /**
@@ -439,7 +440,9 @@ class StateUpdater {
             let metadata = {};
             try {
               metadata = JSON.parse(row.metadata || '{}');
-            } catch (_) {}
+            } catch (_) {
+              swallow('StateUpdater.processIncremental');
+            }
             const seq = Number(metadata.seq) || 0;
             return seq >= minSeq && seq <= maxSeq;
           });
@@ -850,13 +853,17 @@ class StateUpdater {
     let parsed = null;
     try {
       parsed = JSON.parse(raw.trim());
-    } catch (_) {}
+    } catch (_) {
+      swallow('StateUpdater._parseJSON');
+    }
     if (!parsed) {
       const match = raw.match(/\{[\s\S]*\}/);
       if (match) {
         try {
           parsed = JSON.parse(match[0]);
-        } catch (_) {}
+        } catch (_) {
+          swallow('StateUpdater._parseJSON');
+        }
       }
     }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {

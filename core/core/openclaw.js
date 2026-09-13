@@ -1,3 +1,4 @@
+const { swallow } = require('../observability/SwallowedErrors.js');
 // @ts-nocheck
 const logger = require('../observability/Logger.js');
 // openclaw.js — ciclo de vida del servidor local de tools (openclaw-server.js):
@@ -75,7 +76,9 @@ function killDescendants(signal) {
     try {
       process.kill(pid, signal);
       n++;
-    } catch (_) {}
+    } catch (_) {
+      swallow('openclaw.killDescendants');
+    }
   }
   return n;
 }
@@ -137,7 +140,9 @@ function startOpenClaw(workspacePath) {
     // Entregar la key al bridge en memoria (el bridge la lee por request)
     try {
       require('../planner/OpenClawBridge.js').setApiKey(apiKey);
-    } catch (_) {}
+    } catch (_) {
+      swallow('openclaw.startOpenClaw');
+    }
 
     state.openclawProcess.stdout?.on('data', (d) => {
       const msg = d.toString().trim();
@@ -222,13 +227,17 @@ function stopOpenClaw() {
       for (const pid of descendantPids(proc.pid)) {
         try {
           process.kill(pid, 'SIGTERM');
-        } catch (_) {}
+        } catch (_) {
+          swallow('openclaw.stopOpenClaw');
+        }
       }
       proc.kill('SIGTERM');
       state.openclawKillTimer = setTimeout(() => {
         try {
           proc.kill('SIGKILL');
-        } catch (_) {}
+        } catch (_) {
+          swallow('openclaw.stopOpenClaw');
+        }
         state.openclawKillTimer = null;
       }, 3000);
     } catch (e) {

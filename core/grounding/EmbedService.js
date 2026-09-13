@@ -1,5 +1,6 @@
 // @ts-check
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 
 /**
  * EmbedService.js — embeddings en worker_threads (F2.1-D).
@@ -131,7 +132,9 @@ function _terminateWorker() {
   if (w) {
     try {
       w.terminate();
-    } catch {} /* worker ya terminado */
+    } catch {
+      swallow('EmbedService._terminateWorker');
+    } /* worker ya terminado */
   }
 }
 
@@ -142,7 +145,9 @@ function _terminateChildProcess() {
   if (c) {
     try {
       c.kill();
-    } catch {} /* proceso ya terminado */
+    } catch {
+      swallow('EmbedService._terminateChildProcess');
+    } /* proceso ya terminado */
   }
 }
 
@@ -251,7 +256,9 @@ function _forkChildProcess(attempt) {
       resolved = true;
       try {
         c.kill();
-      } catch {}
+      } catch {
+        swallow('EmbedService._forkChildProcess');
+      }
       _child = null;
       _childStarting = false;
       _finalizeChildRecovery(new Error('child process no cargó el modelo a tiempo'));
@@ -286,7 +293,9 @@ function _forkChildProcess(attempt) {
         clearTimeout(loadTimer);
         try {
           c.kill();
-        } catch {}
+        } catch {
+          swallow('EmbedService.top');
+        }
         _child = null;
         _childStarting = false;
         _finalizeChildRecovery(new Error(msg.message));
@@ -300,7 +309,9 @@ function _forkChildProcess(attempt) {
       clearTimeout(loadTimer);
       try {
         c.kill();
-      } catch {}
+      } catch {
+        swallow('EmbedService.top');
+      }
       _child = null;
       _childStarting = false;
       _finalizeChildRecovery(err);
@@ -480,7 +491,9 @@ function _startWorker() {
     const loadTimer = setTimeout(() => {
       try {
         w.terminate();
-      } catch {} /* worker ya terminado */
+      } catch {
+        swallow('EmbedService.fail');
+      } /* worker ya terminado */
       fail(new Error('el embed worker no cargó el modelo a tiempo'));
     }, WORKER_LOAD_TIMEOUT_MS);
 
@@ -518,7 +531,9 @@ function _startWorker() {
           clearTimeout(loadTimer);
           try {
             w.terminate();
-          } catch {} /* worker ya terminado */
+          } catch {
+            swallow('EmbedService.top');
+          } /* worker ya terminado */
           if (!ready) fail(new Error(msg.message));
           else _establishedFailed(w, new Error(msg.message));
         }
@@ -536,7 +551,9 @@ function _startWorker() {
         clearTimeout(loadTimer);
         try {
           w.terminate();
-        } catch {} /* worker ya terminado */
+        } catch {
+          swallow('EmbedService.top');
+        } /* worker ya terminado */
         if (!ready) fail(err);
         else _establishedFailed(w, err);
       }

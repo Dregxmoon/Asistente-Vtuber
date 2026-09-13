@@ -1,5 +1,6 @@
 // @ts-nocheck
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 
 // Chips de metadata para listar modelos en los comandos.
 function modelChip(meta) {
@@ -156,7 +157,9 @@ module.exports = function registerCommands(register) {
             provider: valid.id,
             model: modelName,
           });
-        } catch {}
+        } catch {
+          swallow('llm.top');
+        }
       }
       return `**${meta.label || modelName}** activado en **${valid.name}** (sirve para charla y agente).${warn}`;
     },

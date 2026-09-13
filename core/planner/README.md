@@ -103,16 +103,16 @@ permiso independientes; habilitar una familia no sustituye la aprobación puntua
 
 ## Matriz de acciones e impacto
 
-| Acción                           | Requiere aprobación |
-| -------------------------------- | ------------------- |
-| `read` / `read_file`             | No                  |
-| `list_directory`                 | No                  |
-| `edit` / `write` / `create_file` | Sí                  |
-| `exec` / `run_command`           | Sí                  |
-| `browser` / `web_search`         | Sí                  |
-| `desktop_*` / `window_*` / `ui_*` | Sí                 |
-| `apply_patch`                    | Sí                  |
-| `code_execution`                 | Sí                  |
+| Acción                            | Requiere aprobación |
+| --------------------------------- | ------------------- |
+| `read` / `read_file`              | No                  |
+| `list_directory`                  | No                  |
+| `edit` / `write` / `create_file`  | Sí                  |
+| `exec` / `run_command`            | Sí                  |
+| `browser` / `web_search`          | Sí                  |
+| `desktop_*` / `window_*` / `ui_*` | Sí                  |
+| `apply_patch`                     | Sí                  |
+| `code_execution`                  | Sí                  |
 
 ---
 

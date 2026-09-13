@@ -1,3 +1,4 @@
+const { swallow } = require('../../../observability/SwallowedErrors.js');
 // @ts-nocheck
 const logger = require('../../../observability/Logger.js');
 // curiosity.js — curiosidad sobre la MEMORIA del usuario: candidatos que
@@ -343,7 +344,9 @@ module.exports = {
               for (const n of g.queryNodes?.({ search: w, limit: 2 }) || []) {
                 if (n.content && n.content.length > 10 && !related.includes(n)) related.push(n);
               }
-            } catch {}
+            } catch {
+              swallow('curiosity.top');
+            }
             if (related.length >= 2) break;
           }
           if (!related.length) continue; // sin sustancia → NO preguntar nada

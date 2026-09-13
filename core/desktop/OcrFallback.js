@@ -1,5 +1,6 @@
 // @ts-check
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 
 /**
  * OcrFallback.js — ojos de respaldo cuando AT-SPI no ve nada (Wayland,
@@ -63,7 +64,9 @@ function readWords(image, lang = DEFAULT_LANG, spawnImpl = spawn) {
     if (!child.stdin || !child.stdout || !child.stderr) {
       try {
         child.kill();
-      } catch (_) {}
+      } catch (_) {
+        swallow('OcrFallback.readWords');
+      }
       reject(new Error('Tesseract no expuso canales seguros (¿está instalado?)'));
       return;
     }
@@ -81,7 +84,9 @@ function readWords(image, lang = DEFAULT_LANG, spawnImpl = spawn) {
     const timer = setTimeout(() => {
       try {
         child.kill();
-      } catch (_) {}
+      } catch (_) {
+        swallow('OcrFallback.done');
+      }
       done(new Error('Tesseract agotó el tiempo (¿imagen demasiado grande?)'));
     }, 30_000);
     child.once('error', (error) => {
@@ -99,7 +104,9 @@ function readWords(image, lang = DEFAULT_LANG, spawnImpl = spawn) {
       if (stdout.length > 2 * 1024 * 1024) {
         try {
           child.kill();
-        } catch (_) {}
+        } catch (_) {
+          swallow('OcrFallback.done');
+        }
         done(new Error('Salida OCR excesiva'));
       }
     });

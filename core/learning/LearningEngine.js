@@ -1,5 +1,6 @@
 // @ts-check
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 
 /**
  * LearningEngine.js — Fase 3, ítem 2: el aprendizaje que cierra el círculo.
@@ -548,7 +549,9 @@ class LearningEngine {
     if (this._filePath) {
       try {
         fs.rmSync(this._filePath, { force: true });
-      } catch {}
+      } catch {
+        swallow('LearningEngine.reset');
+      }
     }
   }
 }

@@ -1,5 +1,6 @@
 // @ts-check
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 
 const fs = require('fs');
 const os = require('os');
@@ -429,7 +430,9 @@ class DesktopControl {
         if (typeof electron?.systemPreferences?.getMediaAccessStatus === 'function') {
           status = String(electron.systemPreferences.getMediaAccessStatus('camera'));
         }
-      } catch (_) {}
+      } catch (_) {
+        swallow('DesktopControl.getCameraStatus');
+      }
     }
     return {
       kind: 'camera_status',
@@ -512,7 +515,9 @@ class DesktopControl {
           if (content.length > 256 * 1024) continue;
           const app = _parseDesktopEntry(content, desktopId);
           if (app && !found.has(_normalize(app.name))) found.set(_normalize(app.name), app);
-        } catch (_) {}
+        } catch (_) {
+          swallow('DesktopControl._listLinuxApps');
+        }
       }
     }
     return [...found.values()].sort((a, b) => a.name.localeCompare(b.name));
@@ -602,7 +607,9 @@ class DesktopControl {
           found.set(_normalize(name), { name, id, source: 'start-app' });
         }
       }
-    } catch (_) {}
+    } catch (_) {
+      swallow('DesktopControl.top');
+    }
     for (const name of Object.keys(APP_ALIASES)) {
       if (!found.has(name)) found.set(name, { name, id: name, source: 'alias' });
     }
@@ -658,7 +665,9 @@ class DesktopControl {
         await electron.shell.openExternal(url);
         return;
       }
-    } catch (_) {}
+    } catch (_) {
+      swallow('DesktopControl._openInDefaultBrowser');
+    }
     if (this._platform === 'darwin') await this._spawnDetached('open', [url]);
     else if (this._platform === 'win32') await this._spawnDetached('explorer.exe', [url]);
     else await this._spawnDetached('xdg-open', [url]);

@@ -1,3 +1,4 @@
+const { swallow } = require('./core/observability/SwallowedErrors.js');
 const {
   app,
   BrowserWindow,
@@ -842,7 +843,9 @@ function createChatWindow() {
   S.chatWindow.on('closed', () => {
     try {
       require('./ipc/openclaw-handlers.js').resetSessionApprovals();
-    } catch (_) {}
+    } catch (_) {
+      swallow('main.top');
+    }
     Core.closeSession().catch((e) => logger.error('session', `close error: ${e.message}`));
     Core.setChatOpen(false);
     S.chatWindow = null;

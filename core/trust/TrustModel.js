@@ -1,5 +1,6 @@
 // @ts-check
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 
 /**
  * TrustModel.js — Fase 3, ítem 4: modelo de confianza dinámico (costo×éxito).
@@ -299,7 +300,9 @@ class TrustModel {
     if (this._filePath) {
       try {
         fs.rmSync(this._filePath, { force: true });
-      } catch {}
+      } catch {
+        swallow('TrustModel.reset');
+      }
     }
   }
 }

@@ -1,5 +1,6 @@
 // @ts-check
 'use strict';
+const { swallow } = require('../../observability/SwallowedErrors.js');
 
 const logger = require('../../observability/Logger.js');
 
@@ -135,7 +136,9 @@ class AutobiographicalMemoryStore {
             this._db.prepare('SELECT started_at FROM sessions WHERE id=?').get(opts.sessionId)
               ?.started_at
           ) || 0;
-      } catch (_) {}
+      } catch (_) {
+        swallow('AutobiographicalMemoryStore.registerEpisode');
+      }
     }
     const row = {
       nodeId,

@@ -23,6 +23,7 @@
  */
 
 'use strict';
+const { swallow } = require('../../core/observability/SwallowedErrors.js');
 
 const os = require('os');
 const fs = require('fs');
@@ -45,7 +46,9 @@ async function _defaultProbe(workspace = null) {
   try {
     const st = await fs.promises.statfs(workspace || process.cwd());
     if (st.blocks > 0) disk = (1 - st.bfree / st.blocks) * 100;
-  } catch (_) {}
+  } catch (_) {
+    swallow('SystemWatcher._defaultProbe');
+  }
 
   let battery = null;
   if (process.platform === 'linux') {
@@ -60,7 +63,9 @@ async function _defaultProbe(workspace = null) {
           break;
         }
       }
-    } catch (_) {}
+    } catch (_) {
+      swallow('SystemWatcher._defaultProbe');
+    }
   }
 
   return {
@@ -95,7 +100,9 @@ async function _memPercent() {
       const total = Number(info.match(/^MemTotal:\s+(\d+)/m)?.[1] || 0);
       const available = Number(info.match(/^MemAvailable:\s+(\d+)/m)?.[1] || 0);
       if (total > 0 && available >= 0) return (1 - available / total) * 100;
-    } catch (_) {}
+    } catch (_) {
+      swallow('SystemWatcher._memPercent');
+    }
   }
   const total = os.totalmem();
   return total === 0 ? 0 : (1 - os.freemem() / total) * 100;

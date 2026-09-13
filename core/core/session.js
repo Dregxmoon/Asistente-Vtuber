@@ -1,3 +1,4 @@
+const { swallow } = require('../observability/SwallowedErrors.js');
 // @ts-nocheck
 const logger = require('../observability/Logger.js');
 // session.js — gestión de sesiones de chat (SessionManager): arranque,
@@ -57,7 +58,9 @@ function listSessions(limit = 10) {
       let history = [];
       try {
         history = JSON.parse(s.history_json || '[]') || [];
-      } catch {}
+      } catch {
+        swallow('session.listSessions');
+      }
       return {
         id: s.id,
         startedAt: s.started_at,
@@ -87,7 +90,9 @@ function loadSession(sessionId) {
     let history = [];
     try {
       history = JSON.parse(row.history_json || '[]') || [];
-    } catch {}
+    } catch {
+      swallow('session.loadSession');
+    }
     return {
       id: row.id,
       startedAt: row.started_at,

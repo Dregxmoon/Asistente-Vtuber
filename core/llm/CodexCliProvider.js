@@ -1,5 +1,6 @@
 // @ts-check
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 
 const fs = require('fs');
 const fsp = require('fs/promises');
@@ -23,7 +24,9 @@ function findCodexCommand() {
     try {
       fs.accessSync(candidate, fs.constants.X_OK);
       if (fs.statSync(candidate).isFile()) return candidate;
-    } catch (_) {}
+    } catch (_) {
+      swallow('CodexCliProvider.candidates');
+    }
   }
   return null;
 }
@@ -238,7 +241,9 @@ async function callCodexCli(messages, systemPrompt, mode, tools = [], opts = {})
         try {
           const params = JSON.parse(call.paramsJson);
           if (isObject(params)) toolCalls.push({ tool: call.tool, params });
-        } catch (_) {}
+        } catch (_) {
+          swallow('CodexCliProvider.callCodexCli');
+        }
       }
     }
     const content = typeof parsed.content === 'string' ? parsed.content : null;

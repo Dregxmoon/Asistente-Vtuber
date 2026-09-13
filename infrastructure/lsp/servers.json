@@ -33,7 +33,11 @@
     "npx": true,
     "initializationOptions": {
       "python": {
-        "analysis": { "typeCheckingMode": "basic", "autoSearchPaths": true, "useLibraryCodeForTypes": true }
+        "analysis": {
+          "typeCheckingMode": "basic",
+          "autoSearchPaths": true,
+          "useLibraryCodeForTypes": true
+        }
       }
     }
   },

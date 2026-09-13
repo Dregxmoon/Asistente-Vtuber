@@ -1,3 +1,4 @@
+const { swallow } = require('../observability/SwallowedErrors.js');
 // @ts-nocheck
 const logger = require('../observability/Logger.js');
 // context.js — construcción del context para el LLM (buildContext): ensambla
@@ -446,9 +447,13 @@ async function buildContext(sessionHistory, activeProvider, options = {}) {
 
   // TaskDetector — detecta si el usuario quiere hacer una tarea (no solo charlar)
   let taskIntent = null;
+  // Vía ganadora para telemetría (DetectionTelemetry): regex|fusion|
+  // classifier|arbitrator|none. Se resuelve al final de la cadena.
+  let detectionPath = 'none';
   try {
     taskIntent = state.taskDetector.detect(userText);
     if (taskIntent.isTask) {
+      detectionPath = 'regex';
       logger.info(
         'context',
         `[core] taskIntent: ${taskIntent.domain?.id || 'indefinido'}` +
@@ -465,6 +470,7 @@ async function buildContext(sessionHistory, activeProvider, options = {}) {
   const fused = fuseTaskIntent(taskIntent, toolIntent, userText);
   if (fused) {
     taskIntent = fused;
+    detectionPath = 'fusion';
     logger.info(
       'context',
       `[core] taskIntent fusionada por embeddings: ${fused.domain.id} (tool ${toolIntent.tool})`
@@ -496,6 +502,7 @@ async function buildContext(sessionHistory, activeProvider, options = {}) {
           specificity: 'vague',
           _debug: { classifiedBy: 'embeddings', scores: classified.scores },
         };
+        detectionPath = 'classifier';
         logger.info(
           'context',
           `[core] taskIntent clasificada por embeddings: ${classified.domain.id} (${(classified.confidence * 100).toFixed(0)}%, ${classified.level})`
@@ -529,11 +536,31 @@ async function buildContext(sessionHistory, activeProvider, options = {}) {
           specificity: 'vague',
           _debug: verdict._debug,
         };
+        detectionPath = 'arbitrator';
         logger.info('context', `[core] taskIntent arbitrada por LLM: ${verdict.domain.id}`);
       }
     }
   } catch (e) {
     logger.warn('context', '[core] árbitro LLM error:', e.message);
+  }
+
+  // Telemetría de vía de detección: si no hubo tarea, la vía es 'none'.
+  // Nunca rompe el flujo: todo va en try/catch y con optional chaining.
+  if (!taskIntent || taskIntent.isTask !== true) detectionPath = 'none';
+  try {
+    const { detectLanguage } = require('../grounding/LanguageProfile.js');
+    const lang = detectLanguage(userText).code;
+    require('../telemetry/DetectionTelemetry.js').recordDetection({
+      path: detectionPath,
+      domain: taskIntent && taskIntent.domain,
+      confidence: taskIntent && taskIntent.confidence,
+      lang,
+    });
+    if (state.telemetry && typeof state.telemetry.recordDetectionPath === 'function') {
+      state.telemetry.recordDetectionPath(detectionPath);
+    }
+  } catch (e) {
+    logger.debug('context', '[core] telemetría de detección omitida:', e.message);
   }
 
   // GroundingEngine
@@ -668,6 +695,7 @@ async function buildContext(sessionHistory, activeProvider, options = {}) {
       behaviorCtx,
       toolIntent,
       taskIntent,
+      detectionPath,
       mode,
       nativeToolSchemas: resolvedTools?.nativeToolSchemas || null,
       nativeMcpMap: resolvedTools?.nativeMcpMap || {},
@@ -822,7 +850,9 @@ async function buildContext(sessionHistory, activeProvider, options = {}) {
   try {
     const learningSection = state.learning?.buildPromptSection?.();
     if (learningSection) result.systemPrompt += '\n\n' + learningSection;
-  } catch (_) {}
+  } catch (_) {
+    swallow('context.top');
+  }
 
   // Truncado inteligente: si el prompt excede MAX_SYSTEM_CHARS, elimina
   // secciones COMPLETAS empezando por la menos importante, en vez de cortar
@@ -838,6 +868,7 @@ async function buildContext(sessionHistory, activeProvider, options = {}) {
     behaviorCtx,
     toolIntent,
     taskIntent,
+    detectionPath,
     mode,
     nativeToolSchemas: resolvedTools?.nativeToolSchemas || null,
   };

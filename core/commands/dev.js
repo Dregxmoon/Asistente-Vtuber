@@ -1,5 +1,6 @@
 // @ts-nocheck
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 
 function _formatSize(bytes) {
   if (!bytes) return '';
@@ -53,7 +54,9 @@ module.exports = function registerCommands(register) {
           const pkg = JSON.parse(ctx.fs.readFileSync(pkgPath, 'utf-8'));
           pkgInfo = `\n- **Nombre:** ${pkg.name || '(sin nombre)'}\n- **Version:** ${pkg.version || '-'}`;
           if (pkg.description) pkgInfo += `\n- **Descripción:** ${pkg.description}`;
-        } catch {}
+        } catch {
+          swallow('dev.readDir');
+        }
       }
 
       const totalFiles = files.filter((f) => f.type === 'file').length;
@@ -311,7 +314,9 @@ module.exports = function registerCommands(register) {
     if (!steps.length && typeof intention?.steps === 'string') {
       try {
         steps = JSON.parse(intention.steps);
-      } catch (_) {}
+      } catch (_) {
+        swallow('dev._intentionSteps');
+      }
     } else if (Array.isArray(intention?.steps)) {
       steps = intention.steps;
     }

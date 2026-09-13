@@ -1,5 +1,6 @@
 // @ts-check
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 
 const fs = require('fs');
 const path = require('path');
@@ -266,7 +267,9 @@ class RepositoryIntelligence {
             })),
           });
         }
-      } catch (_) {}
+      } catch (_) {
+        swallow('RepositoryIntelligence.analyze');
+      }
     }
     return {
       ...index,
@@ -425,7 +428,9 @@ class RepositoryIntelligence {
             size: stat.size,
             mtimeMs: Math.floor(stat.mtimeMs),
           });
-        } catch (_) {}
+        } catch (_) {
+          swallow('RepositoryIntelligence.visit');
+        }
       }
     };
     await visit(root);
@@ -461,7 +466,9 @@ class RepositoryIntelligence {
               .slice(0, 40)
           );
         }
-      } catch (_) {}
+      } catch (_) {
+        swallow('RepositoryIntelligence.top');
+      }
     }
     return {
       root,
@@ -490,7 +497,9 @@ class RepositoryIntelligence {
       ) {
         return parsed;
       }
-    } catch (_) {}
+    } catch (_) {
+      swallow('RepositoryIntelligence._readCache');
+    }
     return null;
   }
 
@@ -505,7 +514,9 @@ class RepositoryIntelligence {
     } catch (error) {
       try {
         await fs.promises.unlink(temporary);
-      } catch (_) {}
+      } catch (_) {
+        swallow('RepositoryIntelligence._writeCache');
+      }
       if (process.env.DEBUG) console.warn('[repository-intelligence] cache:', _errorText(error));
     }
   }

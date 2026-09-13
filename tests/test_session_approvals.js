@@ -7,6 +7,8 @@
 
 const {
   approvalPattern,
+  taskApprovalPattern,
+  isTaskScopeApproved,
   isApproved,
   addApproval,
   resetApprovals,
@@ -172,12 +174,44 @@ function testSessionAlways() {
   assert(!isApproved(p), 'reset limpia la sesión');
 }
 
+function testTaskScopeWithUrls() {
+  console.log(C.bold('\n── Scope de tarea con targets que contienen ":" ──'));
+  resetApprovals();
+  // Regresión: el scope se partía por ':' y las URLs (https://...) nunca
+  // matcheaban → el scope de tarea jamás cubría nada con target URL.
+  const pattern = taskApprovalPattern('web-task', 'https://example.com/');
+  assert(pattern === 'task:web-task:https://example.com/', 'patrón con URL intacta');
+  addApproval(pattern);
+  assert(
+    isTaskScopeApproved(
+      { tool: 'open_website', params: { target: 'https://example.com/' } },
+      pattern
+    ),
+    'open_website cubierto por su scope con URL'
+  );
+  assert(
+    isTaskScopeApproved({ tool: 'desktop_snapshot', params: {} }, pattern),
+    'snapshot cubierto por scope vigente'
+  );
+  assert(
+    !isTaskScopeApproved({ tool: 'exec', params: { command: 'ls' } }, pattern),
+    'exec fuera del scope aunque haya scope vigente'
+  );
+  assert(
+    !isTaskScopeApproved({ tool: 'open_website', params: {} }, 'task:'),
+    'scope malformado no cubre'
+  );
+  assert(!isTaskScopeApproved({ tool: 'open_website', params: {} }, null), 'sin scope no cubre');
+  resetApprovals();
+}
+
 function main() {
   console.log(C.bold(C.cyan('\n════════════════════════════════════════════════════════')));
   console.log(C.bold(C.cyan('  SessionApprovals — Test Suite')));
   console.log(C.bold(C.cyan('════════════════════════════════════════════════════════')));
   testApprovalPatterns();
   testSessionAlways();
+  testTaskScopeWithUrls();
 
   console.log(C.bold('\n════════════════════════════════════════════════════════'));
   const total = passed + failed;

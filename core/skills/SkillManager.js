@@ -1,5 +1,6 @@
 // @ts-nocheck
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 const logger = require('../observability/Logger.js');
 
 const fs = require('fs');
@@ -291,7 +292,9 @@ class SkillManager {
         if (raw && typeof raw === 'object') {
           stats = new Map(Object.entries(raw).map(([name, s]) => [name, { ...s }]));
         }
-      } catch {}
+      } catch {
+        swallow('SkillManager.match');
+      }
     }
 
     const merged = rows.filter((r) => {
@@ -384,7 +387,9 @@ class SkillManager {
     let stats = {};
     try {
       stats = this.statsProvider?.() || {};
-    } catch (_) {}
+    } catch (_) {
+      swallow('SkillManager.getAllSkills');
+    }
     return this._skillsCache.map((s) => ({
       name: s.name,
       description: s.description,

@@ -1,5 +1,6 @@
 // @ts-check
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 
 /**
  * PluginMarketplace — marketplace local firmado de plugins.
@@ -54,7 +55,9 @@ class PluginMarketplace {
   _readKeyFile(keyPath) {
     try {
       if (fs.existsSync(keyPath)) return fs.readFileSync(keyPath, 'utf8');
-    } catch (_) {}
+    } catch (_) {
+      swallow('PluginMarketplace._readKeyFile');
+    }
     return null;
   }
 

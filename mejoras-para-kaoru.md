@@ -27,6 +27,21 @@
 > 230/230 en `test_agent_loop`, regresión vecina verde. Hallazgo honesto: frases
 > EN largas y compuestas diluyen los embeddings (0.32, no detecta) — pendiente
 > B1 (modelo multilingüe) + más frases compuestas.
+>
+> **Auditoría crítica (2026-09-13, rama testing):** se verificó cada afirmación
+> pesimista contra el código real antes de actuar. Resultado honesto: Planner
+> legacy YA aislado (`@deprecated`, 0 llamadas), serializadores YA unificados
+> en `CatalogRenderer`, `verificar ⇒ managed` YA es política (C4), permisos con
+> paredes reales (`SessionApprovals`+`DesktopCapabilities`, sin fs/scokets en
+> política), 86 `catch` → 23 instrumentados + 7 vacíos documentados, y CI YA
+> con e2e. Cerrado de verdad: `ToolPolicy` (fachada única de permisos),
+> `DetectionTelemetry` (camino de detección en telemetría), `ApprovalGate`
+> (extraído de `AgentLoop`), `tests/test_e2e_live.js` (**15/15 en vivo, 0
+> mocks**: servidor real, Chromium real, AT-SPI real, loop real, embeddings
+> reales con `abre amazon` → web @0.80). Límite conocido: onnxruntime-node
+> (NAPI) carga 1 vez por proceso — el worker es persistente y `dispose()` no se
+> re-llama en tests. `AgentLoop` conserva su máquina de estados (partirla
+> cambiaría comportamiento; solo se extrajo lo extraíble sin riesgo).
 
 ---
 
@@ -283,7 +298,7 @@ inglés. Cero `if idioma == X` en el código.
 - [ ] E1. Progreso narrado + gestos en tareas desktop.
 - [ ] E2. Claims honestos en desktop.
 - [ ] E3. Pregunta curiosa única ante ambigüedad.
-- [x] E4. Tests e2e con mocks (`test_desktop_task_e2e.js`: ES/EN/Linux/Windows).
+- [x] E4. Tests e2e con mocks (`test_desktop_task_e2e.js`: ES/EN/Linux/Windows) + e2e en vivo sin mocks (`test_e2e_live.js`: 15/15 reales).
 
 ---
 

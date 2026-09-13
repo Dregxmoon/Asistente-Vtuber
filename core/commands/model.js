@@ -1,5 +1,6 @@
 // @ts-nocheck
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 
 module.exports = function registerCommands(register) {
   register({
@@ -124,7 +125,9 @@ module.exports = function registerCommands(register) {
           let current = {};
           try {
             current = (await ctx.ipcRenderer.invoke('gesture-mappings-get')) || {};
-          } catch {}
+          } catch {
+            swallow('model.q');
+          }
           const moods = Lexicon.MOODS.join(', ');
           const lines = ['**Mappings manuales** (prioridad máxima sobre el léxico):', ''];
           const entries = Object.entries(current.mappings || current);
@@ -157,7 +160,9 @@ module.exports = function registerCommands(register) {
                 );
               }
             }
-          } catch {}
+          } catch {
+            swallow('model.top');
+          }
           return lines.join('\n');
         }
 
@@ -192,7 +197,9 @@ module.exports = function registerCommands(register) {
               (g) => g.name.toLowerCase() === gesto.toLowerCase()
             );
           }
-        } catch {}
+        } catch {
+          swallow('model.gesto');
+        }
 
         const res = await ctx.ipcRenderer.invoke('gesture-mappings-set', {
           mood,

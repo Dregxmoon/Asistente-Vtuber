@@ -1,5 +1,6 @@
 // @ts-check
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 
 /**
  * Launcher del sandbox AppContainer de Windows.
@@ -118,7 +119,9 @@ class WindowsSandbox {
       } finally {
         try {
           fs.unlinkSync(marker);
-        } catch (_) {}
+        } catch (_) {
+          swallow('WindowsSandbox._initializeOnce');
+        }
       }
 
       const nodeProbe = await this._runHelper(
@@ -347,7 +350,9 @@ class WindowsSandbox {
       try {
         if (candidate && fs.statSync(candidate).isDirectory())
           roots.add(fs.realpathSync(candidate));
-      } catch (_) {}
+      } catch (_) {
+        swallow('WindowsSandbox.add');
+      }
     };
     add(path.dirname(process.execPath));
     for (const entry of String(process.env.PATH || '').split(path.delimiter)) {

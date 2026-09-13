@@ -34,6 +34,7 @@
  */
 
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 const logger = require('../observability/Logger.js');
 
 const http = require('http');
@@ -137,7 +138,9 @@ function _safeLogParams(tool, params) {
       parsed.search = '';
       parsed.hash = '';
       safe[field] = parsed.href;
-    } catch (_) {}
+    } catch (_) {
+      swallow('OpenClawBridge._safeLogParams');
+    }
   }
   return safe;
 }
@@ -152,7 +155,9 @@ function _safeBrowserLogResult(result) {
       parsed.search = '';
       parsed.hash = '';
       safe[field] = parsed.href;
-    } catch (_) {}
+    } catch (_) {
+      swallow('OpenClawBridge._safeBrowserLogResult');
+    }
   }
   if (Array.isArray(safe.tabs)) {
     safe.tabs = safe.tabs.map((tab) => _safeBrowserLogResult(tab));
@@ -736,7 +741,9 @@ class OpenClawBridge {
               if (this._prefs && typeof this._prefs.recordResolution === 'function') {
                 this._prefs.recordResolution(resolvedTargetInfo.query, desktopResult.url);
               }
-            } catch (_) {}
+            } catch (_) {
+              swallow('OpenClawBridge.top');
+            }
           }
           desktopResult = {
             ...desktopResult,
@@ -961,9 +968,7 @@ class OpenClawBridge {
    */
   desktopSummary() {
     const stats = this.getStats();
-    const desktopEntries = this._actionLog.filter((entry) =>
-      DESKTOP_TOOLS.has(entry.tool)
-    );
+    const desktopEntries = this._actionLog.filter((entry) => DESKTOP_TOOLS.has(entry.tool));
     const byTool = {};
     for (const entry of desktopEntries) {
       const toolStats = byTool[entry.tool] || { total: 0, ok: 0, failed: 0, successRate: 0 };

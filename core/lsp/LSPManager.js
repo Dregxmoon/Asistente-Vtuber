@@ -1,5 +1,6 @@
 // @ts-nocheck
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 const logger = require('../observability/Logger.js');
 
 const { spawn } = require('child_process');
@@ -314,7 +315,9 @@ class _LSPInstance {
       proc.stdin.on('close', () => {
         try {
           this._process?.stdin?.removeAllListeners('error');
-        } catch {}
+        } catch {
+          swallow('LSPManager.top');
+        }
       });
 
       proc.on('exit', (code) => {
@@ -607,7 +610,9 @@ class _LSPInstance {
         const cached = this._diagnostics.get(uri) || [];
         try {
           Object.defineProperty(cached, 'stale', { value: true, enumerable: false });
-        } catch (_) {}
+        } catch (_) {
+          swallow('LSPManager.onDiagnostics');
+        }
         finish(cached);
       }, timeoutMs);
     });
@@ -1574,7 +1579,9 @@ async function _killTree(rootPid) {
             .split(/\s+/)[1],
           10
         );
-      } catch (_) {}
+      } catch (_) {
+        swallow('LSPManager._killTree');
+      }
       if (!children.has(ppid)) children.set(ppid, []);
       children.get(ppid).push(parseInt(entry, 10));
     }
@@ -1586,7 +1593,9 @@ async function _killTree(rootPid) {
     const pid = stack.pop();
     try {
       process.kill(pid, 'SIGTERM');
-    } catch (_) {}
+    } catch (_) {
+      swallow('LSPManager._killTree');
+    }
     stack.push(...(children.get(pid) || []));
   }
 }

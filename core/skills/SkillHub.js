@@ -1,5 +1,6 @@
 // @ts-check
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 
 /**
  * SkillHub.js — descubrimiento e instalación de skills desde GitHub.
@@ -117,7 +118,9 @@ async function descargarTarball(repoSpec) {
     req.on('error', (e) => {
       try {
         fs.unlinkSync(out);
-      } catch {}
+      } catch {
+        swallow('SkillHub.descargarTarball');
+      }
       reject(e);
     });
   });

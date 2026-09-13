@@ -1,5 +1,6 @@
 // @ts-check
 'use strict';
+const { swallow } = require('../../observability/SwallowedErrors.js');
 
 /**
  * IntentionsStore.js — Fase 3, ítem 1: metas persistentes.
@@ -267,7 +268,9 @@ class IntentionsStore {
         ) {
           plan = this._g.createGoalPlan(Number(row.id), legacy);
         }
-      } catch (_) {}
+      } catch (_) {
+        swallow('IntentionsStore._hydrate');
+      }
     }
     if (!plan.length) return row;
     return {

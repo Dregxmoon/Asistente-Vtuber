@@ -16,6 +16,7 @@
  */
 
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 const os = require('os');
 const fs = require('fs');
 const path = require('path');
@@ -69,12 +70,16 @@ async function _managedProfileDir() {
       await fs.promises.chmod(profile, 0o700).catch(() => {});
       return profile;
     }
-  } catch (_) {}
+  } catch (_) {
+    swallow('BrowserBridge._managedProfileDir');
+  }
   if (_fallbackProfileDir) return _fallbackProfileDir;
   const fallback = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'kaoru-browser-profile-'));
   try {
     await fs.promises.chmod(fallback, 0o700);
-  } catch (_) {}
+  } catch (_) {
+    swallow('BrowserBridge._managedProfileDir');
+  }
   _fallbackProfileDir = fallback;
   return _fallbackProfileDir;
 }
@@ -331,7 +336,9 @@ async function _detectChallenge(page) {
         try {
           const count = await page.locator(selector).count();
           if (count > 0) return { challenge: true, kind: 'captcha' };
-        } catch (_) {}
+        } catch (_) {
+          swallow('BrowserBridge._detectChallenge');
+        }
       }
     }
     let text = '';
@@ -341,10 +348,14 @@ async function _detectChallenge(page) {
           await page.evaluate(() => String(document.body?.innerText || '').slice(0, 4000))
         );
       }
-    } catch (_) {}
+    } catch (_) {
+      swallow('BrowserBridge._detectChallenge');
+    }
     try {
       if (page && typeof page.title === 'function' && !text) text = String(await page.title());
-    } catch (_) {}
+    } catch (_) {
+      swallow('BrowserBridge._detectChallenge');
+    }
     if (
       /captcha|verify you are (a )?human|verifica que no eres|unusual traffic|tr[aá]fico inusual|press (&|and) hold|are you a robot|just a moment|attention required/i.test(
         text
@@ -352,7 +363,9 @@ async function _detectChallenge(page) {
     ) {
       return { challenge: true, kind: 'challenge' };
     }
-  } catch (_) {}
+  } catch (_) {
+    swallow('BrowserBridge._detectChallenge');
+  }
   return { challenge: false, kind: 'none' };
 }
 
@@ -1192,7 +1205,9 @@ async function _locateYouTubeWatchUrl(page, query) {
       await videoLink.waitFor({ state: 'attached', timeout: 12_000 });
       const located = _youtubeWatchUrl(await videoLink.getAttribute('href'));
       if (located) return located;
-    } catch (_) {}
+    } catch (_) {
+      swallow('BrowserBridge._locateYouTubeWatchUrl');
+    }
   }
 
   const fromPage = await page

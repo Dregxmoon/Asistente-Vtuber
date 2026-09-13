@@ -1,5 +1,6 @@
 // @ts-nocheck
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 
 /**
  * ProactiveExecutor.js — Fase B: ejecutor whitelisted de acciones proactivas.
@@ -156,7 +157,9 @@ function _defaultSyntaxCheck(content, file) {
     execFile('node', ['--check', tmp], { timeout: 10000 }, (err) => {
       try {
         fs.unlinkSync(tmp);
-      } catch (_) {}
+      } catch (_) {
+        swallow('ProactiveExecutor._defaultSyntaxCheck');
+      }
       if (!err) return resolve(null);
       if (err.code === 'ENOENT') return resolve(null); // sin node → no bloquea
       const full = String(err.message || '');

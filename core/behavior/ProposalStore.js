@@ -1,5 +1,6 @@
 // @ts-nocheck
 'use strict';
+const { swallow } = require('../observability/SwallowedErrors.js');
 const logger = require('../observability/Logger.js');
 
 /**
@@ -390,7 +391,9 @@ class ProposalStore {
     if (this._filePath) {
       try {
         fs.rmSync(this._filePath, { force: true });
-      } catch {}
+      } catch {
+        swallow('ProposalStore.reset');
+      }
     }
   }
 }

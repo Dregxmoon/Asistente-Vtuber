@@ -1,3 +1,4 @@
+const { swallow } = require('../../core/observability/SwallowedErrors.js');
 // @ts-nocheck
 const logger = require('../../core/observability/Logger.js');
 /**
@@ -228,7 +229,7 @@ function Get-ProcTitle($hwnd) {
     try {
         $proc = Get-Process -Id $procId -ErrorAction Stop
         $procName = $proc.ProcessName
-    } catch {}
+    } catch { swallow('OSSensor.Get'); }
     return "$procName|$($sb.ToString())"
 }
 
@@ -444,7 +445,9 @@ class OSSensor extends BaseOSSensor {
       logger.warn('OSSensor', '[os-sensor] PowerShell timeout (>8s), matando proceso');
       try {
         proc.kill();
-      } catch (_) {}
+      } catch (_) {
+        swallow('OSSensor.finish');
+      }
       finish(new Error('powershell timeout'), null);
     }, 8000);
     proc.on('close', () => clearTimeout(timeout));

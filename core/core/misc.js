@@ -1,3 +1,4 @@
+const { swallow } = require('../observability/SwallowedErrors.js');
 // @ts-nocheck
 const logger = require('../observability/Logger.js');
 // misc.js — funciones varias del núcleo: callbacks del bus de iniciativa,
@@ -513,7 +514,9 @@ function _nodeView(n) {
   let tags = [];
   try {
     tags = JSON.parse(n.tags || '[]');
-  } catch {}
+  } catch {
+    swallow('misc._nodeView');
+  }
   return {
     id: n.id,
     type: n.type,

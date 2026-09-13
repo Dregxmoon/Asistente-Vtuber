@@ -1,5 +1,6 @@
 // @ts-nocheck
 'use strict';
+const { swallow } = require('../core/observability/SwallowedErrors.js');
 const logger = require('../core/observability/Logger.js');
 const fs = require('fs');
 
@@ -43,7 +44,9 @@ function register(ctx) {
       if (graph && !graph.usingFallback) {
         try {
           byType = graph.getStats().byType || [];
-        } catch {}
+        } catch {
+          swallow('memory-handlers.chooseExportPath');
+        }
       }
       return { nodes, byType, usingFallback: graph?.usingFallback ?? false };
     } catch (e) {
